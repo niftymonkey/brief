@@ -34,11 +34,19 @@ export interface ContentSection {
   keyPoints: string[];
 }
 
+export interface Tangent {
+  title: string;
+  timestampStart: string;
+  timestampEnd: string;
+  summary: string;
+}
+
 export interface StructuredDigest {
   summary: string;       // "At a Glance" overview of the video
   sections: ContentSection[];
   relatedLinks: Link[];  // Content-related links
   otherLinks: Link[];    // Social, sponsors, gear, etc.
+  tangents?: Tangent[];  // Off-topic segments (optional)
 }
 
 export interface DigestResult {

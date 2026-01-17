@@ -1,6 +1,39 @@
 import * as fs from "fs";
 import * as path from "path";
-import type { VideoMetadata, StructuredDigest } from "./types.js";
+import type { VideoMetadata, StructuredDigest, Tangent } from "./types.js";
+
+/**
+ * Parses a timestamp string (MM:SS or H:MM:SS) to seconds
+ */
+function parseTimestamp(timestamp: string): number {
+  const parts = timestamp.split(":").map(Number);
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  } else if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  return 0;
+}
+
+/**
+ * Finds tangents that occur within a section's time range
+ */
+function findTangentsInSection(
+  sectionStart: string,
+  sectionEnd: string,
+  tangents: Tangent[]
+): { tangent: Tangent; index: number }[] {
+  const startSec = parseTimestamp(sectionStart);
+  const endSec = parseTimestamp(sectionEnd);
+
+  return tangents
+    .map((tangent, index) => ({ tangent, index }))
+    .filter(({ tangent }) => {
+      const tangentStart = parseTimestamp(tangent.timestampStart);
+      // Tangent overlaps if it starts within the section
+      return tangentStart >= startSec && tangentStart < endSec;
+    });
+}
 
 /**
  * Creates a URL-safe slug from a string
@@ -62,16 +95,45 @@ export function formatMarkdown(
     minute: "2-digit",
   });
 
-  // Render content sections
+  // Render section overview (quick navigation table with anchor links)
+  const sectionRows = digest.sections
+    .map((section, index) => {
+      const anchor = `section-${index + 1}`;
+      return `| [${section.title}](#${anchor}) | ${section.timestampStart} |`;
+    })
+    .join("\n");
+  const sectionOverview = `| Section | Time |
+|---------|------|
+${sectionRows}`;
+
+  // Render content sections (with inline tangent references)
+  const tangents = digest.tangents || [];
   const sectionsMarkdown = digest.sections
-    .map((section) => {
+    .map((section, index) => {
+      const anchor = `section-${index + 1}`;
       const keyPoints = section.keyPoints
         .map((point) => `- ${point}`)
         .join("\n");
 
-      return `### ${section.title} - **${section.timestampStart} - ${section.timestampEnd}**
+      // Find any tangents that occur within this section
+      const sectionTangents = findTangentsInSection(
+        section.timestampStart,
+        section.timestampEnd,
+        tangents
+      );
 
-${keyPoints}`;
+      // Add tangent references if any
+      const tangentRefs = sectionTangents
+        .map(({ tangent, index: tangentIndex }) =>
+          `*[Tangent: ${tangent.title} (${tangent.timestampStart} - ${tangent.timestampEnd})](#tangent-${tangentIndex + 1})*`
+        )
+        .join("\n");
+
+      const tangentSection = tangentRefs ? `\n\n${tangentRefs}` : "";
+
+      return `### <a id="${anchor}"></a>${section.title} (${section.timestampStart} - ${section.timestampEnd})
+
+${keyPoints}${tangentSection}`;
     })
     .join("\n\n");
 
@@ -91,6 +153,19 @@ ${digest.relatedLinks.map((link) => `- **[${link.title}](${link.url})** - ${link
 ${digest.otherLinks.map((link) => `- **[${link.title}](${link.url})** - ${link.description}`).join("\n")}`;
   }
 
+  // Render tangents (optional) with anchors
+  let tangentsMarkdown = "";
+  if (digest.tangents && digest.tangents.length > 0) {
+    const tangentItems = digest.tangents
+      .map((tangent, index) =>
+        `- <a id="tangent-${index + 1}"></a>**${tangent.title}** (${tangent.timestampStart} - ${tangent.timestampEnd}) - ${tangent.summary}`
+      )
+      .join("\n");
+    tangentsMarkdown = `## Tangents
+
+${tangentItems}`;
+  }
+
   return `# ${metadata.title}
 
 **Channel**: ${metadata.channelTitle}  
@@ -105,8 +180,13 @@ ${digest.otherLinks.map((link) => `- **[${link.title}](${link.url})** - ${link.d
 
 ${digest.summary}
 
-## Content Sections
+## Sections
+
+${sectionOverview}
+
+## Details
 ${sectionsMarkdown}
+${tangentsMarkdown ? `\n${tangentsMarkdown}` : ""}
 
 ## Links
 ${relatedLinksMarkdown ? `\n${relatedLinksMarkdown}` : ""}

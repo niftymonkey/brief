@@ -25,9 +25,9 @@ const digestSchema = z.object({
       title: z.string().describe("Descriptive heading for this content section"),
       timestampStart: z.string().describe("Start timestamp in MM:SS format (e.g., '0:00')"),
       timestampEnd: z.string().describe("End timestamp in MM:SS format (e.g., '5:30')"),
-      keyPoints: z.array(z.string()).describe("2-4 key points or takeaways from this section"),
+      keyPoints: z.array(z.string()).describe("2-4 synthesized takeaways that consolidate related points into meaningful insights"),
     })
-  ).describe("Topic-based sections organizing the video content"),
+  ).describe("Broad topic sections (aim for 4-8) organizing the video content"),
 
   relatedLinks: z.array(
     z.object({
@@ -44,6 +44,15 @@ const digestSchema = z.object({
       description: z.string().describe("What this link is (social media, sponsor, affiliate, etc.)"),
     })
   ).describe("Other links: social media, sponsors, affiliate links, creator's gear/setup"),
+
+  tangents: z.array(
+    z.object({
+      title: z.string().describe("Brief description of the tangent"),
+      timestampStart: z.string().describe("Start timestamp in MM:SS format"),
+      timestampEnd: z.string().describe("End timestamp in MM:SS format"),
+      summary: z.string().describe("One sentence summary of what this tangent covers"),
+    })
+  ).optional().describe("Off-topic segments (rants, extended sponsor reads, unrelated stories) - only if genuinely off-topic"),
 });
 
 /**
