@@ -16,5 +16,8 @@ export { fetchTranscript } from "./transcript.js";
 // AI summarization
 export { generateDigest } from "./summarize.js";
 
+// Prompts
+export { systemPrompt, buildUserPrompt } from "./prompts.js";
+
 // Output formatting and file I/O
 export { formatMarkdown, saveDigest } from "./formatter.js";
