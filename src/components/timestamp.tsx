@@ -12,7 +12,7 @@ interface TimestampProps {
 /**
  * Parses a timestamp string (MM:SS or H:MM:SS) to seconds
  */
-function parseTimestamp(timestamp: string): number {
+export function parseTimestamp(timestamp: string): number {
   const parts = timestamp.split(":").map(Number);
   if (parts.length === 2) {
     return parts[0] * 60 + parts[1];

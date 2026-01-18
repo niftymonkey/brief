@@ -1,10 +1,9 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Typography - using CSS variables from next/font */
-  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-newsreader), ui-serif, Georgia, serif;
-  --font-mono: var(--font-dm-mono), ui-monospace, monospace;
+  /* Typography - Geist font family */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   /* Spacing Scale */
   --spacing-1: 0.25rem;
@@ -36,47 +35,49 @@
   --radius-2xl: 1.5rem;
   --radius-full: 9999px;
 
-  /* Light mode colors (default) */
-  --color-bg-primary: oklch(98% 0.005 80);
-  --color-bg-secondary: oklch(95% 0.008 80);
-  --color-bg-tertiary: oklch(92% 0.01 80);
+  /* Light mode colors (default) - cleaner, slightly cooler */
+  --color-bg-primary: oklch(98.5% 0.002 260);
+  --color-bg-secondary: oklch(96% 0.004 260);
+  --color-bg-tertiary: oklch(93% 0.006 260);
 
-  --color-text-primary: oklch(20% 0.02 60);
-  --color-text-secondary: oklch(45% 0.015 60);
-  --color-text-tertiary: oklch(60% 0.01 60);
+  --color-text-primary: oklch(15% 0.01 260);
+  --color-text-secondary: oklch(40% 0.01 260);
+  --color-text-tertiary: oklch(55% 0.008 260);
 
-  --color-accent: oklch(55% 0.15 35);
-  --color-accent-hover: oklch(48% 0.17 35);
-  --color-accent-subtle: oklch(92% 0.04 35);
+  /* Sharper coral/sunset accent */
+  --color-accent: oklch(62% 0.19 25);
+  --color-accent-hover: oklch(55% 0.21 25);
+  --color-accent-subtle: oklch(95% 0.03 25);
 
-  --color-border: oklch(88% 0.01 80);
-  --color-border-hover: oklch(80% 0.015 80);
+  --color-border: oklch(90% 0.006 260);
+  --color-border-hover: oklch(82% 0.01 260);
 
-  --shadow-sm: 0 1px 2px oklch(20% 0.02 60 / 0.04);
-  --shadow-md: 0 4px 12px oklch(20% 0.02 60 / 0.06);
-  --shadow-lg: 0 12px 32px oklch(20% 0.02 60 / 0.08);
+  --shadow-sm: 0 1px 2px oklch(20% 0.01 260 / 0.05);
+  --shadow-md: 0 4px 12px oklch(20% 0.01 260 / 0.08);
+  --shadow-lg: 0 12px 32px oklch(20% 0.01 260 / 0.12);
 }
 
 /* Dark mode overrides */
 .dark {
-  --color-bg-primary: oklch(14% 0.01 280);
-  --color-bg-secondary: oklch(18% 0.012 280);
-  --color-bg-tertiary: oklch(22% 0.015 280);
+  --color-bg-primary: oklch(12% 0.015 260);
+  --color-bg-secondary: oklch(16% 0.018 260);
+  --color-bg-tertiary: oklch(20% 0.02 260);
 
-  --color-text-primary: oklch(92% 0.01 80);
-  --color-text-secondary: oklch(70% 0.01 80);
-  --color-text-tertiary: oklch(50% 0.008 80);
+  --color-text-primary: oklch(95% 0.005 260);
+  --color-text-secondary: oklch(72% 0.008 260);
+  --color-text-tertiary: oklch(52% 0.006 260);
 
-  --color-accent: oklch(65% 0.14 35);
-  --color-accent-hover: oklch(72% 0.16 35);
-  --color-accent-subtle: oklch(25% 0.05 35);
+  /* Brighter coral in dark mode */
+  --color-accent: oklch(68% 0.18 25);
+  --color-accent-hover: oklch(75% 0.2 25);
+  --color-accent-subtle: oklch(22% 0.06 25);
 
-  --color-border: oklch(25% 0.015 280);
-  --color-border-hover: oklch(32% 0.02 280);
+  --color-border: oklch(22% 0.018 260);
+  --color-border-hover: oklch(30% 0.022 260);
 
-  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.2);
-  --shadow-md: 0 4px 12px oklch(0% 0 0 / 0.3);
-  --shadow-lg: 0 12px 32px oklch(0% 0 0 / 0.4);
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.25);
+  --shadow-md: 0 4px 12px oklch(0% 0 0 / 0.35);
+  --shadow-lg: 0 12px 32px oklch(0% 0 0 / 0.45);
 }
 
 /* Base styles */
@@ -94,10 +95,10 @@ body {
 
 /* Heading styles */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-serif);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
 }
 
 /* Mono text */

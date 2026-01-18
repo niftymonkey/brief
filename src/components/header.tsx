@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ThemeToggle } from "./theme-toggle";
-import { HelpCircle, Youtube } from "lucide-react";
+import { Youtube } from "lucide-react";
 
 export function Header() {
   return (
@@ -13,15 +13,7 @@ export function Header() {
           <span className="font-semibold">YouTube Digest</span>
         </Link>
 
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <button
-            className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)] transition-colors"
-            aria-label="Help"
-          >
-            <HelpCircle className="w-5 h-5" />
-          </button>
-        </div>
+        <ThemeToggle />
       </div>
     </header>
   );

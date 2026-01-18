@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Header } from "@/components/header";
 import { UrlInput } from "@/components/url-input";
 import { DigestResult } from "@/components/digest-result";
+import { RecentDigests } from "@/components/recent-digests";
 import type { VideoMetadata, StructuredDigest } from "@/lib/types";
 
 interface DigestData {
@@ -33,19 +34,17 @@ export default function Home() {
             onReset={handleReset}
           />
         ) : (
-          <div className="max-w-2xl mx-auto text-center space-y-8 py-8 md:py-16">
-            <h1 className="font-serif text-4xl md:text-5xl text-[var(--color-text-primary)]">
-              Transform YouTube videos
-              <br />
-              into study guides
-            </h1>
+          <>
+            <div className="max-w-2xl mx-auto text-center space-y-6 py-8 md:py-12">
+              <h1 className="text-4xl md:text-5xl text-[var(--color-text-primary)] font-semibold tracking-tight">
+                Your YouTube, indexed
+              </h1>
 
-            <UrlInput onDigestComplete={handleDigestComplete} />
+              <UrlInput onDigestComplete={handleDigestComplete} />
+            </div>
 
-            <p className="text-[var(--color-text-secondary)] text-base">
-              Paste any YouTube link to generate a timestamped digest
-            </p>
-          </div>
+            <RecentDigests />
+          </>
         )}
       </main>
     </div>

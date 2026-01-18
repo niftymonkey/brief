@@ -4,12 +4,41 @@ import * as React from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Timestamp } from "./timestamp";
+import { parseTimestamp } from "./timestamp";
 import type { ContentSection } from "@/lib/types";
 
 interface SectionAccordionProps {
   sections: ContentSection[];
   videoId: string;
+}
+
+function TimestampRange({
+  start,
+  end,
+  videoId
+}: {
+  start: string;
+  end: string;
+  videoId: string;
+}) {
+  const seconds = parseTimestamp(start);
+  const url = `https://youtube.com/watch?v=${videoId}&t=${seconds}s`;
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "font-mono text-sm",
+        "text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]",
+        "transition-colors"
+      )}
+    >
+      {start} – {end}
+    </a>
+  );
 }
 
 export function SectionAccordion({ sections, videoId }: SectionAccordionProps) {
@@ -34,21 +63,17 @@ export function SectionAccordion({ sections, videoId }: SectionAccordionProps) {
                 <ChevronRight className="w-4 h-4 text-[var(--color-text-tertiary)] transition-transform group-data-[state=open]:rotate-90" />
                 <span>{section.title}</span>
               </div>
-              <span className="font-mono text-sm text-[var(--color-text-secondary)]">
-                {section.timestampStart}
-              </span>
+              <TimestampRange
+                start={section.timestampStart}
+                end={section.timestampEnd}
+                videoId={videoId}
+              />
             </AccordionPrimitive.Trigger>
           </AccordionPrimitive.Header>
 
           <AccordionPrimitive.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
-            <div className="px-4 pb-4 pt-0 space-y-3">
-              <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
-                <Timestamp time={section.timestampStart} videoId={videoId} />
-                <span>-</span>
-                <Timestamp time={section.timestampEnd} videoId={videoId} />
-              </div>
-
-              <ul className="space-y-2 pl-4">
+            <div className="px-4 pb-4 pt-2">
+              <ul className="space-y-2">
                 {section.keyPoints.map((point, pointIndex) => (
                   <li
                     key={pointIndex}

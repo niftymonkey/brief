@@ -69,8 +69,8 @@ export function UrlInput({ onDigestComplete }: UrlInputProps) {
           placeholder="Paste a YouTube URL..."
           disabled={isLoading}
           className={cn(
-            "w-full px-6 py-4 text-lg",
-            "bg-[var(--color-bg-secondary)] border rounded-2xl",
+            "w-full px-5 py-3.5 text-lg",
+            "bg-[var(--color-bg-secondary)] border rounded-xl",
             "placeholder:text-[var(--color-text-tertiary)]",
             "focus:outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20",
             "transition-all duration-200",
@@ -85,8 +85,8 @@ export function UrlInput({ onDigestComplete }: UrlInputProps) {
           type="submit"
           disabled={isLoading || !url.trim()}
           className={cn(
-            "absolute right-3 top-1/2 -translate-y-1/2",
-            "w-10 h-10 rounded-xl bg-[var(--color-accent)] text-white",
+            "absolute right-1.5 top-1.5 bottom-1.5",
+            "px-4 rounded-lg bg-[var(--color-accent)] text-white",
             "flex items-center justify-center",
             "hover:bg-[var(--color-accent-hover)] transition-colors",
             "disabled:opacity-50 disabled:cursor-not-allowed"
