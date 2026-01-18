@@ -1,12 +1,63 @@
 import { Supadata } from "@supadata/js";
+import { fetchTranscript as fetchYouTubeTranscript } from "youtube-transcript-plus";
 import type { TranscriptEntry } from "./types";
 
-const supadata = new Supadata({
-  apiKey: process.env.SUPADATA_API_KEY!,
-});
+/**
+ * Fetches transcript using Supadata API (for cloud deployments)
+ * Supadata returns timestamps in milliseconds, needs conversion to seconds
+ */
+async function fetchWithSupadata(videoId: string): Promise<TranscriptEntry[]> {
+  const supadata = new Supadata({
+    apiKey: process.env.SUPADATA_API_KEY!,
+  });
+
+  const result = await supadata.youtube.transcript({
+    videoId,
+  });
+
+  // Handle async job case (unlikely for YouTube but SDK supports it)
+  if ("jobId" in result) {
+    throw new Error("Transcript generation queued - not supported yet");
+  }
+
+  // Handle case where content is a string (no timestamps)
+  if (typeof result.content === "string") {
+    throw new Error("Transcript returned without timestamps - cannot process");
+  }
+
+  // Convert to our TranscriptEntry format
+  // Supadata returns offset/duration in milliseconds, we need seconds
+  return result.content.map((entry) => ({
+    text: entry.text,
+    offset: entry.offset / 1000,
+    duration: entry.duration / 1000,
+    lang: result.lang,
+  }));
+}
 
 /**
- * Fetches the transcript for a YouTube video using Supadata API
+ * Fetches transcript using youtube-transcript-plus (for local development)
+ * This library works without an API key but is blocked by YouTube on cloud platforms
+ */
+async function fetchWithYoutubeTranscriptPlus(
+  videoId: string
+): Promise<TranscriptEntry[]> {
+  const rawTranscript = await fetchYouTubeTranscript(videoId);
+
+  // youtube-transcript-plus returns timestamps already in seconds
+  return rawTranscript.map((entry) => ({
+    text: entry.text,
+    offset: entry.offset,
+    duration: entry.duration,
+    lang: entry.lang,
+  }));
+}
+
+/**
+ * Fetches the transcript for a YouTube video
+ *
+ * Uses Supadata API when SUPADATA_API_KEY is set (required for cloud deployments),
+ * otherwise falls back to youtube-transcript-plus (works locally without API key)
  *
  * @param videoId - YouTube video ID
  * @returns Array of transcript entries with timestamps
@@ -16,39 +67,27 @@ export async function fetchTranscript(
   videoId: string
 ): Promise<TranscriptEntry[]> {
   const startTime = Date.now();
-  console.log(`[TRANSCRIPT] Starting fetch for videoId: ${videoId}`);
+  const useSupadata = !!process.env.SUPADATA_API_KEY;
+
+  console.log(
+    `[TRANSCRIPT] Starting fetch for videoId: ${videoId} using ${useSupadata ? "Supadata API" : "youtube-transcript-plus (local mode)"}`
+  );
 
   try {
-    const result = await supadata.youtube.transcript({
-      videoId,
-    });
-
-    // Handle async job case (unlikely for YouTube but SDK supports it)
-    if ("jobId" in result) {
-      throw new Error("Transcript generation queued - not supported yet");
-    }
-
-    // Handle case where content is a string (no timestamps)
-    if (typeof result.content === "string") {
-      throw new Error(
-        "Transcript returned without timestamps - cannot process"
-      );
-    }
+    const entries = useSupadata
+      ? await fetchWithSupadata(videoId)
+      : await fetchWithYoutubeTranscriptPlus(videoId);
 
     console.log(
-      `[TRANSCRIPT] Success in ${Date.now() - startTime}ms, entries: ${result.content.length}`
+      `[TRANSCRIPT] Success in ${Date.now() - startTime}ms, entries: ${entries.length}`
     );
 
-    // Convert to our TranscriptEntry format
-    // Supadata returns offset/duration in milliseconds, we need seconds
-    return result.content.map((entry) => ({
-      text: entry.text,
-      offset: entry.offset / 1000,
-      duration: entry.duration / 1000,
-      lang: result.lang,
-    }));
+    return entries;
   } catch (error: unknown) {
-    console.error(`[TRANSCRIPT] Failed in ${Date.now() - startTime}ms:`, error);
+    console.error(
+      `[TRANSCRIPT] Failed in ${Date.now() - startTime}ms:`,
+      error
+    );
 
     const errorMsg =
       error instanceof Error ? error.message?.toLowerCase() : "";

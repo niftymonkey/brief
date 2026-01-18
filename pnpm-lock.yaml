@@ -74,6 +74,9 @@ importers:
       tailwind-merge:
         specifier: ^3.4.0
         version: 3.4.0
+      youtube-transcript-plus:
+        specifier: ^1.1.2
+        version: 1.1.2
       zod:
         specifier: ^4.3.5
         version: 4.3.5
@@ -2871,6 +2874,10 @@ packages:
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
+
+  youtube-transcript-plus@1.1.2:
+    resolution: {integrity: sha512-bLlqkA6gVVUorZpcc+THuECXyAwOpnHqW2lOav9g6gGovxAP3FCD8s9GBFVjmSl3cWWwwPPXtG/zY1nD+GvQ7A==}
+    engines: {node: '>=18.0.0'}
 
   zod@4.3.5:
     resolution: {integrity: sha512-k7Nwx6vuWx1IJ9Bjuf4Zt1PEllcwe7cls3VNzm4CQ1/hgtFUK2bRNG3rvnpPUhFjmqJKAKtjV576KnUkHocg/g==}
@@ -5799,5 +5806,7 @@ snapshots:
       bufferutil: 4.1.0
 
   yocto-queue@0.1.0: {}
+
+  youtube-transcript-plus@1.1.2: {}
 
   zod@4.3.5: {}
