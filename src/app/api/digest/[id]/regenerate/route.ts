@@ -40,8 +40,8 @@ export async function POST(
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // Verify digest exists
-        const existingDigest = await getDigestById(id);
+        // Verify digest exists and belongs to user
+        const existingDigest = await getDigestById(id, user.id);
         if (!existingDigest) {
           controller.enqueue(encoder.encode(createEvent("error", "Digest not found")));
           controller.close();
@@ -67,7 +67,7 @@ export async function POST(
 
         // Step 4: Save
         controller.enqueue(encoder.encode(createEvent("saving", "Saving digest...")));
-        await updateDigest(videoId, metadata, digest);
+        await updateDigest(user.id, id, metadata, digest);
         console.log(`[REGENERATE] Digest updated in database`);
 
         // Complete

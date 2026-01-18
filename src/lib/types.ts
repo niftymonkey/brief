@@ -63,6 +63,7 @@ export interface DigestResult {
 // Database types
 export interface DbDigest {
   id: string;
+  userId: string;
   videoId: string;
   title: string;
   channelName: string;
@@ -81,6 +82,7 @@ export interface DbDigest {
 
 export interface DigestSummary {
   id: string;
+  userId?: string;
   videoId: string;
   title: string;
   channelName: string;

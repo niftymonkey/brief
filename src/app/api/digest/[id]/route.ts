@@ -19,7 +19,7 @@ export async function DELETE(
   }
 
   try {
-    const deleted = await deleteDigest(id);
+    const deleted = await deleteDigest(user.id, id);
 
     if (!deleted) {
       return NextResponse.json({ error: "Digest not found" }, { status: 404 });
