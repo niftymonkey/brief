@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "digest": "tsx src/cli.ts"
+    "digest": "tsx src/cli.ts",
+    "migrate": "tsx scripts/migrate.ts"
   },
   "keywords": [
     "youtube",

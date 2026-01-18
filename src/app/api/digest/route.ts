@@ -3,6 +3,7 @@ import { extractVideoId } from "@/lib/parser";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateDigest } from "@/lib/summarize";
+import { saveDigest, getDigestByVideoId } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,7 +52,14 @@ export async function POST(request: NextRequest) {
     // Generate AI digest
     const digest = await generateDigest(transcript, metadata, anthropicApiKey);
 
-    // Return the full result (no database for now)
+    // Save to database
+    try {
+      await saveDigest(metadata, digest);
+    } catch (dbError) {
+      // Log but don't fail the request if save fails
+      console.error("Failed to save digest to database:", dbError);
+    }
+
     return NextResponse.json({
       metadata,
       digest,

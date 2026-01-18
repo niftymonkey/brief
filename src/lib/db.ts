@@ -4,9 +4,6 @@ import type {
   DigestSummary,
   VideoMetadata,
   StructuredDigest,
-  ContentSection,
-  Tangent,
-  Link,
 } from "./types";
 
 /**
@@ -212,39 +209,3 @@ export async function getDigests(options: {
   return { digests, total, hasMore: offset + digests.length < total };
 }
 
-/**
- * Initialize the database schema
- */
-export async function initializeDb(): Promise<void> {
-  await sql`
-    CREATE TABLE IF NOT EXISTS digests (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      video_id VARCHAR(20) NOT NULL,
-      title TEXT NOT NULL,
-      channel_name TEXT NOT NULL,
-      channel_slug TEXT NOT NULL,
-      duration TEXT,
-      published_at TIMESTAMP,
-      thumbnail_url TEXT,
-      summary TEXT NOT NULL,
-      sections JSONB NOT NULL,
-      tangents JSONB,
-      related_links JSONB NOT NULL,
-      other_links JSONB NOT NULL,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    )
-  `;
-
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_digests_video_id ON digests(video_id)
-  `;
-
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_digests_created_at ON digests(created_at DESC)
-  `;
-
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_digests_channel ON digests(channel_slug)
-  `;
-}

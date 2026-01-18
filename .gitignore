@@ -5,3 +5,4 @@ outputs/
 dist/
 .DS_Store
 .next/
+.playwright-mcp/
