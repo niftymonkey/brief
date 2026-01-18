@@ -1,5 +1,5 @@
 import { youtube_v3, youtube } from "@googleapis/youtube";
-import type { VideoMetadata } from "./types.js";
+import type { VideoMetadata } from "./types";
 
 /**
  * Fetches the pinned comment for a video (if available)

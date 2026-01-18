@@ -1,9 +1,9 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import type { TranscriptEntry, VideoMetadata, StructuredDigest } from "./types.js";
-import { combineUrls } from "./url-extractor.js";
-import { systemPrompt, buildUserPrompt } from "./prompts.js";
+import type { TranscriptEntry, VideoMetadata, StructuredDigest } from "./types";
+import { combineUrls } from "./url-extractor";
+import { systemPrompt, buildUserPrompt } from "./prompts";
 
 /**
  * Formats a timestamp in seconds to MM:SS format

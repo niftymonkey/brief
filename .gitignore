@@ -4,3 +4,4 @@ outputs/
 *.log
 dist/
 .DS_Store
+.next/

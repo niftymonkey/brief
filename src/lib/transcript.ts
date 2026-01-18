@@ -1,5 +1,5 @@
 import { fetchTranscript as fetchYouTubeTranscript } from "youtube-transcript-plus";
-import type { TranscriptEntry } from "./types.js";
+import type { TranscriptEntry } from "./types";
 
 /**
  * Fetches the transcript for a YouTube video

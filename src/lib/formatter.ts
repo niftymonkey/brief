@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import type { VideoMetadata, StructuredDigest, Tangent } from "./types.js";
+import type { VideoMetadata, StructuredDigest, Tangent } from "./types";
 
 /**
  * Parses a timestamp string (MM:SS or H:MM:SS) to seconds
@@ -196,14 +196,14 @@ ${otherLinksMarkdown ? `\n${otherLinksMarkdown}` : ""}
 }
 
 /**
- * Saves the digest to an organized file structure
+ * Saves the digest to an organized file structure (CLI only)
  * Creates: outputs/{channel-slug}/{title-slug}.md
  *
  * @param content - Markdown content to save
  * @param metadata - Video metadata for file path generation
  * @returns Full path to the saved file
  */
-export async function saveDigest(
+export async function saveDigestToFile(
   content: string,
   metadata: VideoMetadata
 ): Promise<string> {

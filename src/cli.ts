@@ -8,7 +8,7 @@ import {
   fetchTranscript,
   generateDigest,
   formatMarkdown,
-  saveDigest,
+  saveDigestToFile,
 } from "./lib/index.js";
 
 // Configure marked to use terminal renderer
@@ -98,7 +98,7 @@ async function main() {
     const markdown = formatMarkdown(metadata, digest);
 
     // Step 5: Save to file
-    const outputPath = await saveDigest(markdown, metadata);
+    const outputPath = await saveDigestToFile(markdown, metadata);
     console.log(`💾 Saving to: ${outputPath}`);
     console.log("✅ File saved successfully\n");
 

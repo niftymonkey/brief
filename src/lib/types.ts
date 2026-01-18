@@ -52,5 +52,33 @@ export interface StructuredDigest {
 export interface DigestResult {
   metadata: VideoMetadata;
   digest: StructuredDigest;
-  outputPath: string;
+  outputPath?: string;
+}
+
+// Database types
+export interface DbDigest {
+  id: string;
+  videoId: string;
+  title: string;
+  channelName: string;
+  channelSlug: string;
+  duration: string | null;
+  publishedAt: Date | null;
+  thumbnailUrl: string | null;
+  summary: string;
+  sections: ContentSection[];
+  tangents: Tangent[] | null;
+  relatedLinks: Link[];
+  otherLinks: Link[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DigestSummary {
+  id: string;
+  videoId: string;
+  title: string;
+  channelName: string;
+  thumbnailUrl: string | null;
+  createdAt: Date;
 }
