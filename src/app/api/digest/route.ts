@@ -3,9 +3,18 @@ import { extractVideoId } from "@/lib/parser";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateDigest } from "@/lib/summarize";
-import { saveDigest } from "@/lib/db";
+import { saveDigest, getDigestByVideoId, updateDigest } from "@/lib/db";
+import type { DbDigest } from "@/lib/types";
 
-type Step = "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
+type Step = "cached" | "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function isStale(digest: DbDigest): boolean {
+  const timestamp = digest.updatedAt || digest.createdAt;
+  const age = Date.now() - new Date(timestamp).getTime();
+  return age > ONE_DAY_MS;
+}
 
 function createEvent(step: Step, message: string, data?: unknown) {
   return `data: ${JSON.stringify({ step, message, data })}\n\n`;
@@ -32,6 +41,33 @@ export async function POST(request: NextRequest) {
           return;
         }
 
+        // Check for existing cached digest
+        const existingDigest = await getDigestByVideoId(videoId);
+
+        if (existingDigest && !isStale(existingDigest)) {
+          // Return cached digest immediately
+          controller.enqueue(encoder.encode(createEvent("cached", "Found cached digest")));
+          controller.enqueue(encoder.encode(createEvent("complete", "Done!", {
+            metadata: {
+              videoId: existingDigest.videoId,
+              title: existingDigest.title,
+              channelTitle: existingDigest.channelName,
+              duration: existingDigest.duration,
+              publishedAt: existingDigest.publishedAt,
+              thumbnailUrl: existingDigest.thumbnailUrl,
+            },
+            digest: {
+              summary: existingDigest.summary,
+              sections: existingDigest.sections,
+              tangents: existingDigest.tangents,
+              relatedLinks: existingDigest.relatedLinks,
+              otherLinks: existingDigest.otherLinks,
+            },
+          })));
+          controller.close();
+          return;
+        }
+
         const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
         const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 
@@ -53,9 +89,15 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
         const digest = await generateDigest(transcript, metadata, anthropicApiKey);
 
-        // Step 4: Save to database
+        // Step 4: Save or update digest
         controller.enqueue(encoder.encode(createEvent("saving", "Saving digest...")));
-        await saveDigest(metadata, digest);
+        if (existingDigest) {
+          // Update stale digest
+          await updateDigest(videoId, metadata, digest);
+        } else {
+          // Save new digest
+          await saveDigest(metadata, digest);
+        }
 
         // Complete
         controller.enqueue(encoder.encode(createEvent("complete", "Done!", { metadata, digest })));

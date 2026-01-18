@@ -85,6 +85,53 @@ export async function saveDigest(
 }
 
 /**
+ * Update an existing digest (for refreshing stale digests)
+ */
+export async function updateDigest(
+  videoId: string,
+  metadata: VideoMetadata,
+  digest: StructuredDigest
+): Promise<DbDigest> {
+  const channelSlug = createSlug(metadata.channelTitle);
+  const thumbnailUrl = getThumbnailUrl(metadata.videoId);
+
+  const result = await sql<DbDigest>`
+    UPDATE digests SET
+      title = ${metadata.title},
+      channel_name = ${metadata.channelTitle},
+      channel_slug = ${channelSlug},
+      duration = ${metadata.duration},
+      published_at = ${metadata.publishedAt},
+      thumbnail_url = ${thumbnailUrl},
+      summary = ${digest.summary},
+      sections = ${JSON.stringify(digest.sections)},
+      tangents = ${digest.tangents ? JSON.stringify(digest.tangents) : null},
+      related_links = ${JSON.stringify(digest.relatedLinks)},
+      other_links = ${JSON.stringify(digest.otherLinks)},
+      updated_at = NOW()
+    WHERE video_id = ${videoId}
+    RETURNING
+      id,
+      video_id as "videoId",
+      title,
+      channel_name as "channelName",
+      channel_slug as "channelSlug",
+      duration,
+      published_at as "publishedAt",
+      thumbnail_url as "thumbnailUrl",
+      summary,
+      sections,
+      tangents,
+      related_links as "relatedLinks",
+      other_links as "otherLinks",
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+  `;
+
+  return result.rows[0];
+}
+
+/**
  * Get a digest by ID
  */
 export async function getDigestById(id: string): Promise<DbDigest | null> {
