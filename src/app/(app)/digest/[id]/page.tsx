@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ExternalLink, ArrowLeft } from "lucide-react";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 import { SectionAccordion } from "@/components/section-accordion";
 import { Timestamp } from "@/components/timestamp";
 import { DeleteDigestButton } from "@/components/delete-digest-button";
@@ -69,8 +70,14 @@ function formatDuration(isoDuration: string | null): string {
 }
 
 export default async function DigestPage({ params }: PageProps) {
+  const { user } = await withAuth();
+
+  if (!user) {
+    redirect("/");
+  }
+
   const { id } = await params;
-  const digest = await getDigestById(id);
+  const digest = await getDigestById(id, user.id);
 
   if (!digest) {
     notFound();

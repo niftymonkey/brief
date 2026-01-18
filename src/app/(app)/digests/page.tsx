@@ -1,6 +1,8 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 import { DigestCard } from "@/components/digest-card";
 import { DigestSearch } from "@/components/digest-search";
 import { getDigests } from "@/lib/db";
@@ -10,8 +12,8 @@ interface PageProps {
   searchParams: Promise<{ search?: string }>;
 }
 
-async function DigestGrid({ search }: { search?: string }) {
-  const { digests, total } = await getDigests({ search, limit: 50 });
+async function DigestGrid({ userId, search }: { userId: string; search?: string }) {
+  const { digests } = await getDigests({ userId, search, limit: 50 });
 
   if (digests.length === 0) {
     return (
@@ -58,8 +60,14 @@ function DigestGridSkeleton() {
 }
 
 export default async function DigestsPage({ searchParams }: PageProps) {
+  const { user } = await withAuth();
+
+  if (!user) {
+    redirect("/");
+  }
+
   const { search } = await searchParams;
-  const { total } = await getDigests({ limit: 1 });
+  const { total } = await getDigests({ userId: user.id, limit: 1 });
 
   return (
     <main className="flex-1 px-4 py-8">
@@ -92,7 +100,7 @@ export default async function DigestsPage({ searchParams }: PageProps) {
 
         {/* Content */}
         <Suspense key={search} fallback={<DigestGridSkeleton />}>
-          <DigestGrid search={search} />
+          <DigestGrid userId={user.id} search={search} />
         </Suspense>
       </div>
     </main>
