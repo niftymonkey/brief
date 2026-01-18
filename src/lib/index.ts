@@ -28,5 +28,4 @@ export {
   getDigestById,
   getDigestByVideoId,
   getDigests,
-  initializeDb,
 } from "./db";

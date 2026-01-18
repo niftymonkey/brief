@@ -1,67 +1,78 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { extractVideoId } from "@/lib/parser";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateDigest } from "@/lib/summarize";
+import { saveDigest } from "@/lib/db";
+
+type Step = "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
+
+function createEvent(step: Step, message: string, data?: unknown) {
+  return `data: ${JSON.stringify({ step, message, data })}\n\n`;
+}
 
 export async function POST(request: NextRequest) {
-  try {
-    const { url } = await request.json();
+  const encoder = new TextEncoder();
 
-    if (!url) {
-      return NextResponse.json(
-        { error: "URL is required" },
-        { status: 400 }
-      );
-    }
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const { url } = await request.json();
 
-    // Extract video ID
-    const videoId = extractVideoId(url);
-    if (!videoId) {
-      return NextResponse.json(
-        { error: "Invalid YouTube URL" },
-        { status: 400 }
-      );
-    }
+        if (!url) {
+          controller.enqueue(encoder.encode(createEvent("error", "URL is required")));
+          controller.close();
+          return;
+        }
 
-    // Get API keys from environment
-    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-    const youtubeApiKey = process.env.YOUTUBE_API_KEY;
+        const videoId = extractVideoId(url);
+        if (!videoId) {
+          controller.enqueue(encoder.encode(createEvent("error", "Invalid YouTube URL")));
+          controller.close();
+          return;
+        }
 
-    if (!anthropicApiKey) {
-      return NextResponse.json(
-        { error: "Anthropic API key not configured" },
-        { status: 500 }
-      );
-    }
+        const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+        const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 
-    if (!youtubeApiKey) {
-      return NextResponse.json(
-        { error: "YouTube API key not configured" },
-        { status: 500 }
-      );
-    }
+        if (!anthropicApiKey || !youtubeApiKey) {
+          controller.enqueue(encoder.encode(createEvent("error", "API keys not configured")));
+          controller.close();
+          return;
+        }
 
-    // Fetch metadata and transcript in parallel
-    const [metadata, transcript] = await Promise.all([
-      fetchVideoMetadata(videoId, youtubeApiKey),
-      fetchTranscript(videoId),
-    ]);
+        // Step 1: Fetch metadata
+        controller.enqueue(encoder.encode(createEvent("metadata", "Fetching video info...")));
+        const metadata = await fetchVideoMetadata(videoId, youtubeApiKey);
 
-    // Generate AI digest
-    const digest = await generateDigest(transcript, metadata, anthropicApiKey);
+        // Step 2: Fetch transcript
+        controller.enqueue(encoder.encode(createEvent("transcript", "Extracting transcript...")));
+        const transcript = await fetchTranscript(videoId);
 
-    // Return the full result (no database for now)
-    return NextResponse.json({
-      metadata,
-      digest,
-    });
-  } catch (error) {
-    console.error("Error creating digest:", error);
+        // Step 3: Generate digest
+        controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
+        const digest = await generateDigest(transcript, metadata, anthropicApiKey);
 
-    const message =
-      error instanceof Error ? error.message : "Failed to create digest";
+        // Step 4: Save to database
+        controller.enqueue(encoder.encode(createEvent("saving", "Saving digest...")));
+        await saveDigest(metadata, digest);
 
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+        // Complete
+        controller.enqueue(encoder.encode(createEvent("complete", "Done!", { metadata, digest })));
+        controller.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to create digest";
+        controller.enqueue(encoder.encode(createEvent("error", message)));
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }
