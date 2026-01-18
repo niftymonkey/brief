@@ -44,6 +44,7 @@ export default function LandingPage() {
 
           <Link
             href="/auth"
+            prefetch={false}
             className={cn(
               "inline-flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium",
               "bg-[var(--color-accent)] text-white",
@@ -95,6 +96,7 @@ export default function LandingPage() {
           </p>
           <Link
             href="/auth"
+            prefetch={false}
             className={cn(
               "inline-flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium",
               "bg-[var(--color-accent)] text-white",

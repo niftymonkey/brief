@@ -78,13 +78,16 @@ export function UrlInput({ onDigestComplete }: UrlInputProps) {
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const data = JSON.parse(line.slice(6));
+            console.log(`[DIGEST CLIENT] Received event:`, data);
             setProgress({ step: data.step, message: data.message });
 
             if (data.step === "error") {
+              console.error(`[DIGEST CLIENT] Error received:`, data.message);
               throw new Error(data.message);
             }
 
             if (data.step === "complete" && data.data) {
+              console.log(`[DIGEST CLIENT] Complete! Data:`, data.data);
               onDigestComplete(data.data);
             }
           }

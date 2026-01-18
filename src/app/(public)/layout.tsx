@@ -22,6 +22,7 @@ export default function PublicLayout({
           <div className="flex items-center gap-4">
             <Link
               href="/auth"
+              prefetch={false}
               className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
             >
               Sign In
