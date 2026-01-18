@@ -45,7 +45,7 @@ export function DigestResult({ metadata, digest, onReset }: DigestResultProps) {
   return (
     <article className="max-w-3xl mx-auto">
       {/* New Digest button */}
-      <div className="mb-6">
+      <div className="mb-4 md:mb-6">
         <button
           onClick={onReset}
           className="text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors text-sm"
@@ -59,7 +59,7 @@ export function DigestResult({ metadata, digest, onReset }: DigestResultProps) {
         href={`https://youtube.com/watch?v=${metadata.videoId}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="block relative aspect-video rounded-2xl overflow-hidden mb-6 group"
+        className="block relative aspect-video rounded-2xl overflow-hidden mb-4 md:mb-6 group"
       >
         <Image
           src={thumbnailUrl}
@@ -81,7 +81,7 @@ export function DigestResult({ metadata, digest, onReset }: DigestResultProps) {
       </h1>
 
       {/* Meta line */}
-      <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-8">
+      <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-6 md:mb-8">
         <span>{metadata.channelTitle}</span>
         {metadata.duration && (
           <>
@@ -98,7 +98,7 @@ export function DigestResult({ metadata, digest, onReset }: DigestResultProps) {
       </div>
 
       {/* At a Glance */}
-      <section className="mb-10">
+      <section className="mb-6 md:mb-10">
         <h2 className="font-serif text-xl text-[var(--color-text-primary)] mb-3 pb-2 border-b border-[var(--color-border)]">
           At a Glance
         </h2>
@@ -108,7 +108,7 @@ export function DigestResult({ metadata, digest, onReset }: DigestResultProps) {
       </section>
 
       {/* Sections */}
-      <section className="mb-10">
+      <section className="mb-6 md:mb-10">
         <h2 className="font-serif text-xl text-[var(--color-text-primary)] mb-4 pb-2 border-b border-[var(--color-border)]">
           Sections
         </h2>
@@ -120,7 +120,7 @@ export function DigestResult({ metadata, digest, onReset }: DigestResultProps) {
 
       {/* Links & Resources */}
       {(digest.relatedLinks.length > 0 || digest.otherLinks.length > 0) && (
-        <section className="mb-10">
+        <section className="mb-6 md:mb-10">
           <h2 className="font-serif text-xl text-[var(--color-text-primary)] mb-4 pb-2 border-b border-[var(--color-border)]">
             Links & Resources
           </h2>
@@ -185,7 +185,7 @@ export function DigestResult({ metadata, digest, onReset }: DigestResultProps) {
 
       {/* Tangents */}
       {digest.tangents && digest.tangents.length > 0 && (
-        <section className="mb-10">
+        <section className="mb-6 md:mb-10">
           <h2 className="font-serif text-xl text-[var(--color-text-primary)] mb-4 pb-2 border-b border-[var(--color-border)]">
             Tangents
           </h2>

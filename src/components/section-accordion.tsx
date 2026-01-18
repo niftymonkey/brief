@@ -12,16 +12,14 @@ interface SectionAccordionProps {
   videoId: string;
 }
 
-function TimestampRange({
-  start,
-  end,
+function TimestampLink({
+  time,
   videoId
 }: {
-  start: string;
-  end: string;
+  time: string;
   videoId: string;
 }) {
-  const seconds = parseTimestamp(start);
+  const seconds = parseTimestamp(time);
   const url = `https://youtube.com/watch?v=${videoId}&t=${seconds}s`;
 
   return (
@@ -36,7 +34,7 @@ function TimestampRange({
         "transition-colors"
       )}
     >
-      {start} – {end}
+      {time}
     </a>
   );
 }
@@ -53,7 +51,7 @@ export function SectionAccordion({ sections, videoId }: SectionAccordionProps) {
           <AccordionPrimitive.Header>
             <AccordionPrimitive.Trigger
               className={cn(
-                "flex items-center justify-between w-full px-4 py-3",
+                "flex items-center justify-between w-full px-3 py-2 md:px-4 md:py-3",
                 "text-left font-medium text-[var(--color-text-primary)]",
                 "hover:bg-[var(--color-bg-tertiary)] transition-colors",
                 "group"
@@ -63,16 +61,15 @@ export function SectionAccordion({ sections, videoId }: SectionAccordionProps) {
                 <ChevronRight className="w-4 h-4 text-[var(--color-text-tertiary)] transition-transform group-data-[state=open]:rotate-90" />
                 <span>{section.title}</span>
               </div>
-              <TimestampRange
-                start={section.timestampStart}
-                end={section.timestampEnd}
+              <TimestampLink
+                time={section.timestampStart}
                 videoId={videoId}
               />
             </AccordionPrimitive.Trigger>
           </AccordionPrimitive.Header>
 
           <AccordionPrimitive.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
-            <div className="px-4 pb-4 pt-2">
+            <div className="px-3 pb-3 pt-1 md:px-4 md:pb-4 md:pt-2">
               <ul className="space-y-2">
                 {section.keyPoints.map((point, pointIndex) => (
                   <li

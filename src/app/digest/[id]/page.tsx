@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,6 +10,46 @@ import { getDigestById } from "@/lib/db";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params;
+  const digest = await getDigestById(id);
+
+  if (!digest) {
+    return {
+      title: "Digest Not Found | YouTube Digest",
+    };
+  }
+
+  const thumbnailUrl = digest.thumbnailUrl || `https://i.ytimg.com/vi/${digest.videoId}/hqdefault.jpg`;
+  const description = digest.summary.length > 160
+    ? digest.summary.slice(0, 157) + "..."
+    : digest.summary;
+
+  return {
+    title: `${digest.title} | YouTube Digest`,
+    description,
+    openGraph: {
+      title: digest.title,
+      description,
+      type: "article",
+      images: [
+        {
+          url: thumbnailUrl,
+          width: 480,
+          height: 360,
+          alt: digest.title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: digest.title,
+      description,
+      images: [thumbnailUrl],
+    },
+  };
 }
 
 function formatDuration(isoDuration: string | null): string {

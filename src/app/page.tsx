@@ -26,7 +26,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      <main className="flex-1 px-4 py-8">
+      <main className="flex-1 px-4 py-4 md:py-8">
         {digestData ? (
           <DigestResult
             metadata={digestData.metadata}
