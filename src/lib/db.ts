@@ -32,10 +32,14 @@ export async function saveDigest(
   metadata: VideoMetadata,
   digest: StructuredDigest
 ): Promise<DbDigest> {
+  const startTime = Date.now();
+  console.log(`[DB] saveDigest called, videoId: ${metadata.videoId}`);
+
   const channelSlug = createSlug(metadata.channelTitle);
   const thumbnailUrl = getThumbnailUrl(metadata.videoId);
 
-  const result = await sql<DbDigest>`
+  try {
+    const result = await sql<DbDigest>`
     INSERT INTO digests (
       video_id,
       title,
@@ -79,9 +83,14 @@ export async function saveDigest(
       other_links as "otherLinks",
       created_at as "createdAt",
       updated_at as "updatedAt"
-  `;
+    `;
 
-  return result.rows[0];
+    console.log(`[DB] saveDigest success in ${Date.now() - startTime}ms`);
+    return result.rows[0];
+  } catch (error) {
+    console.error(`[DB] saveDigest failed in ${Date.now() - startTime}ms:`, error);
+    throw error;
+  }
 }
 
 /**
@@ -165,30 +174,39 @@ export async function getDigestById(id: string): Promise<DbDigest | null> {
 export async function getDigestByVideoId(
   videoId: string
 ): Promise<DbDigest | null> {
-  const result = await sql<DbDigest>`
-    SELECT
-      id,
-      video_id as "videoId",
-      title,
-      channel_name as "channelName",
-      channel_slug as "channelSlug",
-      duration,
-      published_at as "publishedAt",
-      thumbnail_url as "thumbnailUrl",
-      summary,
-      sections,
-      tangents,
-      related_links as "relatedLinks",
-      other_links as "otherLinks",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-    FROM digests
-    WHERE video_id = ${videoId}
-    ORDER BY created_at DESC
-    LIMIT 1
-  `;
+  const startTime = Date.now();
+  console.log(`[DB] getDigestByVideoId called, videoId: ${videoId}`);
 
-  return result.rows[0] || null;
+  try {
+    const result = await sql<DbDigest>`
+      SELECT
+        id,
+        video_id as "videoId",
+        title,
+        channel_name as "channelName",
+        channel_slug as "channelSlug",
+        duration,
+        published_at as "publishedAt",
+        thumbnail_url as "thumbnailUrl",
+        summary,
+        sections,
+        tangents,
+        related_links as "relatedLinks",
+        other_links as "otherLinks",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM digests
+      WHERE video_id = ${videoId}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    console.log(`[DB] getDigestByVideoId success in ${Date.now() - startTime}ms, found: ${!!result.rows[0]}`);
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error(`[DB] getDigestByVideoId failed in ${Date.now() - startTime}ms:`, error);
+    throw error;
+  }
 }
 
 /**

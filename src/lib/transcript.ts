@@ -11,8 +11,12 @@ import type { TranscriptEntry } from "./types";
 export async function fetchTranscript(
   videoId: string
 ): Promise<TranscriptEntry[]> {
+  const startTime = Date.now();
+  console.log(`[TRANSCRIPT] Starting fetch for videoId: ${videoId}`);
+
   try {
     const rawTranscript = await fetchYouTubeTranscript(videoId);
+    console.log(`[TRANSCRIPT] Success in ${Date.now() - startTime}ms, entries: ${rawTranscript.length}`);
 
     // Convert to our TranscriptEntry format
     return rawTranscript.map((entry) => ({
@@ -22,6 +26,10 @@ export async function fetchTranscript(
       lang: entry.lang,
     }));
   } catch (error: any) {
+    console.error(`[TRANSCRIPT] Failed in ${Date.now() - startTime}ms:`, error);
+    console.error(`[TRANSCRIPT] Error name: ${error.name}, message: ${error.message}`);
+    console.error(`[TRANSCRIPT] Error stack:`, error.stack);
+
     const errorMsg = error.message?.toLowerCase() || "";
 
     if (errorMsg.includes("disabled") || errorMsg.includes("not available")) {

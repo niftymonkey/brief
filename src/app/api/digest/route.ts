@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Check for existing cached digest
+        console.log(`[DIGEST] Checking DB for cached digest, videoId: ${videoId}`);
         const existingDigest = await getDigestByVideoId(videoId);
+        console.log(`[DIGEST] DB result: found=${!!existingDigest}, stale=${existingDigest ? isStale(existingDigest) : 'N/A'}`);
 
         if (existingDigest && !isStale(existingDigest)) {
           // Return cached digest immediately
@@ -71,6 +73,9 @@ export async function POST(request: NextRequest) {
 
         const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
         const youtubeApiKey = process.env.YOUTUBE_API_KEY;
+
+        // Log environment check (not values, just presence)
+        console.log(`[DIGEST] Env check: ANTHROPIC_API_KEY=${!!anthropicApiKey}, YOUTUBE_API_KEY=${!!youtubeApiKey}`);
 
         if (!anthropicApiKey || !youtubeApiKey) {
           controller.enqueue(encoder.encode(createEvent("error", "API keys not configured")));
