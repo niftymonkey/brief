@@ -4,6 +4,7 @@ import { extractVideoId } from "@/lib/parser";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateDigest } from "@/lib/summarize";
+import { isEmailAllowed } from "@/lib/access";
 import {
   saveDigest,
   getDigestByVideoId,
@@ -57,6 +58,20 @@ export async function POST(request: NextRequest) {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  if (!isEmailAllowed(user.email)) {
+    return new Response(
+      JSON.stringify({
+        error: "Access restricted",
+        message:
+          "Digest generation is currently limited to approved users. Bring Your Own Key (BYOK) support is coming soon!",
+      }),
+      {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 
   const userId = user.id;
