@@ -104,18 +104,54 @@ async function runMigration() {
 
     const migrationSQL = fs.readFileSync(migrationPath, "utf-8");
 
-    // Split by semicolons and filter out comments and empty statements
-    const statements = migrationSQL
-      .split(";")
-      .map((stmt) => stmt.trim())
-      .filter((stmt) => {
-        const withoutComments = stmt
+    // Split SQL into statements, respecting dollar-quoted strings ($$...$$)
+    // This is needed for PL/pgSQL functions which contain semicolons
+    const statements: string[] = [];
+    let current = "";
+    let inDollarQuote = false;
+
+    for (let i = 0; i < migrationSQL.length; i++) {
+      const char = migrationSQL[i];
+      const nextChar = migrationSQL[i + 1];
+
+      // Check for dollar quote start/end ($$)
+      if (char === "$" && nextChar === "$") {
+        inDollarQuote = !inDollarQuote;
+        current += "$$";
+        i++; // Skip next $
+        continue;
+      }
+
+      // Split on semicolon only if not inside dollar quote
+      if (char === ";" && !inDollarQuote) {
+        const trimmed = current.trim();
+        // Filter out empty statements and comment-only statements
+        const withoutComments = trimmed
           .split("\n")
           .filter((line) => !line.trim().startsWith("--"))
           .join("\n")
           .trim();
-        return withoutComments.length > 0;
-      });
+        if (withoutComments.length > 0) {
+          statements.push(trimmed);
+        }
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+
+    // Don't forget the last statement if it doesn't end with semicolon
+    const lastTrimmed = current.trim();
+    if (lastTrimmed.length > 0) {
+      const withoutComments = lastTrimmed
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("--"))
+        .join("\n")
+        .trim();
+      if (withoutComments.length > 0) {
+        statements.push(lastTrimmed);
+      }
+    }
 
     console.log(`Found ${statements.length} SQL statement${statements.length === 1 ? "" : "s"}${isDryRun ? " to preview" : " to execute"}\n`);
 

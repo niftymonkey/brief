@@ -4,6 +4,10 @@ import type {
   DigestSummary,
   VideoMetadata,
   StructuredDigest,
+  ContentSection,
+  Tangent,
+  Link,
+  KeyPoint,
 } from "./types";
 
 /**
@@ -26,6 +30,58 @@ function getThumbnailUrl(videoId: string): string {
 }
 
 /**
+ * Build searchable text from digest content for full-text search
+ * Extracts text from summary, sections, tangents, and links
+ */
+function buildSearchText(digest: StructuredDigest): string {
+  const parts: string[] = [];
+
+  // Add summary
+  if (digest.summary) {
+    parts.push(digest.summary);
+  }
+
+  // Add section titles and key points
+  for (const section of digest.sections) {
+    if (section.title) {
+      parts.push(section.title);
+    }
+    for (const kp of section.keyPoints) {
+      if (typeof kp === "string") {
+        parts.push(kp);
+      } else {
+        parts.push(kp.text);
+      }
+    }
+  }
+
+  // Add tangent titles and summaries
+  if (digest.tangents) {
+    for (const tangent of digest.tangents) {
+      if (tangent.title) {
+        parts.push(tangent.title);
+      }
+      if (tangent.summary) {
+        parts.push(tangent.summary);
+      }
+    }
+  }
+
+  // Add link titles and descriptions
+  const allLinks = [...digest.relatedLinks, ...digest.otherLinks];
+  for (const link of allLinks) {
+    if (link.title) {
+      parts.push(link.title);
+    }
+    if (link.description) {
+      parts.push(link.description);
+    }
+  }
+
+  return parts.join(" ");
+}
+
+/**
  * Save a new digest to the database
  */
 export async function saveDigest(
@@ -38,6 +94,7 @@ export async function saveDigest(
 
   const channelSlug = createSlug(metadata.channelTitle);
   const thumbnailUrl = getThumbnailUrl(metadata.videoId);
+  const searchText = buildSearchText(digest);
 
   try {
     const result = await sql<DbDigest>`
@@ -54,7 +111,8 @@ export async function saveDigest(
       sections,
       tangents,
       related_links,
-      other_links
+      other_links,
+      search_text
     ) VALUES (
       ${userId},
       ${metadata.videoId},
@@ -68,7 +126,8 @@ export async function saveDigest(
       ${JSON.stringify(digest.sections)},
       ${digest.tangents ? JSON.stringify(digest.tangents) : null},
       ${JSON.stringify(digest.relatedLinks)},
-      ${JSON.stringify(digest.otherLinks)}
+      ${JSON.stringify(digest.otherLinks)},
+      ${searchText}
     )
     RETURNING
       id,
@@ -110,6 +169,7 @@ export async function updateDigest(
 ): Promise<DbDigest> {
   const channelSlug = createSlug(metadata.channelTitle);
   const thumbnailUrl = getThumbnailUrl(metadata.videoId);
+  const searchText = buildSearchText(digest);
 
   const result = await sql<DbDigest>`
     UPDATE digests SET
@@ -124,6 +184,7 @@ export async function updateDigest(
       tangents = ${digest.tangents ? JSON.stringify(digest.tangents) : null},
       related_links = ${JSON.stringify(digest.relatedLinks)},
       other_links = ${JSON.stringify(digest.otherLinks)},
+      search_text = ${searchText},
       updated_at = NOW()
     WHERE id = ${digestId} AND user_id = ${userId}
     RETURNING
@@ -311,6 +372,15 @@ export async function copyDigestForUser(
   const startTime = Date.now();
   console.log(`[DB] copyDigestForUser called, userId: ${userId}, sourceDigestId: ${sourceDigest.id}`);
 
+  // Build search_text from the source digest
+  const searchText = buildSearchText({
+    summary: sourceDigest.summary,
+    sections: sourceDigest.sections,
+    tangents: sourceDigest.tangents ?? undefined,
+    relatedLinks: sourceDigest.relatedLinks,
+    otherLinks: sourceDigest.otherLinks,
+  });
+
   try {
     const result = await sql<DbDigest>`
     INSERT INTO digests (
@@ -326,7 +396,8 @@ export async function copyDigestForUser(
       sections,
       tangents,
       related_links,
-      other_links
+      other_links,
+      search_text
     ) VALUES (
       ${userId},
       ${sourceDigest.videoId},
@@ -340,7 +411,8 @@ export async function copyDigestForUser(
       ${JSON.stringify(sourceDigest.sections)},
       ${sourceDigest.tangents ? JSON.stringify(sourceDigest.tangents) : null},
       ${JSON.stringify(sourceDigest.relatedLinks)},
-      ${JSON.stringify(sourceDigest.otherLinks)}
+      ${JSON.stringify(sourceDigest.otherLinks)},
+      ${searchText}
     )
     RETURNING
       id,
@@ -372,7 +444,25 @@ export async function copyDigestForUser(
 }
 
 /**
+ * Convert search input to tsquery format
+ * Handles multiple words with prefix matching
+ * Sanitizes input to prevent tsquery syntax errors
+ */
+function buildTsQuery(search: string): string {
+  return search
+    .trim()
+    .toLowerCase()
+    // Remove special tsquery characters that could cause syntax errors
+    .replace(/[&|!():*<>'"\\]/g, " ")
+    .split(/\s+/)
+    .filter((term) => term.length > 0)
+    .map((term) => `${term}:*`) // Prefix matching for each term
+    .join(" & "); // AND between terms
+}
+
+/**
  * Get recent digests for a specific user with optional search
+ * Uses PostgreSQL full-text search with ranking when search is provided
  */
 export async function getDigests(options: {
   userId: string;
@@ -386,16 +476,17 @@ export async function getDigests(options: {
   let total: number;
 
   if (search) {
-    const searchPattern = `%${search}%`;
+    const tsQuery = buildTsQuery(search);
 
     const countResult = await sql<{ count: string }>`
       SELECT COUNT(*) as count
       FROM digests
       WHERE user_id = ${userId}
-        AND (title ILIKE ${searchPattern} OR channel_name ILIKE ${searchPattern})
+        AND search_vector @@ to_tsquery('english', ${tsQuery})
     `;
     total = parseInt(countResult.rows[0].count, 10);
 
+    // Use ts_rank to order by relevance, then by created_at
     const result = await sql<DigestSummary>`
       SELECT
         id,
@@ -406,8 +497,8 @@ export async function getDigests(options: {
         created_at as "createdAt"
       FROM digests
       WHERE user_id = ${userId}
-        AND (title ILIKE ${searchPattern} OR channel_name ILIKE ${searchPattern})
-      ORDER BY created_at DESC
+        AND search_vector @@ to_tsquery('english', ${tsQuery})
+      ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC, created_at DESC
       LIMIT ${limit}
       OFFSET ${offset}
     `;

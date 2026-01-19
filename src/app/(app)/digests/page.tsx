@@ -96,7 +96,7 @@ export default async function DigestsPage({ searchParams }: PageProps) {
         </div>
 
         {/* Search */}
-        <DigestSearch initialValue={search} />
+        <DigestSearch />
 
         {/* Content */}
         <Suspense key={search} fallback={<DigestGridSkeleton />}>
