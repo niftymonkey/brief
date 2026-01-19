@@ -1,4 +1,12 @@
 /**
+ * Validates a YouTube video ID format
+ * YouTube video IDs are 11 characters: alphanumeric, hyphens, and underscores
+ */
+function isValidVideoId(videoId: string): boolean {
+  return /^[a-zA-Z0-9_-]{11}$/.test(videoId);
+}
+
+/**
  * Extracts the YouTube video ID from various URL formats
  *
  * Supported formats:
@@ -24,7 +32,7 @@ export function extractVideoId(url: string): string | null {
 
   for (const pattern of patterns) {
     const match = url.match(pattern);
-    if (match?.[1]) {
+    if (match?.[1] && isValidVideoId(match[1])) {
       return match[1];
     }
   }

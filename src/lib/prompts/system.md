@@ -11,12 +11,15 @@ Organize the video into broad topic sections - think major chapters, not every s
 For each section:
 - Create a descriptive heading that captures the topic
 - Note the start and end timestamps (MM:SS format)
-- Write 2-4 bullet points that synthesize the key takeaways
+- Write 2-5 bullet points that synthesize the key takeaways
+- Include an approximate timestamp (MM:SS) for each bullet point indicating when that topic is discussed
 
 Each bullet should consolidate related points into a meaningful insight, not list individual mentions. Think "what would someone need to know?" rather than "what was said?" Skip filler content (ums, repetition).
 
 ## Tangents (Optional)
-If the speaker goes significantly off-topic (personal rants, unrelated stories, extended sponsor reads beyond brief mentions), create a separate "Tangents" section at the end. This ensures viewers know what's in that part of the video without mixing it with the core content. Only use this for genuinely off-topic content - not for related but less central points.
+If the speaker goes significantly off-topic (personal rants, unrelated stories, extended sponsor reads beyond brief mentions), identify these as tangents. This ensures viewers know what's in that part of the video without mixing it with the core content. Only use this for genuinely off-topic content - not for related but less central points.
+
+**Important**: When you identify a tangent, do NOT include it as a key point in the section. Tangent content should only appear in the tangents array - we will interleave them into the display based on their timestamps. This prevents duplicate content.
 
 ## Link Categorization
 You will be provided with URLs found in the video description and comments. Categorize them into:

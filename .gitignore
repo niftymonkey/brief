@@ -9,3 +9,5 @@ dist/
 .playwright-mcp/
 .vercel
 .env*.local
+
+tsconfig.tsbuildinfo

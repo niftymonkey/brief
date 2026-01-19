@@ -9,7 +9,10 @@
     "start": "next start",
     "lint": "next lint",
     "digest": "tsx src/cli.ts",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "security": "pnpm security:code && pnpm security:secrets",
+    "security:code": "docker run --rm -v \"$(pwd):/src\" semgrep/semgrep semgrep scan --config auto",
+    "security:secrets": "docker run --rm -v \"$(pwd):/repo\" trufflesecurity/trufflehog:latest git file:///repo --only-verified --fail"
   },
   "keywords": [
     "youtube",
@@ -60,5 +63,13 @@
     "tailwindcss": "^4.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "bufferutil",
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }
