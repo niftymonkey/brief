@@ -34,18 +34,22 @@ export function DigestCard({ digest }: DigestCardProps) {
         )}
       </div>
 
-      {/* Title */}
-      <h3 className="font-medium text-[var(--color-text-primary)] line-clamp-2 group-hover:text-[var(--color-accent)] transition-colors mb-1">
-        {digest.title}
-      </h3>
+      {/* Title - FIXED HEIGHT for 2 lines */}
+      <div className="h-[2.75rem] mb-2">
+        <h3 className="font-medium text-[var(--color-text-primary)] line-clamp-2 leading-snug group-hover:text-[var(--color-accent)] transition-colors">
+          {digest.title}
+        </h3>
+      </div>
 
-      {/* Meta */}
-      <p className="text-sm text-[var(--color-text-secondary)]">
-        {digest.channelName}
-      </p>
-      <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
-        {createdDate}
-      </p>
+      {/* Meta - channel left, date right */}
+      <div className="flex items-center justify-between text-sm border-t border-[var(--color-border)] pt-2 mt-2">
+        <span className="text-[var(--color-text-secondary)] truncate min-w-0">
+          {digest.channelName}
+        </span>
+        <span className="text-[var(--color-text-tertiary)] text-xs shrink-0 ml-2">
+          {createdDate}
+        </span>
+      </div>
     </Link>
   );
 }
