@@ -1,6 +1,6 @@
 import { authkitMiddleware } from '@workos-inc/authkit-nextjs';
 
-export default authkitMiddleware({
+export const proxy = authkitMiddleware({
   middlewareAuth: {
     enabled: true,
     unauthenticatedPaths: ['/', '/auth', '/callback', '/api/:path*', '/share/:path*'],
