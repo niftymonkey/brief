@@ -10,6 +10,7 @@ import { DeleteDigestButton } from "@/components/delete-digest-button";
 import { RegenerateDigestButton } from "@/components/regenerate-digest-button";
 import { ShareButton } from "@/components/share-button";
 import { getDigestById } from "@/lib/db";
+import { isEmailAllowed } from "@/lib/access";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -79,6 +80,7 @@ export default async function DigestPage({ params }: PageProps) {
 
   const { id } = await params;
   const digest = await getDigestById(id, user.id);
+  const canRegenerate = isEmailAllowed(user.email);
 
   if (!digest) {
     notFound();
@@ -107,7 +109,7 @@ export default async function DigestPage({ params }: PageProps) {
             </Link>
             <div className="flex items-center gap-3">
               <ShareButton digestId={id} isShared={digest.isShared} slug={digest.slug} title={digest.title} />
-              <RegenerateDigestButton digestId={id} videoId={digest.videoId} />
+              {canRegenerate && <RegenerateDigestButton digestId={id} videoId={digest.videoId} />}
               <DeleteDigestButton digestId={id} />
             </div>
           </div>

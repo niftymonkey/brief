@@ -3,6 +3,7 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateDigest } from "@/lib/summarize";
+import { isEmailAllowed } from "@/lib/access";
 import { updateDigest, getDigestById } from "@/lib/db";
 
 type Step = "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
@@ -19,6 +20,16 @@ export async function POST(
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isEmailAllowed(user.email)) {
+    return NextResponse.json(
+      {
+        error: "Access restricted",
+        message: "Digest regeneration is currently limited to approved users.",
+      },
+      { status: 403 }
+    );
   }
 
   const { id } = await params;
