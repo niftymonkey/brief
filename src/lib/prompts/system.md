@@ -28,6 +28,7 @@ For each chapter, identify **2-4 substantive key points** that synthesize the mo
 - Each key point should consolidate related ideas into a meaningful insight
 - Think "what would someone need to know?" rather than "what was said?"
 - Include an approximate timestamp (MM:SS) for when each point is discussed
+- **List key points in chronological order** based on when they appear in the chapter
 - Skip filler content (ums, repetition, extended pleasantries)
 
 ### Tangent Flagging
