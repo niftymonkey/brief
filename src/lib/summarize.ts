@@ -30,22 +30,32 @@ function parseTimestamp(timestamp: string): number {
 }
 
 /**
- * Sorts key points within each section by timestamp (chronological order)
+ * Sorts digest content chronologically:
+ * - Sections (chapters) by their start timestamp
+ * - Key points within each section by their timestamp
  */
-function sortKeyPointsByTimestamp(digest: StructuredDigest): StructuredDigest {
+function sortDigestChronologically(digest: StructuredDigest): StructuredDigest {
+  // First sort sections by start timestamp
+  const sortedSections = [...digest.sections].sort(
+    (a, b) => parseTimestamp(a.timestampStart) - parseTimestamp(b.timestampStart)
+  );
+
+  // Then sort key points within each section
+  const sectionsWithSortedPoints = sortedSections.map((section) => {
+    // Legacy digests have string[] keyPoints - skip sorting
+    if (section.keyPoints.length === 0 || typeof section.keyPoints[0] === "string") {
+      return section;
+    }
+    // Sort KeyPoint[] by timestamp
+    const sortedPoints = [...(section.keyPoints as KeyPoint[])].sort(
+      (a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp)
+    );
+    return { ...section, keyPoints: sortedPoints };
+  });
+
   return {
     ...digest,
-    sections: digest.sections.map((section) => {
-      // Legacy digests have string[] keyPoints - skip sorting
-      if (section.keyPoints.length === 0 || typeof section.keyPoints[0] === "string") {
-        return section;
-      }
-      // Sort KeyPoint[] by timestamp
-      const sortedPoints = [...(section.keyPoints as KeyPoint[])].sort(
-        (a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp)
-      );
-      return { ...section, keyPoints: sortedPoints };
-    }),
+    sections: sectionsWithSortedPoints,
   };
 }
 
@@ -147,8 +157,8 @@ export async function generateDigest(
       prompt: userPrompt,
     });
 
-    // Sort key points chronologically within each section
-    return sortKeyPointsByTimestamp(result.output as StructuredDigest);
+    // Sort sections and key points chronologically
+    return sortDigestChronologically(result.output as StructuredDigest);
   } catch (error: any) {
     if (error.message?.includes("401") || error.message?.includes("authentication")) {
       throw new Error(
