@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import type { TranscriptEntry, VideoMetadata, StructuredDigest, Chapter } from "./types";
+import type { TranscriptEntry, VideoMetadata, StructuredDigest, Chapter, KeyPoint } from "./types";
 import { combineUrls } from "./url-extractor";
 import { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts";
 
@@ -12,6 +12,41 @@ function formatTimestamp(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Parses a timestamp string (MM:SS or H:MM:SS) to seconds
+ */
+function parseTimestamp(timestamp: string): number {
+  const parts = timestamp.split(":").map((p) => parseInt(p, 10));
+  if (parts.length === 3) {
+    // H:MM:SS
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  } else if (parts.length === 2) {
+    // MM:SS
+    return parts[0] * 60 + parts[1];
+  }
+  return 0;
+}
+
+/**
+ * Sorts key points within each section by timestamp (chronological order)
+ */
+function sortKeyPointsByTimestamp(digest: StructuredDigest): StructuredDigest {
+  return {
+    ...digest,
+    sections: digest.sections.map((section) => {
+      // Legacy digests have string[] keyPoints - skip sorting
+      if (section.keyPoints.length === 0 || typeof section.keyPoints[0] === "string") {
+        return section;
+      }
+      // Sort KeyPoint[] by timestamp
+      const sortedPoints = [...(section.keyPoints as KeyPoint[])].sort(
+        (a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp)
+      );
+      return { ...section, keyPoints: sortedPoints };
+    }),
+  };
 }
 
 /**
@@ -112,7 +147,8 @@ export async function generateDigest(
       prompt: userPrompt,
     });
 
-    return result.output as StructuredDigest;
+    // Sort key points chronologically within each section
+    return sortKeyPointsByTimestamp(result.output as StructuredDigest);
   } catch (error: any) {
     if (error.message?.includes("401") || error.message?.includes("authentication")) {
       throw new Error(
