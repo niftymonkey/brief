@@ -25,6 +25,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
+      data-scroll-behavior="smooth"
       className={`${GeistSans.variable} ${GeistMono.variable}`}
     >
       <body className="antialiased min-h-screen bg-[var(--color-bg-primary)]">

@@ -147,7 +147,47 @@ export function UrlInput({ onDigestComplete }: UrlInputProps) {
           </button>
         </div>
         {error && (
-          <p className="mt-2 text-sm text-red-500 text-center">{error}</p>
+          <p className="mt-2 text-sm text-red-500 text-center">
+            {error.includes("credit balance") ? (
+              <>
+                Your credit balance is too low to access the Anthropic API.{" "}
+                <a
+                  href="https://console.anthropic.com/settings/plans"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-red-400"
+                >
+                  Upgrade or purchase credits
+                </a>
+              </>
+            ) : error.includes("quota exceeded") ? (
+              <>
+                YouTube API quota exceeded for today.{" "}
+                <a
+                  href="https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-red-400"
+                >
+                  Check quota usage
+                </a>
+              </>
+            ) : error.includes("Supadata") ? (
+              <>
+                Supadata API credits exhausted.{" "}
+                <a
+                  href="https://dash.supadata.ai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-red-400"
+                >
+                  Add credits in your dashboard
+                </a>
+              </>
+            ) : (
+              error
+            )}
+          </p>
         )}
       </form>
 

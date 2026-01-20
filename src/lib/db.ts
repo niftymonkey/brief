@@ -4,10 +4,7 @@ import type {
   DigestSummary,
   VideoMetadata,
   StructuredDigest,
-  ContentSection,
-  Tangent,
   Link,
-  KeyPoint,
 } from "./types";
 
 /**
@@ -31,7 +28,7 @@ function getThumbnailUrl(videoId: string): string {
 
 /**
  * Build searchable text from digest content for full-text search
- * Extracts text from summary, sections, tangents, and links
+ * Extracts text from summary, sections, and links
  */
 function buildSearchText(digest: StructuredDigest): string {
   const parts: string[] = [];
@@ -51,18 +48,6 @@ function buildSearchText(digest: StructuredDigest): string {
         parts.push(kp);
       } else {
         parts.push(kp.text);
-      }
-    }
-  }
-
-  // Add tangent titles and summaries
-  if (digest.tangents) {
-    for (const tangent of digest.tangents) {
-      if (tangent.title) {
-        parts.push(tangent.title);
-      }
-      if (tangent.summary) {
-        parts.push(tangent.summary);
       }
     }
   }
@@ -87,7 +72,8 @@ function buildSearchText(digest: StructuredDigest): string {
 export async function saveDigest(
   userId: string,
   metadata: VideoMetadata,
-  digest: StructuredDigest
+  digest: StructuredDigest,
+  hasCreatorChapters: boolean
 ): Promise<DbDigest> {
   const startTime = Date.now();
   console.log(`[DB] saveDigest called, userId: ${userId}, videoId: ${metadata.videoId}`);
@@ -109,9 +95,9 @@ export async function saveDigest(
       thumbnail_url,
       summary,
       sections,
-      tangents,
       related_links,
       other_links,
+      has_creator_chapters,
       search_text
     ) VALUES (
       ${userId},
@@ -124,9 +110,9 @@ export async function saveDigest(
       ${thumbnailUrl},
       ${digest.summary},
       ${JSON.stringify(digest.sections)},
-      ${digest.tangents ? JSON.stringify(digest.tangents) : null},
       ${JSON.stringify(digest.relatedLinks)},
       ${JSON.stringify(digest.otherLinks)},
+      ${hasCreatorChapters},
       ${searchText}
     )
     RETURNING
@@ -141,11 +127,11 @@ export async function saveDigest(
       thumbnail_url as "thumbnailUrl",
       summary,
       sections,
-      tangents,
       related_links as "relatedLinks",
       other_links as "otherLinks",
       is_shared as "isShared",
       slug,
+      has_creator_chapters as "hasCreatorChapters",
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -165,7 +151,8 @@ export async function updateDigest(
   userId: string,
   digestId: string,
   metadata: VideoMetadata,
-  digest: StructuredDigest
+  digest: StructuredDigest,
+  hasCreatorChapters: boolean
 ): Promise<DbDigest> {
   const channelSlug = createSlug(metadata.channelTitle);
   const thumbnailUrl = getThumbnailUrl(metadata.videoId);
@@ -181,9 +168,9 @@ export async function updateDigest(
       thumbnail_url = ${thumbnailUrl},
       summary = ${digest.summary},
       sections = ${JSON.stringify(digest.sections)},
-      tangents = ${digest.tangents ? JSON.stringify(digest.tangents) : null},
       related_links = ${JSON.stringify(digest.relatedLinks)},
       other_links = ${JSON.stringify(digest.otherLinks)},
+      has_creator_chapters = ${hasCreatorChapters},
       search_text = ${searchText},
       updated_at = NOW()
     WHERE id = ${digestId} AND user_id = ${userId}
@@ -199,11 +186,11 @@ export async function updateDigest(
       thumbnail_url as "thumbnailUrl",
       summary,
       sections,
-      tangents,
       related_links as "relatedLinks",
       other_links as "otherLinks",
       is_shared as "isShared",
       slug,
+      has_creator_chapters as "hasCreatorChapters",
       created_at as "createdAt",
       updated_at as "updatedAt"
   `;
@@ -232,11 +219,11 @@ export async function getDigestById(
         thumbnail_url as "thumbnailUrl",
         summary,
         sections,
-        tangents,
         related_links as "relatedLinks",
         other_links as "otherLinks",
         is_shared as "isShared",
         slug,
+        has_creator_chapters as "hasCreatorChapters",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -258,11 +245,11 @@ export async function getDigestById(
       thumbnail_url as "thumbnailUrl",
       summary,
       sections,
-      tangents,
       related_links as "relatedLinks",
       other_links as "otherLinks",
       is_shared as "isShared",
       slug,
+      has_creator_chapters as "hasCreatorChapters",
       created_at as "createdAt",
       updated_at as "updatedAt"
     FROM digests
@@ -296,11 +283,11 @@ export async function getDigestByVideoId(
         thumbnail_url as "thumbnailUrl",
         summary,
         sections,
-        tangents,
         related_links as "relatedLinks",
         other_links as "otherLinks",
         is_shared as "isShared",
         slug,
+        has_creator_chapters as "hasCreatorChapters",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -341,11 +328,11 @@ export async function findGlobalDigestByVideoId(
         thumbnail_url as "thumbnailUrl",
         summary,
         sections,
-        tangents,
         related_links as "relatedLinks",
         other_links as "otherLinks",
         is_shared as "isShared",
         slug,
+        has_creator_chapters as "hasCreatorChapters",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -376,7 +363,6 @@ export async function copyDigestForUser(
   const searchText = buildSearchText({
     summary: sourceDigest.summary,
     sections: sourceDigest.sections,
-    tangents: sourceDigest.tangents ?? undefined,
     relatedLinks: sourceDigest.relatedLinks,
     otherLinks: sourceDigest.otherLinks,
   });
@@ -394,9 +380,9 @@ export async function copyDigestForUser(
       thumbnail_url,
       summary,
       sections,
-      tangents,
       related_links,
       other_links,
+      has_creator_chapters,
       search_text
     ) VALUES (
       ${userId},
@@ -409,9 +395,9 @@ export async function copyDigestForUser(
       ${sourceDigest.thumbnailUrl},
       ${sourceDigest.summary},
       ${JSON.stringify(sourceDigest.sections)},
-      ${sourceDigest.tangents ? JSON.stringify(sourceDigest.tangents) : null},
       ${JSON.stringify(sourceDigest.relatedLinks)},
       ${JSON.stringify(sourceDigest.otherLinks)},
+      ${sourceDigest.hasCreatorChapters},
       ${searchText}
     )
     RETURNING
@@ -426,11 +412,11 @@ export async function copyDigestForUser(
       thumbnail_url as "thumbnailUrl",
       summary,
       sections,
-      tangents,
       related_links as "relatedLinks",
       other_links as "otherLinks",
       is_shared as "isShared",
       slug,
+      has_creator_chapters as "hasCreatorChapters",
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -568,11 +554,11 @@ export async function getSharedDigestBySlug(
       thumbnail_url as "thumbnailUrl",
       summary,
       sections,
-      tangents,
       related_links as "relatedLinks",
       other_links as "otherLinks",
       is_shared as "isShared",
       slug,
+      has_creator_chapters as "hasCreatorChapters",
       created_at as "createdAt",
       updated_at as "updatedAt"
     FROM digests
@@ -636,4 +622,3 @@ export async function toggleDigestSharing(
     slug: result.rows[0].slug,
   };
 }
-

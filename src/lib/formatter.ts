@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import type { VideoMetadata, StructuredDigest, Tangent, KeyPoint } from "./types";
+import type { VideoMetadata, StructuredDigest, KeyPoint } from "./types";
 
 /**
  * Parses a timestamp string (MM:SS or H:MM:SS) to seconds
@@ -15,76 +15,23 @@ function parseTimestamp(timestamp: string): number {
   return 0;
 }
 
-/**
- * Finds tangents that occur within a section's time range
- */
-function findTangentsInSection(
-  sectionStart: string,
-  sectionEnd: string,
-  tangents: Tangent[]
-): { tangent: Tangent; index: number }[] {
-  const startSec = parseTimestamp(sectionStart);
-  const endSec = parseTimestamp(sectionEnd);
-
-  return tangents
-    .map((tangent, index) => ({ tangent, index }))
-    .filter(({ tangent }) => {
-      const tangentStart = parseTimestamp(tangent.timestampStart);
-      // Tangent overlaps if it starts within the section
-      return tangentStart >= startSec && tangentStart < endSec;
-    });
-}
-
 function isKeyPointArray(keyPoints: KeyPoint[] | string[]): keyPoints is KeyPoint[] {
   return keyPoints.length > 0 && typeof keyPoints[0] === "object";
 }
 
-type ContentItem =
-  | { type: "keypoint"; text: string; timestamp?: number }
-  | { type: "tangent"; tangent: Tangent; index: number };
-
-function buildInterleavedMarkdown(
-  keyPoints: KeyPoint[] | string[],
-  sectionTangents: { tangent: Tangent; index: number }[]
-): string {
+function buildKeyPointsMarkdown(keyPoints: KeyPoint[] | string[]): string {
   if (isKeyPointArray(keyPoints)) {
-    // New format - interleave by timestamp
-    const items: ContentItem[] = [
-      ...keyPoints.map((kp) => ({
-        type: "keypoint" as const,
-        text: kp.text,
-        timestamp: parseTimestamp(kp.timestamp),
-      })),
-      ...sectionTangents.map(({ tangent, index }) => ({
-        type: "tangent" as const,
-        tangent,
-        index,
-      })),
-    ];
-
-    items.sort((a, b) => {
-      const aTime = a.type === "keypoint" ? (a.timestamp ?? 0) : parseTimestamp(a.tangent.timestampStart);
-      const bTime = b.type === "keypoint" ? (b.timestamp ?? 0) : parseTimestamp(b.tangent.timestampStart);
-      return aTime - bTime;
-    });
-
-    return items
-      .map((item) =>
-        item.type === "keypoint"
-          ? `- ${item.text}`
-          : `\n*[Tangent: ${item.tangent.title} (${item.tangent.timestampStart} - ${item.tangent.timestampEnd})](#tangent-${item.index + 1})*\n`
+    // New format with timestamps and tangent flags
+    return keyPoints
+      .map((kp) =>
+        kp.isTangent
+          ? `- *[tangent] ${kp.text}*`
+          : `- ${kp.text}`
       )
       .join("\n");
   } else {
-    // Legacy format - keypoints then tangents at end
-    const keyPointsMarkdown = keyPoints.map((point) => `- ${point}`).join("\n");
-    const tangentRefs = sectionTangents
-      .map(({ tangent, index }) =>
-        `*[Tangent: ${tangent.title} (${tangent.timestampStart} - ${tangent.timestampEnd})](#tangent-${index + 1})*`
-      )
-      .join("\n");
-
-    return tangentRefs ? `${keyPointsMarkdown}\n\n${tangentRefs}` : keyPointsMarkdown;
+    // Legacy format - plain strings
+    return keyPoints.map((point) => `- ${point}`).join("\n");
   }
 }
 
@@ -155,25 +102,15 @@ export function formatMarkdown(
       return `| [${section.title}](#${anchor}) | ${section.timestampStart} |`;
     })
     .join("\n");
-  const sectionOverview = `| Section | Time |
+  const sectionOverview = `| Chapter | Time |
 |---------|-----:|
 ${sectionRows}`;
 
-  // Render content sections (with inline tangent references)
-  const tangents = digest.tangents || [];
+  // Render content sections
   const sectionsMarkdown = digest.sections
     .map((section, index) => {
       const anchor = `section-${index + 1}`;
-
-      // Find any tangents that occur within this section
-      const sectionTangents = findTangentsInSection(
-        section.timestampStart,
-        section.timestampEnd,
-        tangents
-      );
-
-      // Build interleaved content (handles both legacy and new formats)
-      const contentMarkdown = buildInterleavedMarkdown(section.keyPoints, sectionTangents);
+      const contentMarkdown = buildKeyPointsMarkdown(section.keyPoints);
 
       return `### <a id="${anchor}"></a>${section.title} (${section.timestampStart} - ${section.timestampEnd})
 
@@ -197,26 +134,13 @@ ${digest.relatedLinks.map((link) => `- **[${link.title}](${link.url})** - ${link
 ${digest.otherLinks.map((link) => `- **[${link.title}](${link.url})** - ${link.description}`).join("\n")}`;
   }
 
-  // Render tangents (optional) with anchors
-  let tangentsMarkdown = "";
-  if (digest.tangents && digest.tangents.length > 0) {
-    const tangentItems = digest.tangents
-      .map((tangent, index) =>
-        `- <a id="tangent-${index + 1}"></a>**${tangent.title}** (${tangent.timestampStart} - ${tangent.timestampEnd}) - ${tangent.summary}`
-      )
-      .join("\n");
-    tangentsMarkdown = `## Tangents
-
-${tangentItems}`;
-  }
-
   return `# ${metadata.title}
 
-**Channel**: ${metadata.channelTitle}  
-**Duration**: ${formatDuration(metadata.duration)}  
-**Published**: ${publishDate}  
-**Video**: https://youtube.com/watch?v=${metadata.videoId}  
-**Generated**: ${generatedDate}  
+**Channel**: ${metadata.channelTitle}
+**Duration**: ${formatDuration(metadata.duration)}
+**Published**: ${publishDate}
+**Video**: https://youtube.com/watch?v=${metadata.videoId}
+**Generated**: ${generatedDate}
 
 ---
 
@@ -224,13 +148,12 @@ ${tangentItems}`;
 
 ${digest.summary}
 
-## Sections
+## Chapters
 
 ${sectionOverview}
 
 ## Details
 ${sectionsMarkdown}
-${tangentsMarkdown ? `\n${tangentsMarkdown}` : ""}
 
 ## Links
 ${relatedLinksMarkdown ? `\n${relatedLinksMarkdown}` : ""}

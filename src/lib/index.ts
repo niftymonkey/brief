@@ -17,7 +17,10 @@ export { fetchTranscript } from "./transcript";
 export { generateDigest } from "./summarize";
 
 // Prompts
-export { systemPrompt, buildUserPrompt } from "./prompts";
+export { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts";
+
+// Chapter extraction
+export { extractChapters, parseDurationToSeconds } from "./chapters";
 
 // Output formatting
 export { formatMarkdown, saveDigestToFile } from "./formatter";

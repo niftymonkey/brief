@@ -3,6 +3,7 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateDigest } from "@/lib/summarize";
+import { extractChapters } from "@/lib/chapters";
 import { isEmailAllowed } from "@/lib/access";
 import { updateDigest, getDigestById } from "@/lib/db";
 
@@ -66,6 +67,10 @@ export async function POST(
         const metadata = await fetchVideoMetadata(videoId, youtubeApiKey);
         console.log(`[REGENERATE] Metadata fetched: ${metadata.title}`);
 
+        // Extract chapters from description
+        const chapters = extractChapters(metadata.description, metadata.duration);
+        console.log(`[REGENERATE] Chapters extracted: ${chapters ? chapters.length : 'none'}`);
+
         // Step 2: Fetch transcript
         controller.enqueue(encoder.encode(createEvent("transcript", "Extracting transcript...")));
         const transcript = await fetchTranscript(videoId);
@@ -73,13 +78,14 @@ export async function POST(
 
         // Step 3: Generate digest
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
-        const digest = await generateDigest(transcript, metadata, anthropicApiKey);
+        const digest = await generateDigest(transcript, metadata, anthropicApiKey, chapters);
         console.log(`[REGENERATE] Digest generated`);
 
         // Step 4: Save
         controller.enqueue(encoder.encode(createEvent("saving", "Saving digest...")));
-        await updateDigest(user.id, id, metadata, digest);
-        console.log(`[REGENERATE] Digest updated in database`);
+        const hasCreatorChapters = chapters !== null && chapters.length > 0;
+        await updateDigest(user.id, id, metadata, digest, hasCreatorChapters);
+        console.log(`[REGENERATE] Digest updated in database, hasCreatorChapters: ${hasCreatorChapters}`);
 
         // Complete
         controller.enqueue(encoder.encode(createEvent("complete", "Done!")));

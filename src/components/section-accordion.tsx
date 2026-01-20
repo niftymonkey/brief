@@ -6,78 +6,15 @@ import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { ChevronRight, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseTimestamp } from "./timestamp";
-import type { ContentSection, Tangent, KeyPoint } from "@/lib/types";
+import type { ContentSection, KeyPoint } from "@/lib/types";
 
 interface SectionAccordionProps {
   sections: ContentSection[];
   videoId: string;
-  tangents?: Tangent[];
 }
-
-type ContentItem =
-  | { type: "keypoint"; text: string; timestamp?: number }
-  | { type: "tangent"; tangent: Tangent; index: number };
 
 function isKeyPointArray(keyPoints: KeyPoint[] | string[]): keyPoints is KeyPoint[] {
   return keyPoints.length > 0 && typeof keyPoints[0] === "object";
-}
-
-function getTangentsInSection(
-  section: ContentSection,
-  tangents: Tangent[],
-  nextSectionStart?: number
-): Array<{ tangent: Tangent; index: number }> {
-  const sectionStart = parseTimestamp(section.timestampStart);
-  // Use next section's start time if available, otherwise use this section's end time
-  const sectionEnd = nextSectionStart ?? parseTimestamp(section.timestampEnd);
-
-  return tangents
-    .map((tangent, index) => ({ tangent, index }))
-    .filter(({ tangent }) => {
-      const tangentStart = parseTimestamp(tangent.timestampStart);
-      return tangentStart >= sectionStart && tangentStart < sectionEnd;
-    });
-}
-
-function buildInterleavedContent(
-  section: ContentSection,
-  sectionTangents: Array<{ tangent: Tangent; index: number }>
-): ContentItem[] {
-  const items: ContentItem[] = [];
-
-  if (isKeyPointArray(section.keyPoints)) {
-    // New format with timestamps - interleave tangents
-    const keyPointItems: ContentItem[] = section.keyPoints.map((kp) => ({
-      type: "keypoint" as const,
-      text: kp.text,
-      timestamp: parseTimestamp(kp.timestamp),
-    }));
-
-    const tangentItems: ContentItem[] = sectionTangents.map(({ tangent, index }) => ({
-      type: "tangent" as const,
-      tangent,
-      index,
-    }));
-
-    // Merge and sort by timestamp
-    const allItems = [...keyPointItems, ...tangentItems];
-    allItems.sort((a, b) => {
-      const aTime = a.type === "keypoint" ? (a.timestamp ?? 0) : parseTimestamp(a.tangent.timestampStart);
-      const bTime = b.type === "keypoint" ? (b.timestamp ?? 0) : parseTimestamp(b.tangent.timestampStart);
-      return aTime - bTime;
-    });
-
-    return allItems;
-  } else {
-    // Legacy format - keypoints first, then tangents at end
-    section.keyPoints.forEach((text) => {
-      items.push({ type: "keypoint", text });
-    });
-    sectionTangents.forEach(({ tangent, index }) => {
-      items.push({ type: "tangent", tangent, index });
-    });
-    return items;
-  }
 }
 
 function TimestampLink({
@@ -107,7 +44,7 @@ function TimestampLink({
   );
 }
 
-export function SectionAccordion({ sections, videoId, tangents = [] }: SectionAccordionProps) {
+export function SectionAccordion({ sections, videoId }: SectionAccordionProps) {
   const allSectionValues = sections.map((_, index) => `section-${index}`);
   const [openSections, setOpenSections] = useState<string[]>([]);
 
@@ -138,12 +75,7 @@ export function SectionAccordion({ sections, videoId, tangents = [] }: SectionAc
         onValueChange={setOpenSections}
         className="space-y-2"
       >
-        {sections.map((section, index) => {
-        const nextSection = sections[index + 1];
-        const nextSectionStart = nextSection ? parseTimestamp(nextSection.timestampStart) : undefined;
-        const sectionTangents = getTangentsInSection(section, tangents, nextSectionStart);
-
-        return (
+        {sections.map((section, index) => (
           <AccordionPrimitive.Item
             key={index}
             value={`section-${index}`}
@@ -172,34 +104,36 @@ export function SectionAccordion({ sections, videoId, tangents = [] }: SectionAc
             <AccordionPrimitive.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
               <div className="px-3 pb-3 pt-1 md:px-4 md:pb-4 md:pt-2">
                 <ul className="space-y-2">
-                  {buildInterleavedContent(section, sectionTangents).map((item, itemIndex) =>
-                    item.type === "keypoint" ? (
-                      <li
-                        key={`kp-${itemIndex}`}
-                        className="text-[var(--color-text-primary)] list-disc list-outside ml-4"
-                      >
-                        {item.text}
-                      </li>
-                    ) : (
-                      <li
-                        key={`tangent-${item.index}`}
-                        className="text-[var(--color-text-secondary)] list-disc list-outside ml-4 italic"
-                      >
-                        <a
-                          href={`#tangent-${item.index}`}
-                          className="hover:text-[var(--color-accent)] transition-colors"
+                  {isKeyPointArray(section.keyPoints)
+                    ? section.keyPoints.map((kp, kpIndex) => (
+                        <li
+                          key={kpIndex}
+                          className={cn(
+                            "list-disc list-outside ml-4",
+                            kp.isTangent
+                              ? "text-[var(--color-text-tertiary)] italic"
+                              : "text-[var(--color-text-primary)]"
+                          )}
                         >
-                          Tangent: {item.tangent.title} ({item.tangent.timestampStart} - {item.tangent.timestampEnd})
-                        </a>
-                      </li>
-                    )
-                  )}
+                          {kp.isTangent && (
+                            <span className="text-[var(--color-text-tertiary)] not-italic mr-1">[tangent]</span>
+                          )}
+                          {kp.text}
+                        </li>
+                      ))
+                    : section.keyPoints.map((text, kpIndex) => (
+                        <li
+                          key={kpIndex}
+                          className="text-[var(--color-text-primary)] list-disc list-outside ml-4"
+                        >
+                          {text}
+                        </li>
+                      ))}
                 </ul>
               </div>
             </AccordionPrimitive.Content>
           </AccordionPrimitive.Item>
-        );
-        })}
+        ))}
       </AccordionPrimitive.Root>
     </div>
   );

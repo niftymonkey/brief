@@ -9,6 +9,14 @@ export interface VideoMetadata {
   pinnedComment?: string;
 }
 
+export interface Chapter {
+  title: string;
+  startSeconds: number;
+  endSeconds: number;
+  timestampStart: string; // MM:SS format
+  timestampEnd: string; // MM:SS format
+}
+
 export interface TranscriptEntry {
   text: string;
   offset: number;    // in seconds
@@ -30,6 +38,7 @@ export interface Link {
 export interface KeyPoint {
   text: string;
   timestamp: string;  // Approximate timestamp when this point is discussed (MM:SS format)
+  isTangent?: boolean;  // True if this point diverges from the chapter's stated topic
 }
 
 export interface ContentSection {
@@ -39,19 +48,12 @@ export interface ContentSection {
   keyPoints: KeyPoint[] | string[];  // KeyPoint[] for new digests, string[] for legacy
 }
 
-export interface Tangent {
-  title: string;
-  timestampStart: string;
-  timestampEnd: string;
-  summary: string;
-}
-
 export interface StructuredDigest {
   summary: string;       // "At a Glance" overview of the video
   sections: ContentSection[];
   relatedLinks: Link[];  // Content-related links
   otherLinks: Link[];    // Social, sponsors, gear, etc.
-  tangents?: Tangent[];  // Off-topic segments (optional)
+  // Tangents are flagged on individual KeyPoints via isTangent
 }
 
 export interface DigestResult {
@@ -73,11 +75,11 @@ export interface DbDigest {
   thumbnailUrl: string | null;
   summary: string;
   sections: ContentSection[];
-  tangents: Tangent[] | null;
   relatedLinks: Link[];
   otherLinks: Link[];
   isShared: boolean;
   slug: string | null;
+  hasCreatorChapters: boolean | null;
   createdAt: Date;
   updatedAt: Date;
 }

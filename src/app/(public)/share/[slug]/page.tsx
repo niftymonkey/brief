@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { ExternalLink, ArrowRight, Youtube } from "lucide-react";
 import { SectionAccordion } from "@/components/section-accordion";
-import { Timestamp } from "@/components/timestamp";
 import { getSharedDigestBySlug } from "@/lib/db";
 
 interface PageProps {
@@ -101,6 +100,7 @@ export default async function SharedDigestPage({ params }: PageProps) {
             src={thumbnailUrl}
             alt={digest.title}
             fill
+            sizes="(max-width: 768px) 100vw, 768px"
             className="object-cover"
             priority
           />
@@ -143,15 +143,19 @@ export default async function SharedDigestPage({ params }: PageProps) {
           </p>
         </section>
 
-        {/* Sections */}
+        {/* Chapters */}
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-4 pb-2 border-b border-[var(--color-border)]">
-            Sections
+            Chapters
+            {digest.hasCreatorChapters !== null && (
+              <span className="text-base font-normal text-[var(--color-text-tertiary)]">
+                {" "}({digest.hasCreatorChapters ? "From creator" : "AI-generated"})
+              </span>
+            )}
           </h2>
           <SectionAccordion
             sections={digest.sections}
             videoId={digest.videoId}
-            tangents={digest.tangents ?? undefined}
           />
         </section>
 
@@ -217,44 +221,6 @@ export default async function SharedDigestPage({ params }: PageProps) {
                 </ul>
               </div>
             )}
-          </section>
-        )}
-
-        {/* Tangents */}
-        {digest.tangents && digest.tangents.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-4 pb-2 border-b border-[var(--color-border)]">
-              Tangents
-            </h2>
-            <ul className="space-y-4">
-              {digest.tangents.map((tangent, index) => (
-                <li
-                  key={index}
-                  id={`tangent-${index}`}
-                  className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] scroll-mt-20"
-                >
-                  <div className="flex items-start justify-between gap-4 mb-2">
-                    <span className="font-medium text-[var(--color-text-primary)]">
-                      {tangent.title}
-                    </span>
-                    <div className="flex items-center gap-2 text-sm shrink-0">
-                      <Timestamp
-                        time={tangent.timestampStart}
-                        videoId={digest.videoId}
-                      />
-                      <span className="text-[var(--color-text-tertiary)]">-</span>
-                      <Timestamp
-                        time={tangent.timestampEnd}
-                        videoId={digest.videoId}
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[var(--color-text-secondary)]">
-                    {tangent.summary}
-                  </p>
-                </li>
-              ))}
-            </ul>
           </section>
         )}
 

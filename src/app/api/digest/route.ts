@@ -4,6 +4,7 @@ import { extractVideoId } from "@/lib/parser";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateDigest } from "@/lib/summarize";
+import { extractChapters } from "@/lib/chapters";
 import { isEmailAllowed } from "@/lib/access";
 import {
   saveDigest,
@@ -42,7 +43,6 @@ function formatDigestResponse(dbDigest: DbDigest) {
     digest: {
       summary: dbDigest.summary,
       sections: dbDigest.sections,
-      tangents: dbDigest.tangents,
       relatedLinks: dbDigest.relatedLinks,
       otherLinks: dbDigest.otherLinks,
     },
@@ -142,6 +142,10 @@ export async function POST(request: NextRequest) {
         const metadata = await fetchVideoMetadata(videoId, youtubeApiKey);
         console.log(`[DIGEST] Metadata fetched successfully: ${metadata.title}`);
 
+        // Extract chapters from description
+        const chapters = extractChapters(metadata.description, metadata.duration);
+        console.log(`[DIGEST] Chapters extracted: ${chapters ? chapters.length : 'none'}`);
+
         // Step 4: Fetch transcript
         controller.enqueue(encoder.encode(createEvent("transcript", "Extracting transcript...")));
         console.log(`[DIGEST] Starting transcript fetch for videoId: ${videoId}`);
@@ -151,20 +155,21 @@ export async function POST(request: NextRequest) {
         // Step 5: Generate digest
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
         console.log(`[DIGEST] Starting digest generation`);
-        const digest = await generateDigest(transcript, metadata, anthropicApiKey);
+        const digest = await generateDigest(transcript, metadata, anthropicApiKey, chapters);
         console.log(`[DIGEST] Digest generated successfully`);
 
         // Step 6: Save or update digest
         controller.enqueue(encoder.encode(createEvent("saving", "Saving digest...")));
-        console.log(`[DIGEST] Saving to database, userDigest: ${!!userDigest}`);
+        const hasCreatorChapters = chapters !== null && chapters.length > 0;
+        console.log(`[DIGEST] Saving to database, userDigest: ${!!userDigest}, hasCreatorChapters: ${hasCreatorChapters}`);
         let savedDigest: DbDigest;
         if (userDigest) {
           // Update stale digest
-          savedDigest = await updateDigest(userId, userDigest.id, metadata, digest);
+          savedDigest = await updateDigest(userId, userDigest.id, metadata, digest, hasCreatorChapters);
           console.log(`[DIGEST] Updated existing digest`);
         } else {
           // Save new digest
-          savedDigest = await saveDigest(userId, metadata, digest);
+          savedDigest = await saveDigest(userId, metadata, digest, hasCreatorChapters);
           console.log(`[DIGEST] Saved new digest`);
         }
 

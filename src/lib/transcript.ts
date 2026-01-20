@@ -106,6 +106,18 @@ export async function fetchTranscript(
       throw new Error("Invalid video ID");
     }
 
+    // Supadata credit/billing errors
+    if (
+      errorMsg.includes("credit") ||
+      errorMsg.includes("billing") ||
+      errorMsg.includes("subscription") ||
+      errorMsg.includes("limit exceeded")
+    ) {
+      throw new Error(
+        "Supadata API credits exhausted. Please add credits in your Supadata dashboard."
+      );
+    }
+
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to fetch transcript: ${message}`);
   }

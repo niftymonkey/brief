@@ -41,6 +41,7 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "geist": "^1.5.1",
+    "get-youtube-chapters": "^2.0.0",
     "lucide-react": "^0.468.0",
     "marked": "^11.2.0",
     "marked-terminal": "^6.2.0",

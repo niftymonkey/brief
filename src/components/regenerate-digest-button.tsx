@@ -96,14 +96,67 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
           {/* Progress card */}
           <div className="bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4">
             <div className="flex items-center gap-3 mb-6">
-              <RefreshCw className="w-5 h-5 text-[var(--color-accent)] animate-spin" />
+              <RefreshCw className={`w-5 h-5 ${error ? "text-red-500" : "text-[var(--color-accent)] animate-spin"}`} />
               <h3 className="text-lg font-medium text-[var(--color-text-primary)]">
-                Regenerating Digest
+                {error ? "Regeneration Failed" : "Regenerating Digest"}
               </h3>
             </div>
 
             {error ? (
-              <div className="text-red-500 text-sm">{error}</div>
+              <div className="space-y-4">
+                <p className="text-red-500 text-sm">
+                  {error.includes("credit balance") ? (
+                    <>
+                      Your credit balance is too low to access the Anthropic API.{" "}
+                      <a
+                        href="https://console.anthropic.com/settings/plans"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-red-400"
+                      >
+                        Upgrade or purchase credits
+                      </a>
+                    </>
+                  ) : error.includes("quota exceeded") ? (
+                    <>
+                      YouTube API quota exceeded for today.{" "}
+                      <a
+                        href="https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-red-400"
+                      >
+                        Check quota usage
+                      </a>
+                    </>
+                  ) : error.includes("Supadata") ? (
+                    <>
+                      Supadata API credits exhausted.{" "}
+                      <a
+                        href="https://dash.supadata.ai"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-red-400"
+                      >
+                        Add credits in your dashboard
+                      </a>
+                    </>
+                  ) : (
+                    error
+                  )}
+                </p>
+                <button
+                  onClick={() => {
+                    setIsRegenerating(false);
+                    setShowConfirm(false);
+                    setCurrentStep(null);
+                    setError(null);
+                  }}
+                  className="w-full py-2 px-4 bg-[var(--color-bg-secondary)] hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] rounded-lg transition-colors text-sm"
+                >
+                  Close
+                </button>
+              </div>
             ) : (
               <ul className="space-y-3">
                 {STEPS.map((step) => {
