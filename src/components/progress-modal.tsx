@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Loader2, type LucideIcon } from "lucide-react";
 
 type Step = "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
@@ -97,11 +99,17 @@ export function ProgressModal({
   error,
   onClose,
 }: ProgressModalProps) {
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
-      <div className="bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4">
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in-0 duration-200">
+      <div className="bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-xl p-6 shadow-lg max-w-sm w-full mx-4 animate-in fade-in-0 zoom-in-95 duration-200">
         <div className="flex items-center gap-3 mb-6">
           <Icon
             className={`w-5 h-5 ${
@@ -159,7 +167,8 @@ export function ProgressModal({
           </ul>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

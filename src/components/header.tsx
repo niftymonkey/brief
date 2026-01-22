@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { withAuth, signOut } from "@workos-inc/authkit-nextjs";
+import { Youtube } from "lucide-react";
+import { isEmailAllowed } from "@/lib/access";
+import { NewDigestDialog } from "./new-digest-dialog";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
-import { Youtube } from "lucide-react";
 
 async function signOutAction() {
   "use server";
@@ -11,6 +13,7 @@ async function signOutAction() {
 
 export async function Header() {
   const { user } = await withAuth();
+  const hasAccess = isEmailAllowed(user?.email);
 
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--color-bg-primary)]/80">
@@ -21,6 +24,7 @@ export async function Header() {
         </Link>
 
         <div className="flex items-center gap-4">
+          {user && hasAccess && <NewDigestDialog />}
           {user && (
             <UserMenu
               user={{

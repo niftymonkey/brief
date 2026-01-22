@@ -7,18 +7,38 @@ import { ProgressModal, type Step } from "@/components/progress-modal";
 
 interface UrlInputProps {
   onDigestComplete: (digestId: string) => void;
+  onLoadingStart?: () => void;
+  onStepChange?: (step: Step | null) => void;
+  onError?: (error: string | null) => void;
+  showProgressModal?: boolean;
 }
 
-export function UrlInput({ onDigestComplete }: UrlInputProps) {
+export function UrlInput({
+  onDigestComplete,
+  onLoadingStart,
+  onStepChange,
+  onError,
+  showProgressModal = true
+}: UrlInputProps) {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<Step | null>(null);
 
+  const updateStep = (step: Step | null) => {
+    setCurrentStep(step);
+    onStepChange?.(step);
+  };
+
+  const updateError = (err: string | null) => {
+    setError(err);
+    onError?.(err);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setCurrentStep(null);
+    updateError(null);
+    updateStep(null);
 
     if (!url.trim()) {
       setError("Please enter a YouTube URL");
@@ -35,7 +55,8 @@ export function UrlInput({ onDigestComplete }: UrlInputProps) {
     }
 
     setIsLoading(true);
-    setCurrentStep("metadata");
+    updateStep("metadata");
+    onLoadingStart?.();
 
     try {
       const response = await fetch("/api/digest", {
@@ -61,16 +82,16 @@ export function UrlInput({ onDigestComplete }: UrlInputProps) {
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const data = JSON.parse(line.slice(6));
-            setCurrentStep(data.step);
+            updateStep(data.step);
 
             if (data.step === "error") {
-              setError(data.message);
+              updateError(data.message);
             }
 
             if (data.step === "complete" && data.data?.digestId) {
               setTimeout(() => {
                 setIsLoading(false);
-                setCurrentStep(null);
+                updateStep(null);
                 setUrl("");
                 onDigestComplete(data.data.digestId);
               }, 500);
@@ -79,15 +100,15 @@ export function UrlInput({ onDigestComplete }: UrlInputProps) {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      updateError(err instanceof Error ? err.message : "Something went wrong");
       setIsLoading(false);
     }
   };
 
   const handleClose = () => {
     setIsLoading(false);
-    setCurrentStep(null);
-    setError(null);
+    updateStep(null);
+    updateError(null);
   };
 
   // Validation errors (shown inline)
@@ -98,15 +119,17 @@ export function UrlInput({ onDigestComplete }: UrlInputProps) {
 
   return (
     <>
-      <ProgressModal
-        isOpen={isLoading}
-        title="Creating Digest"
-        errorTitle="Failed to Create Digest"
-        icon={Youtube}
-        currentStep={currentStep}
-        error={error}
-        onClose={handleClose}
-      />
+      {showProgressModal && (
+        <ProgressModal
+          isOpen={isLoading}
+          title="Creating Digest"
+          errorTitle="Failed to Create Digest"
+          icon={Youtube}
+          currentStep={currentStep}
+          error={error}
+          onClose={handleClose}
+        />
+      )}
 
       {/* URL Input Form */}
       <div className="w-full max-w-xl mx-auto">

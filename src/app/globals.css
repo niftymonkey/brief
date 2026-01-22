@@ -88,6 +88,7 @@
   --color-text-tertiary: oklch(55% 0.008 270);
   --color-accent: oklch(62% 0.19 25);
   --color-accent-hover: oklch(55% 0.21 25);
+  --color-accent-dark: oklch(50% 0.22 25);
   --color-accent-subtle: oklch(95% 0.03 25);
   --color-border: oklch(90% 0.006 270);
   --color-border-hover: oklch(82% 0.01 270);
@@ -143,6 +144,7 @@
   /* Terracotta accent */
   --color-accent: oklch(65% 0.16 25);
   --color-accent-hover: oklch(72% 0.18 25);
+  --color-accent-dark: oklch(55% 0.18 25);
   --color-accent-subtle: oklch(22% 0.06 25);
 
   /* Warning for tangents */

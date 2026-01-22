@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ProgressModal, type Step } from "@/components/progress-modal";
 
 interface RegenerateDigestButtonProps {
@@ -14,11 +19,12 @@ interface RegenerateDigestButtonProps {
 export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestButtonProps) {
   const router = useRouter();
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleRegenerate = async () => {
+    setOpen(false);
     setIsRegenerating(true);
     setCurrentStep("metadata");
     setError(null);
@@ -54,7 +60,6 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
             } else if (data.step === "complete") {
               setTimeout(() => {
                 setIsRegenerating(false);
-                setShowConfirm(false);
                 setCurrentStep(null);
                 router.refresh();
               }, 500);
@@ -69,53 +74,59 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
 
   const handleClose = () => {
     setIsRegenerating(false);
-    setShowConfirm(false);
     setCurrentStep(null);
     setError(null);
   };
 
-  if (showConfirm) {
-    return (
-      <>
-        <ProgressModal
-          isOpen={isRegenerating}
-          title="Regenerating Digest"
-          errorTitle="Regeneration Failed"
-          icon={RefreshCw}
-          iconSpins={true}
-          currentStep={currentStep}
-          error={error}
-          onClose={handleClose}
-        />
-        <div className="flex items-center gap-2">
-          <RefreshCw className="w-4 h-4 text-[var(--color-text-tertiary)]" />
-          <span className="text-sm text-[var(--color-text-secondary)]">Regenerate?</span>
-          <button
-            onClick={handleRegenerate}
-            className="text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] cursor-pointer"
-          >
-            Yes
-          </button>
-          <button
-            onClick={() => setShowConfirm(false)}
-            className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] cursor-pointer"
-          >
-            No
-          </button>
-        </div>
-      </>
-    );
-  }
-
   return (
-    <Button
-      onClick={() => setShowConfirm(true)}
-      variant="outline"
-      size="icon-sm"
-      className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
-      title="Regenerate digest"
-    >
-      <RefreshCw className="w-4 h-4" />
-    </Button>
+    <>
+      <ProgressModal
+        isOpen={isRegenerating}
+        title="Regenerating Digest"
+        errorTitle="Regeneration Failed"
+        icon={RefreshCw}
+        iconSpins={true}
+        currentStep={currentStep}
+        error={error}
+        onClose={handleClose}
+      />
+
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
+            title="Regenerate digest"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          className="w-auto p-3 rounded-xl bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-[var(--color-text-primary)]">
+              Regenerate digest?
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRegenerate}
+                className="text-sm font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] cursor-pointer"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setOpen(false)}
+                className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] cursor-pointer"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </>
   );
 }

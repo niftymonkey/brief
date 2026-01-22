@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Share2, Check, Copy, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface ShareButtonProps {
   digestId: string;
@@ -15,28 +20,10 @@ export function ShareButton({ digestId, isShared: initialIsShared, slug: initial
   const [isShared, setIsShared] = useState(initialIsShared);
   const [slug, setSlug] = useState(initialSlug);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showPopover, setShowPopover] = useState(false);
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const shareUrl = slug ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/${slug}` : "";
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(event.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target as Node)
-      ) {
-        setShowPopover(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const handleToggleShare = async () => {
     setIsUpdating(true);
@@ -52,7 +39,9 @@ export function ShareButton({ digestId, isShared: initialIsShared, slug: initial
         setIsShared(data.isShared);
         setSlug(data.slug);
         if (data.isShared) {
-          setShowPopover(true);
+          setOpen(true);
+        } else {
+          setOpen(false);
         }
       }
     } catch (error) {
@@ -73,35 +62,33 @@ export function ShareButton({ digestId, isShared: initialIsShared, slug: initial
   };
 
   const handleButtonClick = () => {
-    if (isShared) {
-      setShowPopover(!showPopover);
-    } else {
+    if (!isShared) {
       handleToggleShare();
     }
   };
 
   return (
-    <div className="relative flex items-center">
-      <Button
-        ref={buttonRef}
-        onClick={handleButtonClick}
-        disabled={isUpdating}
-        variant="outline"
-        size="icon-sm"
-        className={isShared ? "text-[var(--color-accent)] border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]" : "text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"}
-        title={isShared ? "Manage sharing" : "Share digest"}
-      >
-        {isUpdating ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          <Share2 className="w-4 h-4" />
-        )}
-      </Button>
-
-      {showPopover && isShared && (
-        <div
-          ref={popoverRef}
-          className="absolute right-0 top-full mt-2 w-72 p-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] shadow-lg z-10"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          onClick={handleButtonClick}
+          disabled={isUpdating}
+          variant="outline"
+          size="icon-sm"
+          className={isShared ? "text-[var(--color-accent)] border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]" : "text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"}
+          title={isShared ? "Manage sharing" : "Share digest"}
+        >
+          {isUpdating ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Share2 className="w-4 h-4" />
+          )}
+        </Button>
+      </PopoverTrigger>
+      {isShared && (
+        <PopoverContent
+          align="end"
+          className="w-72 p-3 rounded-xl bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
         >
           <div className="flex items-center gap-2 mb-3">
             <Link2 className="w-4 h-4 text-[var(--color-accent)]" />
@@ -119,7 +106,7 @@ export function ShareButton({ digestId, isShared: initialIsShared, slug: initial
             />
             <button
               onClick={handleCopy}
-              className="p-2 rounded-lg bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors shrink-0"
+              className="p-2 rounded-lg bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors shrink-0 cursor-pointer"
               title="Copy link"
             >
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -129,12 +116,12 @@ export function ShareButton({ digestId, isShared: initialIsShared, slug: initial
           <button
             onClick={handleToggleShare}
             disabled={isUpdating}
-            className="w-full text-sm text-[var(--color-text-secondary)] hover:text-red-500 transition-colors disabled:opacity-50"
+            className="w-full text-sm text-[var(--color-text-secondary)] hover:text-red-500 transition-colors disabled:opacity-50 cursor-pointer"
           >
             {isUpdating ? "Updating..." : "Stop sharing"}
           </button>
-        </div>
+        </PopoverContent>
       )}
-    </div>
+    </Popover>
   );
 }

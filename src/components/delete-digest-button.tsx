@@ -64,7 +64,7 @@ export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
             This action cannot be undone. The digest will be permanently deleted.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter>
           <Button
             variant="outline"
             onClick={() => setIsOpen(false)}

@@ -5,8 +5,7 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import { Header } from "@/components/header";
 import { DigestCard } from "@/components/digest-card";
 import { DigestSearch } from "@/components/digest-search";
-import { UnifiedDashboard } from "@/components/unified-dashboard";
-import { AccessRestricted } from "@/components/access-restricted";
+import { NewDigestDialog } from "@/components/new-digest-dialog";
 import { getDigests } from "@/lib/db";
 import { isEmailAllowed } from "@/lib/access";
 import { cn } from "@/lib/utils";
@@ -126,15 +125,20 @@ function LandingPage() {
   );
 }
 
-async function DigestGrid({ userId, search }: { userId: string; search?: string }) {
+async function DigestGrid({ userId, search, hasAccess }: { userId: string; search?: string; hasAccess: boolean }) {
   const { digests } = await getDigests({ userId, search, limit: 50 });
 
   if (digests.length === 0) {
     return (
       <div className="text-center py-12">
         <p className="text-[var(--color-text-secondary)]">
-          {search ? "No digests match your search" : "No digests yet. Paste a YouTube URL above to create your first!"}
+          {search ? "No digests match your search" : "No digests yet"}
         </p>
+        {!search && hasAccess && (
+          <div className="mt-4">
+            <NewDigestDialog variant="outline" />
+          </div>
+        )}
       </div>
     );
   }
@@ -167,28 +171,19 @@ function DigestGridSkeleton() {
 
 async function AuthenticatedDashboard({ search }: { search?: string }) {
   const { user } = await withAuth();
-  const hasAccess = isEmailAllowed(user?.email);
 
   if (!user) {
     return <LandingPage />;
   }
 
+  const hasAccess = isEmailAllowed(user.email);
   const { total } = await getDigests({ userId: user.id, limit: 1 });
 
   return (
     <>
       <Header />
-      <main className="flex-1 px-4 py-2 md:py-4">
-      <div className="max-w-5xl mx-auto">
-        {/* URL Input Section */}
-        {hasAccess ? (
-          <UnifiedDashboard />
-        ) : (
-          <AccessRestricted />
-        )}
-
-        {/* Library Section */}
-        <section className="mt-6">
+      <main className="flex-1 px-4 py-4 md:py-6">
+        <div className="max-w-5xl mx-auto">
           <div className="flex items-baseline justify-between mb-4">
             <h2 className="text-lg font-heading font-semibold text-[var(--color-text-primary)]">
               Your Library
@@ -201,11 +196,10 @@ async function AuthenticatedDashboard({ search }: { search?: string }) {
           <DigestSearch />
 
           <Suspense key={search} fallback={<DigestGridSkeleton />}>
-            <DigestGrid userId={user.id} search={search} />
+            <DigestGrid userId={user.id} search={search} hasAccess={hasAccess} />
           </Suspense>
-        </section>
-      </div>
-    </main>
+        </div>
+      </main>
     </>
   );
 }
