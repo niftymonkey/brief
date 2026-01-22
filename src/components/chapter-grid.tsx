@@ -16,16 +16,48 @@ interface ChapterGridProps {
   sections: ContentSection[];
   videoId: string;
   hasCreatorChapters?: boolean | null;
+  onSeek?: (seconds: number) => void;
 }
 
 function isKeyPointArray(keyPoints: KeyPoint[] | string[]): keyPoints is KeyPoint[] {
   return keyPoints.length > 0 && typeof keyPoints[0] === "object";
 }
 
-function TimestampLink({ time, videoId }: { time: string; videoId: string }) {
+function TimestampLink({
+  time,
+  videoId,
+  onSeek,
+}: {
+  time: string;
+  videoId: string;
+  onSeek?: (seconds: number) => void;
+}) {
   const seconds = parseTimestamp(time);
-  const url = `https://youtube.com/watch?v=${videoId}&t=${seconds}s`;
 
+  if (onSeek) {
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSeek(seconds);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            onSeek(seconds);
+          }
+        }}
+        className="font-mono text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors cursor-pointer"
+      >
+        {time}
+      </span>
+    );
+  }
+
+  const url = `https://youtube.com/watch?v=${videoId}&t=${seconds}s`;
   return (
     <a
       href={url}
@@ -39,7 +71,7 @@ function TimestampLink({ time, videoId }: { time: string; videoId: string }) {
   );
 }
 
-export function ChapterGrid({ sections, videoId, hasCreatorChapters }: ChapterGridProps) {
+export function ChapterGrid({ sections, videoId, hasCreatorChapters, onSeek }: ChapterGridProps) {
   const allSectionValues = sections.map((_, index) => `section-${index}`);
   const [openSections, setOpenSections] = useState<string[]>([]);
 
@@ -97,9 +129,9 @@ export function ChapterGrid({ sections, videoId, hasCreatorChapters }: ChapterGr
             >
               <div className="flex items-center gap-2 flex-1">
                 <ChevronRight className="w-4 h-4 text-[var(--color-text-tertiary)] transition-transform [[data-state=open]_&]:rotate-90 shrink-0" />
-                <span className="text-lg">{section.title}</span>
+                <span className="text-lg font-light">{section.title}</span>
               </div>
-              <TimestampLink time={section.timestampStart} videoId={videoId} />
+              <TimestampLink time={section.timestampStart} videoId={videoId} onSeek={onSeek} />
             </AccordionTrigger>
 
             <AccordionContent className="px-3 py-2">

@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { withAuth } from "@workos-inc/authkit-nextjs";
-import { ChapterGrid } from "@/components/chapter-grid";
+import { DigestViewer } from "@/components/digest-viewer";
 import { DeleteDigestButton } from "@/components/delete-digest-button";
 import { RegenerateDigestButton } from "@/components/regenerate-digest-button";
 import { ShareButton } from "@/components/share-button";
@@ -112,57 +112,45 @@ export default async function DigestPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Embedded YouTube Player */}
-          <div className="relative aspect-video rounded-2xl overflow-hidden mb-4 bg-black">
-            <iframe
-              src={`https://www.youtube.com/embed/${digest.videoId}`}
-              title={digest.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              className="absolute inset-0 w-full h-full"
-            />
-          </div>
+          {/* Embedded YouTube Player and Chapters */}
+          <DigestViewer
+            videoId={digest.videoId}
+            title={digest.title}
+            sections={digest.sections}
+            hasCreatorChapters={digest.hasCreatorChapters}
+          >
+            {/* Title */}
+            <h1 className="text-xl md:text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
+              {digest.title}
+            </h1>
 
-          {/* Title */}
-          <h1 className="text-xl md:text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
-            {digest.title}
-          </h1>
+            {/* Meta line */}
+            <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-4">
+              <span>{digest.channelName}</span>
+              {digest.duration && (
+                <>
+                  <span className="text-[var(--color-text-tertiary)]">•</span>
+                  <span>{formatDuration(digest.duration)}</span>
+                </>
+              )}
+              {publishDate && (
+                <>
+                  <span className="text-[var(--color-text-tertiary)]">•</span>
+                  <span>{publishDate}</span>
+                </>
+              )}
+            </div>
 
-          {/* Meta line */}
-          <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-4">
-            <span>{digest.channelName}</span>
-            {digest.duration && (
-              <>
-                <span className="text-[var(--color-text-tertiary)]">•</span>
-                <span>{formatDuration(digest.duration)}</span>
-              </>
-            )}
-            {publishDate && (
-              <>
-                <span className="text-[var(--color-text-tertiary)]">•</span>
-                <span>{publishDate}</span>
-              </>
-            )}
-          </div>
-
-          {/* The Gist */}
-          <section className="mt-6 mb-4">
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1.5 pb-1 border-b border-[var(--color-border)]">
-              The Gist
-            </h2>
-            <p className="text-lg text-[var(--color-text-primary)] leading-relaxed pt-2">
-              {digest.summary}
-            </p>
-          </section>
-
-          {/* Chapters */}
-          <section className="mt-6 mb-4">
-            <ChapterGrid
-              sections={digest.sections}
-              videoId={digest.videoId}
-              hasCreatorChapters={digest.hasCreatorChapters}
-            />
-          </section>
+            {/* The Gist */}
+            <section className="mt-6 mb-4">
+              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1.5 pb-1 border-b border-[var(--color-border)]">
+                The Gist
+              </h2>
+              <p className="text-lg text-[var(--color-text-primary)] leading-relaxed pt-2">
+                {digest.summary}
+              </p>
+            </section>
+          </DigestViewer>
 
           {/* Links & Resources */}
           {(digest.relatedLinks.length > 0 || digest.otherLinks.length > 0) && (
