@@ -4,10 +4,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* Typography - New font stack */
-  --font-sans: "Source Sans 3 Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Typography - Font stacks (CSS variables injected by next/font) */
+  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
   /* Spacing Scale - matches Tailwind default (spacing = index * 0.25rem) */
   --spacing-1: 0.25rem;

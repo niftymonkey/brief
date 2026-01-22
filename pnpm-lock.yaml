@@ -15,15 +15,6 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^3.0.15
         version: 3.0.15(zod@4.3.5)
-      '@fontsource-variable/plus-jakarta-sans':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource-variable/source-sans-3':
-        specifier: ^5.2.9
-        version: 5.2.9
-      '@fontsource/jetbrains-mono':
-        specifier: ^5.2.8
-        version: 5.2.8
       '@googleapis/youtube':
         specifier: ^18.0.0
         version: 18.0.0
@@ -468,15 +459,6 @@ packages:
 
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
-
-  '@fontsource-variable/plus-jakarta-sans@5.2.8':
-    resolution: {integrity: sha512-iQecBizIdZxezODNHzOn4SvvRMrZL/S8k4MEXGDynCmUrImVW0VmX+tIAMqnADwH4haXlHSXqMgU6+kcfBQJdw==}
-
-  '@fontsource-variable/source-sans-3@5.2.9':
-    resolution: {integrity: sha512-K9fkQbb0BNnRmmaU+Gpr6U4IaYKpNzA8t07J6aam2i+6v84RT72MVpar8OBr3yYAEznj4riKivPQ2nAF2fPKsw==}
-
-  '@fontsource/jetbrains-mono@5.2.8':
-    resolution: {integrity: sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ==}
 
   '@googleapis/youtube@18.0.0':
     resolution: {integrity: sha512-BvZIIGmDlUeJNvqvihrHwsFZMbgiuDDMYTXFg9mHhpEqRBgXZf/N2/nq5r7Vfywf8bCbGaScmL+DE4txb+NLbw==}
@@ -3511,12 +3493,6 @@ snapshots:
       react-dom: 19.2.3(react@19.2.3)
 
   '@floating-ui/utils@0.2.10': {}
-
-  '@fontsource-variable/plus-jakarta-sans@5.2.8': {}
-
-  '@fontsource-variable/source-sans-3@5.2.9': {}
-
-  '@fontsource/jetbrains-mono@5.2.8': {}
 
   '@googleapis/youtube@18.0.0':
     dependencies:
