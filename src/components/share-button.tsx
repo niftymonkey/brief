@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Share2, Check, Copy, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -98,11 +99,11 @@ export function ShareButton({ digestId, isShared: initialIsShared, slug: initial
           </div>
 
           <div className="flex items-center gap-2 mb-3">
-            <input
+            <Input
               type="text"
               readOnly
               value={shareUrl}
-              className="flex-1 px-3 py-2 text-sm bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] truncate"
+              className="flex-1 h-auto px-3 py-2 text-sm bg-[var(--color-bg-primary)] border-[var(--color-border)] rounded-lg truncate"
             />
             <button
               onClick={handleCopy}

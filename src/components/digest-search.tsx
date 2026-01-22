@@ -4,6 +4,7 @@ import { useQueryState, parseAsString } from "nuqs";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect, useTransition } from "react";
+import { Input } from "@/components/ui/input";
 
 const DEBOUNCE_MS = 300;
 
@@ -40,17 +41,15 @@ export function DigestSearch() {
   return (
     <div className="relative mb-6">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--color-text-tertiary)]" />
-      <input
+      <Input
         type="text"
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         placeholder="Search digests..."
         className={cn(
-          "w-full pl-10 pr-4 py-2.5 text-base",
-          "bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg",
+          "w-full h-auto pl-10 pr-4 py-2.5 text-base",
+          "bg-[var(--color-bg-secondary)] border-[var(--color-border)] rounded-lg",
           "placeholder:text-[var(--color-text-tertiary)]",
-          "focus:outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20",
-          "transition-all",
           isPending && "opacity-70"
         )}
       />

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowRight, Loader2, Youtube } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import { ProgressModal, type Step } from "@/components/progress-modal";
 
 interface UrlInputProps {
@@ -135,7 +136,7 @@ export function UrlInput({
       <div className="w-full max-w-xl mx-auto">
         <form onSubmit={handleSubmit}>
           <div className="relative group">
-            <input
+            <Input
               type="url"
               value={url}
               onChange={(e) => {
@@ -145,16 +146,12 @@ export function UrlInput({
               placeholder="Paste a YouTube URL..."
               disabled={isLoading}
               className={cn(
-                "w-full px-5 py-3.5 text-lg",
-                "bg-[var(--color-bg-secondary)] border rounded-xl",
+                "w-full h-auto px-5 py-3.5 text-lg",
+                "bg-[var(--color-bg-secondary)] border-[var(--color-border)] rounded-xl",
                 "placeholder:text-[var(--color-text-tertiary)]",
-                "focus:outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20",
                 "transition-all duration-200",
                 "group-hover:border-[var(--color-border-hover)]",
-                "disabled:opacity-60 disabled:cursor-not-allowed",
-                isValidationError
-                  ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                  : "border-[var(--color-border)]"
+                isValidationError && "border-red-500"
               )}
             />
             <button
