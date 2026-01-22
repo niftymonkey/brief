@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
-import { ExternalLink, ArrowRight, Youtube } from "lucide-react";
-import { SectionAccordion } from "@/components/section-accordion";
+import { ArrowRight } from "lucide-react";
+import { ChapterGrid } from "@/components/chapter-grid";
+import { Card, CardContent } from "@/components/ui/card";
 import { getSharedDigestBySlug } from "@/lib/db";
 
 interface PageProps {
@@ -77,7 +77,6 @@ export default async function SharedDigestPage({ params }: PageProps) {
     notFound();
   }
 
-  const thumbnailUrl = digest.thumbnailUrl || `https://i.ytimg.com/vi/${digest.videoId}/hqdefault.jpg`;
   const publishDate = digest.publishedAt
     ? new Date(digest.publishedAt).toLocaleDateString("en-US", {
         year: "numeric",
@@ -89,35 +88,24 @@ export default async function SharedDigestPage({ params }: PageProps) {
   return (
     <main className="flex-1 px-4 py-4">
       <article className="max-w-3xl mx-auto">
-        {/* Thumbnail */}
-        <a
-          href={`https://youtube.com/watch?v=${digest.videoId}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block relative aspect-video rounded-2xl overflow-hidden mb-6 group"
-        >
-          <Image
-            src={thumbnailUrl}
-            alt={digest.title}
-            fill
-            sizes="(max-width: 768px) 100vw, 768px"
-            className="object-cover"
-            priority
+        {/* Embedded YouTube Player */}
+        <div className="relative aspect-video rounded-2xl overflow-hidden mb-4 bg-black">
+          <iframe
+            src={`https://www.youtube.com/embed/${digest.videoId}`}
+            title={digest.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full"
           />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <ExternalLink className="w-6 h-6 text-white" />
-            </div>
-          </div>
-        </a>
+        </div>
 
         {/* Title */}
-        <h1 className="text-3xl md:text-4xl font-semibold text-[var(--color-text-primary)] mb-3">
+        <h1 className="text-xl md:text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
           {digest.title}
         </h1>
 
         {/* Meta line */}
-        <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-6">
+        <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-4">
           <span>{digest.channelName}</span>
           {digest.duration && (
             <>
@@ -133,109 +121,101 @@ export default async function SharedDigestPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* At a Glance */}
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-3 pb-2 border-b border-[var(--color-border)]">
-            At a Glance
+        {/* The Gist */}
+        <section className="mt-6 mb-4">
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1.5 pb-1 border-b border-[var(--color-border)]">
+            The Gist
           </h2>
-          <p className="text-[var(--color-text-primary)] leading-relaxed">
+          <p className="text-lg text-[var(--color-text-primary)] leading-relaxed pt-2">
             {digest.summary}
           </p>
         </section>
 
         {/* Chapters */}
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-4 pb-2 border-b border-[var(--color-border)]">
-            Chapters
-            {digest.hasCreatorChapters !== null && (
-              <span className="text-base font-normal text-[var(--color-text-tertiary)]">
-                {" "}({digest.hasCreatorChapters ? "From creator" : "AI-generated"})
-              </span>
-            )}
-          </h2>
-          <SectionAccordion
+        <section className="mt-6 mb-4">
+          <ChapterGrid
             sections={digest.sections}
             videoId={digest.videoId}
+            hasCreatorChapters={digest.hasCreatorChapters}
           />
         </section>
 
         {/* Links & Resources */}
         {(digest.relatedLinks.length > 0 || digest.otherLinks.length > 0) && (
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-4 pb-2 border-b border-[var(--color-border)]">
+          <section className="mt-6 mb-4">
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1.5 pb-1 border-b border-[var(--color-border)]">
               Links & Resources
             </h2>
 
-            {digest.relatedLinks.length > 0 && (
-              <div className="mb-6">
-                <h3 className="font-medium text-[var(--color-text-primary)] mb-3">
-                  From the video
-                </h3>
-                <ul className="space-y-3">
-                  {digest.relatedLinks.map((link, index) => (
-                    <li key={index}>
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group"
-                      >
-                        <span className="font-medium text-[var(--color-accent)] group-hover:text-[var(--color-accent-hover)] transition-colors">
-                          {link.title}
-                        </span>
-                        <span className="text-[var(--color-text-secondary)]">
-                          {" "}
-                          - {link.description}
-                        </span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <Card className="border-[var(--color-border)] bg-[var(--color-bg-secondary)] py-0">
+              <CardContent className="px-5 py-4 space-y-3">
+                {digest.relatedLinks.length > 0 && (
+                  <div>
+                    <h3 className="font-medium text-[var(--color-text-primary)] mb-1.5">
+                      From the video
+                    </h3>
+                    <ul className="space-y-1">
+                      {digest.relatedLinks.map((link, index) => (
+                        <li key={index}>
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group"
+                          >
+                            <span className="font-medium text-[var(--color-accent)] group-hover:text-[var(--color-accent-hover)] transition-colors">
+                              {link.title}
+                            </span>
+                            <span className="text-[var(--color-text-secondary)]">
+                              {" "}- {link.description}
+                            </span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {digest.otherLinks.length > 0 && (
-              <div>
-                <h3 className="font-medium text-[var(--color-text-primary)] mb-3">
-                  Other links
-                </h3>
-                <ul className="space-y-3">
-                  {digest.otherLinks.map((link, index) => (
-                    <li key={index}>
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group"
-                      >
-                        <span className="font-medium text-[var(--color-accent)] group-hover:text-[var(--color-accent-hover)] transition-colors">
-                          {link.title}
-                        </span>
-                        <span className="text-[var(--color-text-secondary)]">
-                          {" "}
-                          - {link.description}
-                        </span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                {digest.otherLinks.length > 0 && (
+                  <div>
+                    <h3 className="font-medium text-[var(--color-text-primary)] mb-1.5">
+                      Other links
+                    </h3>
+                    <ul className="space-y-1">
+                      {digest.otherLinks.map((link, index) => (
+                        <li key={index}>
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group"
+                          >
+                            <span className="font-medium text-[var(--color-accent)] group-hover:text-[var(--color-accent-hover)] transition-colors">
+                              {link.title}
+                            </span>
+                            <span className="text-[var(--color-text-secondary)]">
+                              {" "}- {link.description}
+                            </span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </section>
         )}
 
         {/* CTA */}
-        <section className="mt-12 p-6 rounded-2xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-center">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <Youtube className="w-5 h-5 text-[var(--color-accent)]" />
-            <span className="font-semibold text-[var(--color-text-primary)]">YouTube Digest</span>
-          </div>
+        <section className="mt-6 py-6 px-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-center">
           <p className="text-[var(--color-text-secondary)] mb-4">
-            Create your own AI-powered video digests
+            Create your own digests with AI summaries, timestamps, and more.
           </p>
           <Link
-            href="/"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+            href="/auth"
+            prefetch={false}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-base font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer"
           >
             Get Started
             <ArrowRight className="w-4 h-4" />

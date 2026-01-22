@@ -47,7 +47,7 @@ export function DigestCard({ digest }: DigestCardProps) {
         <span className="text-[var(--color-text-secondary)] truncate min-w-0">
           {digest.channelName}
         </span>
-        <span className="text-[var(--color-text-tertiary)] text-xs shrink-0 ml-2">
+        <span className="text-[var(--color-text-secondary)] shrink-0 ml-2">
           {createdDate}
         </span>
       </div>

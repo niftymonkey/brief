@@ -30,7 +30,12 @@
     "@ai-sdk/anthropic": "^3.0.15",
     "@googleapis/youtube": "^18.0.0",
     "@radix-ui/react-accordion": "^1.2.2",
+    "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.4",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
     "@supadata/js": "^1.3.2",
@@ -65,6 +70,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.21.0",
+    "tw-animate-css": "^1.4.0",
     "typescript": "^5.9.3"
   },
   "pnpm": {

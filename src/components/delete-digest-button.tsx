@@ -3,6 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface DeleteDigestButtonProps {
   digestId: string;
@@ -11,7 +21,7 @@ interface DeleteDigestButtonProps {
 export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -21,49 +31,56 @@ export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
       });
 
       if (response.ok) {
-        router.push("/digests");
+        setIsOpen(false);
+        router.push("/");
         router.refresh();
       } else {
         const data = await response.json();
         alert(data.error || "Failed to delete digest");
       }
-    } catch (error) {
+    } catch {
       alert("Failed to delete digest");
     } finally {
       setIsDeleting(false);
-      setShowConfirm(false);
     }
   };
 
-  if (showConfirm) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-[var(--color-text-secondary)]">Delete?</span>
-        <button
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className="text-sm text-red-500 hover:text-red-600 disabled:opacity-50"
-        >
-          {isDeleting ? "Deleting..." : "Yes"}
-        </button>
-        <button
-          onClick={() => setShowConfirm(false)}
-          disabled={isDeleting}
-          className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-        >
-          No
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <button
-      onClick={() => setShowConfirm(true)}
-      className="inline-flex items-center gap-1 text-[var(--color-text-tertiary)] hover:text-red-500 transition-colors text-sm"
-      title="Delete digest"
-    >
-      <Trash2 className="w-4 h-4" />
-    </button>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon-sm"
+          className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-red-500 hover:border-red-500/50 hover:bg-[var(--color-bg-tertiary)]"
+          title="Delete digest"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete digest?</DialogTitle>
+          <DialogDescription>
+            This action cannot be undone. The digest will be permanently deleted.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setIsOpen(false)}
+            disabled={isDeleting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleDelete}
+            disabled={isDeleting}
+          >
+            {isDeleting ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

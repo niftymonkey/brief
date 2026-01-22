@@ -1,9 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import Image from "next/image";
-import { LogOut, ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { LogOut } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface UserMenuProps {
   user: {
@@ -47,76 +53,42 @@ function getDisplayName(
 }
 
 export function UserMenu({ user, signOutAction }: UserMenuProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
   const initials = getInitials(user.firstName, user.lastName, user.email);
   const displayName = getDisplayName(user.firstName, user.lastName, user.email);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   return (
-    <div className="relative" ref={menuRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "flex items-center gap-2 p-1 pr-2 rounded-full",
-          "hover:bg-[var(--color-bg-secondary)] transition-colors",
-          isOpen && "bg-[var(--color-bg-secondary)]"
-        )}
-      >
-        {user.profilePictureUrl ? (
-          <Image
-            src={user.profilePictureUrl}
-            alt={displayName}
-            width={32}
-            height={32}
-            className="rounded-full"
-          />
-        ) : (
-          <div className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-sm font-medium">
-            {initials}
-          </div>
-        )}
-        <ChevronDown
-          className={cn(
-            "w-4 h-4 text-[var(--color-text-secondary)] transition-transform",
-            isOpen && "rotate-180"
-          )}
-        />
-      </button>
-
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[var(--color-bg-primary)] border border-[var(--color-border)] shadow-md overflow-hidden z-50">
-          <div className="px-4 py-3 border-b border-[var(--color-border)]">
-            <p className="font-medium text-[var(--color-text-primary)] truncate">
-              {displayName}
-            </p>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex items-center gap-2 rounded-full p-0.5 hover:bg-[var(--color-bg-secondary)] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]">
+          <Avatar className="size-7">
+            {user.profilePictureUrl && (
+              <AvatarImage src={user.profilePictureUrl} alt={displayName} />
+            )}
+            <AvatarFallback className="bg-[var(--color-accent)] text-white text-xs font-medium">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col space-y-1">
+            <p className="font-medium truncate">{displayName}</p>
             <p className="text-sm text-[var(--color-text-secondary)] truncate">
               {user.email}
             </p>
           </div>
-
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="w-full flex items-center gap-3 px-4 py-3 text-left text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <form action={signOutAction}>
+          <DropdownMenuItem asChild>
+            <button type="submit" className="w-full cursor-pointer">
+              <LogOut className="mr-2 h-4 w-4" />
               Sign out
             </button>
-          </form>
-        </div>
-      )}
-    </div>
+          </DropdownMenuItem>
+        </form>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

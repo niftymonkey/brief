@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { withAuth } from "@workos-inc/authkit-nextjs";
-import { hasDigests } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +10,6 @@ export default async function PostLoginPage() {
     redirect("/");
   }
 
-  const digestsExist = await hasDigests(user.id);
-
-  if (digestsExist) {
-    redirect("/digests");
-  } else {
-    redirect("/home");
-  }
+  // Always redirect to unified homepage
+  redirect("/");
 }
