@@ -62,6 +62,12 @@ export interface DigestResult {
   outputPath?: string;
 }
 
+// Tag types
+export interface Tag {
+  id: string;
+  name: string;
+}
+
 // Database types
 export interface DbDigest {
   id: string;
@@ -82,6 +88,7 @@ export interface DbDigest {
   hasCreatorChapters: boolean | null;
   createdAt: Date;
   updatedAt: Date;
+  tags?: Tag[];
 }
 
 export interface DigestSummary {
@@ -92,4 +99,5 @@ export interface DigestSummary {
   channelName: string;
   thumbnailUrl: string | null;
   createdAt: Date;
+  tags?: Tag[];
 }

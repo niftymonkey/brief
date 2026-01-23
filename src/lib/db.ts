@@ -5,6 +5,7 @@ import type {
   VideoMetadata,
   StructuredDigest,
   Link,
+  Tag,
 } from "./types";
 
 /**
@@ -205,6 +206,8 @@ export async function getDigestById(
   id: string,
   userId?: string
 ): Promise<DbDigest | null> {
+  let digest: DbDigest | null = null;
+
   if (userId) {
     const result = await sql<DbDigest>`
       SELECT
@@ -229,34 +232,40 @@ export async function getDigestById(
       FROM digests
       WHERE id = ${id} AND user_id = ${userId}
     `;
-    return result.rows[0] || null;
+    digest = result.rows[0] || null;
+  } else {
+    const result = await sql<DbDigest>`
+      SELECT
+        id,
+        user_id as "userId",
+        video_id as "videoId",
+        title,
+        channel_name as "channelName",
+        channel_slug as "channelSlug",
+        duration,
+        published_at as "publishedAt",
+        thumbnail_url as "thumbnailUrl",
+        summary,
+        sections,
+        related_links as "relatedLinks",
+        other_links as "otherLinks",
+        is_shared as "isShared",
+        slug,
+        has_creator_chapters as "hasCreatorChapters",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM digests
+      WHERE id = ${id}
+    `;
+    digest = result.rows[0] || null;
   }
 
-  const result = await sql<DbDigest>`
-    SELECT
-      id,
-      user_id as "userId",
-      video_id as "videoId",
-      title,
-      channel_name as "channelName",
-      channel_slug as "channelSlug",
-      duration,
-      published_at as "publishedAt",
-      thumbnail_url as "thumbnailUrl",
-      summary,
-      sections,
-      related_links as "relatedLinks",
-      other_links as "otherLinks",
-      is_shared as "isShared",
-      slug,
-      has_creator_chapters as "hasCreatorChapters",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-    FROM digests
-    WHERE id = ${id}
-  `;
+  // Fetch tags for the digest
+  if (digest) {
+    digest.tags = await getDigestTags(id);
+  }
 
-  return result.rows[0] || null;
+  return digest;
 }
 
 /**
@@ -512,6 +521,15 @@ export async function getDigests(options: {
     digests = result.rows;
   }
 
+  // Batch fetch tags for all digests
+  if (digests.length > 0) {
+    const digestIds = digests.map((d) => d.id);
+    const tagsMap = await getTagsForDigests(digestIds);
+    for (const digest of digests) {
+      digest.tags = tagsMap.get(digest.id) || [];
+    }
+  }
+
   return { digests, total, hasMore: offset + digests.length < total };
 }
 
@@ -621,4 +639,170 @@ export async function toggleDigestSharing(
     isShared: result.rows[0].is_shared,
     slug: result.rows[0].slug,
   };
+}
+
+// ============================================
+// Tag Functions
+// ============================================
+
+/**
+ * Get all tags for a user (their vocabulary)
+ */
+export async function getUserTags(userId: string): Promise<Tag[]> {
+  const result = await sql<Tag>`
+    SELECT id, name
+    FROM tags
+    WHERE user_id = ${userId}
+    ORDER BY name ASC
+  `;
+  return result.rows;
+}
+
+/**
+ * Get tags for a specific digest
+ */
+export async function getDigestTags(digestId: string): Promise<Tag[]> {
+  const result = await sql<Tag>`
+    SELECT t.id, t.name
+    FROM tags t
+    JOIN digest_tags dt ON t.id = dt.tag_id
+    WHERE dt.digest_id = ${digestId}
+    ORDER BY t.name ASC
+  `;
+  return result.rows;
+}
+
+/**
+ * Get tags for multiple digests in a single query (batch)
+ */
+export async function getTagsForDigests(
+  digestIds: string[]
+): Promise<Map<string, Tag[]>> {
+  if (digestIds.length === 0) {
+    return new Map();
+  }
+
+  // Build parameterized query for IN clause
+  const placeholders = digestIds.map((_, i) => `$${i + 1}`).join(", ");
+  const query = `
+    SELECT dt.digest_id as "digestId", t.id, t.name
+    FROM tags t
+    JOIN digest_tags dt ON t.id = dt.tag_id
+    WHERE dt.digest_id IN (${placeholders})
+    ORDER BY t.name ASC
+  `;
+
+  const result = await sql.query<{ digestId: string; id: string; name: string }>(
+    query,
+    digestIds
+  );
+
+  const tagsMap = new Map<string, Tag[]>();
+  for (const row of result.rows) {
+    const tags = tagsMap.get(row.digestId) || [];
+    tags.push({ id: row.id, name: row.name });
+    tagsMap.set(row.digestId, tags);
+  }
+
+  return tagsMap;
+}
+
+/**
+ * Add a tag to a digest
+ * Creates the tag if it doesn't exist in user's vocabulary
+ * Tag names are normalized to lowercase
+ */
+export async function addTagToDigest(
+  userId: string,
+  digestId: string,
+  tagName: string
+): Promise<Tag> {
+  const normalizedName = tagName.toLowerCase().trim();
+
+  if (!normalizedName) {
+    throw new Error("Tag name cannot be empty");
+  }
+
+  if (normalizedName.length > 50) {
+    throw new Error("Tag name cannot exceed 50 characters");
+  }
+
+  // First, verify the digest belongs to the user
+  const digestCheck = await sql`
+    SELECT id FROM digests WHERE id = ${digestId} AND user_id = ${userId}
+  `;
+  if (digestCheck.rows.length === 0) {
+    throw new Error("Digest not found");
+  }
+
+  // Check current tag count for this digest
+  const countResult = await sql<{ count: string }>`
+    SELECT COUNT(*) as count FROM digest_tags WHERE digest_id = ${digestId}
+  `;
+  if (parseInt(countResult.rows[0].count, 10) >= 20) {
+    throw new Error("Maximum of 20 tags per digest");
+  }
+
+  // Insert or get the tag
+  const tagResult = await sql<Tag>`
+    INSERT INTO tags (user_id, name)
+    VALUES (${userId}, ${normalizedName})
+    ON CONFLICT (user_id, name) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id, name
+  `;
+  const tag = tagResult.rows[0];
+
+  // Link tag to digest (ignore if already linked)
+  await sql`
+    INSERT INTO digest_tags (digest_id, tag_id)
+    VALUES (${digestId}, ${tag.id})
+    ON CONFLICT (digest_id, tag_id) DO NOTHING
+  `;
+
+  return tag;
+}
+
+/**
+ * Remove a tag from a digest
+ * Only removes the association, not the tag itself
+ */
+export async function removeTagFromDigest(
+  userId: string,
+  digestId: string,
+  tagId: string
+): Promise<boolean> {
+  // Verify ownership through the digests table
+  const result = await sql`
+    DELETE FROM digest_tags
+    WHERE digest_id = ${digestId}
+      AND tag_id = ${tagId}
+      AND EXISTS (
+        SELECT 1 FROM digests WHERE id = ${digestId} AND user_id = ${userId}
+      )
+  `;
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Delete a tag entirely from a user's vocabulary
+ * Also removes all associations with digests
+ */
+export async function deleteTag(tagId: string, userId: string): Promise<boolean> {
+  // First delete all digest_tags associations for this tag
+  await sql`
+    DELETE FROM digest_tags
+    WHERE tag_id = ${tagId}
+      AND EXISTS (
+        SELECT 1 FROM tags WHERE id = ${tagId} AND user_id = ${userId}
+      )
+  `;
+
+  // Then delete the tag itself
+  const result = await sql`
+    DELETE FROM tags
+    WHERE id = ${tagId}
+      AND user_id = ${userId}
+  `;
+
+  return (result.rowCount ?? 0) > 0;
 }
