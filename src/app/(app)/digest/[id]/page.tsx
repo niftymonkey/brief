@@ -7,6 +7,7 @@ import { DigestViewer } from "@/components/digest-viewer";
 import { DeleteDigestButton } from "@/components/delete-digest-button";
 import { RegenerateDigestButton } from "@/components/regenerate-digest-button";
 import { ShareButton } from "@/components/share-button";
+import { TagInput } from "@/components/tag-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { getDigestById } from "@/lib/db";
 import { isEmailAllowed } from "@/lib/access";
@@ -125,7 +126,7 @@ export default async function DigestPage({ params }: PageProps) {
             </h1>
 
             {/* Meta line */}
-            <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-4">
+            <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-3">
               <span>{digest.channelName}</span>
               {digest.duration && (
                 <>
@@ -139,6 +140,11 @@ export default async function DigestPage({ params }: PageProps) {
                   <span>{publishDate}</span>
                 </>
               )}
+            </div>
+
+            {/* Tags */}
+            <div className="mb-4">
+              <TagInput digestId={id} initialTags={digest.tags || []} />
             </div>
 
             {/* The Gist */}
