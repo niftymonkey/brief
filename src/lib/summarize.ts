@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import type { TranscriptEntry, VideoMetadata, StructuredDigest, Chapter, KeyPoint } from "./types";
+import type { TranscriptEntry, VideoMetadata, StructuredDigest, ContentSection, Chapter, KeyPoint } from "./types";
 import { combineUrls } from "./url-extractor";
 import { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts";
 
@@ -27,6 +27,66 @@ function parseTimestamp(timestamp: string): number {
     return parts[0] * 60 + parts[1];
   }
   return 0;
+}
+
+/**
+ * Merges tangent-only chapters into adjacent substantive chapters (for auto-generated chapters only).
+ * This is a safety net in case the LLM creates a chapter with only tangent content.
+ */
+function mergeTangentOnlyChapters(
+  sections: ContentSection[],
+  hasCreatorChapters: boolean
+): ContentSection[] {
+  // Don't modify creator-defined chapters - respect their structure
+  if (hasCreatorChapters) return sections;
+
+  const result: ContentSection[] = [];
+  // Buffer for leading tangent-only sections (before first substantive section)
+  let leadingTangents: ContentSection[] = [];
+
+  for (const section of sections) {
+    // Check if this section has any substantive (non-tangent) key points
+    const hasSubstantivePoints = section.keyPoints.some((kp) => {
+      // Legacy string[] format - assume substantive
+      if (typeof kp === "string") return true;
+      // KeyPoint format - check isTangent flag
+      return !kp.isTangent;
+    });
+
+    if (!hasSubstantivePoints) {
+      if (result.length > 0) {
+        // Merge into previous substantive chapter
+        const prev = result[result.length - 1];
+        (prev.keyPoints as KeyPoint[]).push(...(section.keyPoints as KeyPoint[]));
+        prev.timestampEnd = section.timestampEnd;
+      } else {
+        // Buffer leading tangent-only sections
+        leadingTangents.push(section);
+      }
+    } else {
+      // Found a substantive section
+      if (leadingTangents.length > 0) {
+        // Merge buffered leading tangents into this first substantive section
+        const allLeadingPoints = leadingTangents.flatMap(s => s.keyPoints as KeyPoint[]);
+        const mergedSection: ContentSection = {
+          ...section,
+          timestampStart: leadingTangents[0].timestampStart,
+          keyPoints: [...allLeadingPoints, ...(section.keyPoints as KeyPoint[])],
+        };
+        result.push(mergedSection);
+        leadingTangents = [];
+      } else {
+        result.push(section);
+      }
+    }
+  }
+
+  // If ALL sections were tangent-only, return them as-is (edge case)
+  if (result.length === 0 && leadingTangents.length > 0) {
+    return leadingTangents;
+  }
+
+  return result;
 }
 
 /**
@@ -157,8 +217,16 @@ export async function generateDigest(
       prompt: userPrompt,
     });
 
+    const digest = result.output as StructuredDigest;
+
+    // Post-process: merge tangent-only chapters (auto-generated chapters only)
+    const processedSections = mergeTangentOnlyChapters(digest.sections, !!hasChapters);
+
     // Sort sections and key points chronologically
-    return sortDigestChronologically(result.output as StructuredDigest);
+    return sortDigestChronologically({
+      ...digest,
+      sections: processedSections,
+    });
   } catch (error: any) {
     if (error.message?.includes("401") || error.message?.includes("authentication")) {
       throw new Error(
