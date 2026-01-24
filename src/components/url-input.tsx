@@ -87,9 +87,14 @@ export function UrlInput({
             if (data.step === "error") {
               updateStep(data.step);
               updateError(data.message);
-            } else if (data.step === "complete" && data.data?.digestId) {
-              updateStep("redirecting");
-              onDigestComplete(data.data.digestId);
+            } else if (data.step === "complete") {
+              if (data.data?.digestId) {
+                updateStep("redirecting");
+                onDigestComplete(data.data.digestId);
+              } else {
+                updateStep("error");
+                updateError("Digest completed but no ID was returned");
+              }
             } else {
               updateStep(data.step);
             }
