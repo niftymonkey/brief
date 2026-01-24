@@ -16,7 +16,7 @@ export function LibraryToolbar() {
   const { sidebarOpen, toggleSidebar, isMobile } = useLayout();
   const sidebarEnabled = useSidebarEnabled();
 
-  const label = sidebarOpen ? "Close sidebar (Ctrl+B)" : "Open sidebar (Ctrl+B)";
+  const label = sidebarOpen ? "Close sidebar (Ctrl/Cmd+B)" : "Open sidebar (Ctrl/Cmd+B)";
 
   return (
     <div className="sticky top-14 z-40 bg-[var(--color-bg-primary)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--color-bg-primary)]/80 border-b border-[var(--color-border)] py-3 px-4">
@@ -35,6 +35,7 @@ export function LibraryToolbar() {
                     "transition-colors"
                   )}
                   aria-label={label}
+                  aria-pressed={sidebarOpen}
                 >
                   <PanelLeft className="w-5 h-5" />
                 </button>

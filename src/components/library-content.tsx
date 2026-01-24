@@ -1,13 +1,19 @@
 "use client";
 
 import { type ReactNode } from "react";
-import { useLayout } from "./layout/layout-context";
+import { useLayout, type LayoutMode } from "./layout/layout-context";
 import { LibraryShell as Shell } from "./layout/library-shell";
 import { DigestSearch } from "./digest-search";
 import { cn } from "@/lib/utils";
 
 // Re-export the shell for convenience
 export { Shell as LibraryShell };
+
+function getGridClasses(mode: LayoutMode, mounted: boolean): string {
+  return !mounted || mode === "compact"
+    ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5";
+}
 
 /**
  * Renders DigestSearch only in compact mode (expanded mode has it in the toolbar)
@@ -38,11 +44,7 @@ interface DigestGridProps {
  */
 export function DigestGrid({ children }: DigestGridProps) {
   const { mode, mounted } = useLayout();
-
-  // Default to compact layout classes until mounted
-  const gridClasses = !mounted || mode === "compact"
-    ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5";
+  const gridClasses = getGridClasses(mode, mounted);
 
   return (
     <div className={cn("grid gap-4", gridClasses)}>
@@ -57,10 +59,7 @@ interface DigestGridSkeletonProps {
 
 export function DigestGridSkeleton({ count = 6 }: DigestGridSkeletonProps) {
   const { mode, mounted } = useLayout();
-
-  const gridClasses = !mounted || mode === "compact"
-    ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5";
+  const gridClasses = getGridClasses(mode, mounted);
 
   return (
     <div className={cn("grid gap-4", gridClasses)}>

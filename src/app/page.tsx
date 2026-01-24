@@ -142,12 +142,6 @@ async function AuthenticatedDashboard({ search }: { search?: string }) {
 }
 
 export default async function RootPage({ searchParams }: PageProps) {
-  const { user } = await withAuth();
   const { search } = await searchParams;
-
-  if (!user) {
-    return <LandingPage />;
-  }
-
   return <AuthenticatedDashboard search={search} />;
 }

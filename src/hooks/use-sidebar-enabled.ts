@@ -1,9 +1,32 @@
+"use client";
+
+import { useState, useEffect } from "react";
+
+const STORAGE_KEY = "youtube-digest-sidebar-enabled";
+
 /**
  * Hook to determine if the sidebar feature is enabled.
- * Currently returns false as the sidebar is not yet implemented.
- * When sidebar features are ready, update this to return true
- * (or implement more complex logic like feature flags, user settings, etc.)
+ * Reads from localStorage, defaulting to false.
+ *
+ * To enable: localStorage.setItem("youtube-digest-sidebar-enabled", "true")
+ * To disable: localStorage.setItem("youtube-digest-sidebar-enabled", "false")
  */
 export function useSidebarEnabled(): boolean {
-  return false;
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === null) {
+        // Initialize to false if not set
+        localStorage.setItem(STORAGE_KEY, "false");
+      } else {
+        setEnabled(stored === "true");
+      }
+    } catch {
+      // localStorage unavailable
+    }
+  }, []);
+
+  return enabled;
 }

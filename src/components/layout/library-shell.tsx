@@ -4,7 +4,6 @@ import { type ReactNode } from "react";
 import { useLayout } from "./layout-context";
 import { LibrarySidebar } from "./library-sidebar";
 import { LibraryToolbar } from "./library-toolbar";
-import { cn } from "@/lib/utils";
 
 interface LibraryShellProps {
   children: ReactNode;
@@ -42,10 +41,8 @@ export function LibraryShell({ children }: LibraryShellProps) {
         <LibraryToolbar />
 
         <main
-          className={cn(
-            "flex-1 px-4 py-4 md:py-6",
-            "transition-[margin] duration-[var(--sidebar-transition)]"
-          )}
+          className="flex-1 px-4 py-4 md:py-6"
+          style={{ transition: "margin var(--sidebar-transition)" }}
         >
           {children}
         </main>

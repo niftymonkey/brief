@@ -45,17 +45,21 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 
   // Load mode and sidebar width from localStorage on mount
   useEffect(() => {
-    const storedMode = localStorage.getItem(STORAGE_KEY);
-    if (storedMode === "compact" || storedMode === "expanded") {
-      setModeState(storedMode);
-    }
-
-    const storedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    if (storedWidth) {
-      const width = parseInt(storedWidth, 10);
-      if (!isNaN(width) && width >= SIDEBAR_MIN_WIDTH && width <= SIDEBAR_MAX_WIDTH) {
-        setSidebarWidthState(width);
+    try {
+      const storedMode = localStorage.getItem(STORAGE_KEY);
+      if (storedMode === "compact" || storedMode === "expanded") {
+        setModeState(storedMode);
       }
+
+      const storedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+      if (storedWidth) {
+        const width = parseInt(storedWidth, 10);
+        if (!isNaN(width) && width >= SIDEBAR_MIN_WIDTH && width <= SIDEBAR_MAX_WIDTH) {
+          setSidebarWidthState(width);
+        }
+      }
+    } catch {
+      // localStorage unavailable (private browsing, quota exceeded)
     }
 
     setMounted(true);
@@ -63,7 +67,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 
   const setMode = useCallback((newMode: LayoutMode) => {
     setModeState(newMode);
-    localStorage.setItem(STORAGE_KEY, newMode);
+    try {
+      localStorage.setItem(STORAGE_KEY, newMode);
+    } catch {
+      // localStorage unavailable
+    }
   }, []);
 
   const toggleSidebar = useCallback(() => {
@@ -73,7 +81,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const setSidebarWidth = useCallback((width: number) => {
     const clampedWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
     setSidebarWidthState(clampedWidth);
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clampedWidth));
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clampedWidth));
+    } catch {
+      // localStorage unavailable
+    }
   }, []);
 
   return (

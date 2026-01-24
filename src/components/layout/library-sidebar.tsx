@@ -21,7 +21,8 @@ export function LibrarySidebar() {
     if (!isResizing) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = e.clientX;
+      const left = sidebarRef.current?.getBoundingClientRect().left ?? 0;
+      const newWidth = e.clientX - left;
       setSidebarWidth(newWidth);
     };
 
