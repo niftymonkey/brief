@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Loader2, type LucideIcon } from "lucide-react";
 
-type Step = "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
+type Step = "metadata" | "transcript" | "analyzing" | "saving" | "redirecting" | "complete" | "error";
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "metadata", label: "Fetching video info" },
   { key: "transcript", label: "Extracting transcript" },
   { key: "analyzing", label: "Analyzing content" },
   { key: "saving", label: "Saving digest" },
+  { key: "redirecting", label: "Redirecting" },
 ];
 
 interface ProgressModalProps {
@@ -22,6 +23,7 @@ interface ProgressModalProps {
   currentStep: Step | null;
   error: string | null;
   onClose: () => void;
+  redirectingLabel?: string;
 }
 
 function getStepStatus(currentStep: Step | null, stepKey: Step): "pending" | "active" | "complete" {
@@ -29,8 +31,19 @@ function getStepStatus(currentStep: Step | null, stepKey: Step): "pending" | "ac
   const currentIndex = STEPS.findIndex((s) => s.key === currentStep);
   const stepIndex = STEPS.findIndex((s) => s.key === stepKey);
 
-  if (currentStep === "complete" || currentStep === "saving") {
-    return stepIndex <= STEPS.findIndex((s) => s.key === "saving") ? "complete" : "pending";
+  // When complete, show all steps as complete
+  if (currentStep === "complete") {
+    return "complete";
+  }
+  // When redirecting, show all prior steps as complete, redirecting as active
+  if (currentStep === "redirecting") {
+    if (stepKey === "redirecting") return "active";
+    return "complete";
+  }
+  // When saving, show saving as active (not complete yet)
+  if (currentStep === "saving") {
+    if (stepKey === "saving") return "active";
+    return stepIndex < currentIndex ? "complete" : "pending";
   }
   if (stepIndex < currentIndex) return "complete";
   if (stepIndex === currentIndex) return "active";
@@ -98,6 +111,7 @@ export function ProgressModal({
   currentStep,
   error,
   onClose,
+  redirectingLabel = "Redirecting",
 }: ProgressModalProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -108,8 +122,8 @@ export function ProgressModal({
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in-0 duration-200">
-      <div className="bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-xl p-6 shadow-lg max-w-sm w-full mx-4 animate-in fade-in-0 zoom-in-95 duration-200">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center animate-in fade-in-0 duration-200">
+      <div className="bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-xl p-6 shadow-lg max-w-sm w-full mx-4 h-fit mt-[20vh] animate-in fade-in-0 zoom-in-95 duration-200">
         <div className="flex items-center gap-3 mb-6">
           <Icon
             className={`w-5 h-5 ${
@@ -159,7 +173,7 @@ export function ProgressModal({
                         : "text-[var(--color-text-tertiary)]"
                     }
                   >
-                    {step.label}
+                    {step.key === "redirecting" ? redirectingLabel : step.label}
                   </span>
                 </li>
               );

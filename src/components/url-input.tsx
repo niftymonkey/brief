@@ -83,19 +83,15 @@ export function UrlInput({
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const data = JSON.parse(line.slice(6));
-            updateStep(data.step);
 
             if (data.step === "error") {
+              updateStep(data.step);
               updateError(data.message);
-            }
-
-            if (data.step === "complete" && data.data?.digestId) {
-              setTimeout(() => {
-                setIsLoading(false);
-                updateStep(null);
-                setUrl("");
-                onDigestComplete(data.data.digestId);
-              }, 500);
+            } else if (data.step === "complete" && data.data?.digestId) {
+              updateStep("redirecting");
+              onDigestComplete(data.data.digestId);
+            } else {
+              updateStep(data.step);
             }
           }
         }

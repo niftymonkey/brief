@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +21,7 @@ interface DeleteDigestButtonProps {
 export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
   const handleDelete = async () => {
@@ -31,22 +32,26 @@ export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
       });
 
       if (response.ok) {
-        setIsOpen(false);
+        // Show redirecting state and navigate - dialog will unmount when navigation completes
+        setIsDeleting(false);
+        setIsRedirecting(true);
         router.push("/");
         router.refresh();
       } else {
         const data = await response.json();
         alert(data.error || "Failed to delete digest");
+        setIsDeleting(false);
       }
     } catch {
       alert("Failed to delete digest");
-    } finally {
       setIsDeleting(false);
     }
   };
 
+  const isBusy = isDeleting || isRedirecting;
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => !isBusy && setIsOpen(open)}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
@@ -57,29 +62,38 @@ export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
           <Trash2 className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Delete digest?</DialogTitle>
-          <DialogDescription>
-            This action cannot be undone. The digest will be permanently deleted.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => setIsOpen(false)}
-            disabled={isDeleting}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            {isDeleting ? "Deleting..." : "Delete"}
-          </Button>
-        </DialogFooter>
+      <DialogContent className="sm:max-w-md" showCloseButton={!isBusy}>
+        {isRedirecting ? (
+          <div className="flex flex-col items-center justify-center py-6 gap-3">
+            <Loader2 className="w-6 h-6 text-[var(--color-accent)] animate-spin" />
+            <p className="text-[var(--color-text-secondary)]">Redirecting</p>
+          </div>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Delete digest?</DialogTitle>
+              <DialogDescription>
+                This action cannot be undone. The digest will be permanently deleted.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
