@@ -7,6 +7,7 @@ import {
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
+import { LayoutProvider } from "@/components/layout";
 import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -55,9 +56,11 @@ export default function RootLayout({
               enableSystem
               disableTransitionOnChange
             >
-              <div className="flex flex-col min-h-screen">
-                {children}
-              </div>
+              <LayoutProvider>
+                <div className="flex flex-col min-h-screen">
+                  {children}
+                </div>
+              </LayoutProvider>
             </ThemeProvider>
           </NuqsAdapter>
         </AuthKitProvider>

@@ -5,9 +5,14 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import { Header } from "@/components/header";
 import { LandingHeader } from "@/components/landing-header";
 import { DigestCard } from "@/components/digest-card";
-import { DigestSearch } from "@/components/digest-search";
 import { NewDigestDialog } from "@/components/new-digest-dialog";
 import { AccessRestricted } from "@/components/access-restricted";
+import {
+  LibraryShell,
+  DigestGrid,
+  DigestGridSkeleton,
+  CompactModeSearch,
+} from "@/components/library-content";
 import { getDigests } from "@/lib/db";
 import { isEmailAllowed } from "@/lib/access";
 import { cn } from "@/lib/utils";
@@ -59,7 +64,15 @@ function LandingPage() {
   );
 }
 
-async function DigestGrid({ userId, search, hasAccess }: { userId: string; search?: string; hasAccess: boolean }) {
+async function DigestGridContent({
+  userId,
+  search,
+  hasAccess,
+}: {
+  userId: string;
+  search?: string;
+  hasAccess: boolean;
+}) {
   const { digests } = await getDigests({ userId, search, limit: 50 });
 
   if (digests.length === 0) {
@@ -83,28 +96,11 @@ async function DigestGrid({ userId, search, hasAccess }: { userId: string; searc
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <DigestGrid>
       {digests.map((digest) => (
         <DigestCard key={digest.id} digest={digest} />
       ))}
-    </div>
-  );
-}
-
-function DigestGridSkeleton() {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {[...Array(6)].map((_, i) => (
-        <div
-          key={i}
-          className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] animate-pulse"
-        >
-          <div className="aspect-video rounded-lg bg-[var(--color-bg-tertiary)] mb-3" />
-          <div className="h-5 bg-[var(--color-bg-tertiary)] rounded w-3/4 mb-2" />
-          <div className="h-4 bg-[var(--color-bg-tertiary)] rounded w-1/2" />
-        </div>
-      ))}
-    </div>
+    </DigestGrid>
   );
 }
 
@@ -121,24 +117,26 @@ async function AuthenticatedDashboard({ search }: { search?: string }) {
   return (
     <>
       <Header />
-      <main className="flex-1 px-4 py-4 md:py-6">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-baseline justify-between mb-4">
-            <h2 className="text-lg font-heading font-semibold text-[var(--color-text-primary)]">
-              Your Library
-            </h2>
-            <span className="text-[var(--color-text-secondary)]">
-              {total} {total === 1 ? "digest" : "digests"} saved
-            </span>
-          </div>
-
-          <DigestSearch />
-
-          <Suspense key={search} fallback={<DigestGridSkeleton />}>
-            <DigestGrid userId={user.id} search={search} hasAccess={hasAccess} />
-          </Suspense>
+      <LibraryShell>
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-lg font-heading font-semibold text-[var(--color-text-primary)]">
+            Your Library
+          </h2>
+          <span className="text-[var(--color-text-secondary)]">
+            {total} {total === 1 ? "digest" : "digests"} saved
+          </span>
         </div>
-      </main>
+
+        <CompactModeSearch />
+
+        <Suspense key={search} fallback={<DigestGridSkeleton />}>
+          <DigestGridContent
+            userId={user.id}
+            search={search}
+            hasAccess={hasAccess}
+          />
+        </Suspense>
+      </LibraryShell>
     </>
   );
 }
