@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,10 +18,21 @@ interface RegenerateDigestButtonProps {
 
 export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestButtonProps) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Close modal when refresh transition completes
+  useEffect(() => {
+    if (isRefreshing && !isPending) {
+      setIsRegenerating(false);
+      setIsRefreshing(false);
+      setCurrentStep(null);
+    }
+  }, [isPending, isRefreshing]);
 
   const handleRegenerate = async () => {
     setOpen(false);
@@ -53,16 +64,18 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const data = JSON.parse(line.slice(6));
-            setCurrentStep(data.step);
 
             if (data.step === "error") {
+              setCurrentStep(data.step);
               setError(data.message);
             } else if (data.step === "complete") {
-              setTimeout(() => {
-                setIsRegenerating(false);
-                setCurrentStep(null);
+              setCurrentStep("redirecting");
+              setIsRefreshing(true);
+              startTransition(() => {
                 router.refresh();
-              }, 500);
+              });
+            } else {
+              setCurrentStep(data.step);
             }
           }
         }
@@ -89,6 +102,7 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
         currentStep={currentStep}
         error={error}
         onClose={handleClose}
+        redirectingLabel="Refreshing content"
       />
 
       <Popover open={open} onOpenChange={setOpen}>

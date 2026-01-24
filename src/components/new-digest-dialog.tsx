@@ -41,8 +41,8 @@ export function NewDigestDialog({ variant = "default" }: NewDigestDialogProps) {
   };
 
   const handleDigestComplete = (digestId: string) => {
-    setIsLoading(false);
-    setCurrentStep(null);
+    // Keep modal open with "redirecting" step - it will unmount when navigation completes
+    setCurrentStep("redirecting");
     router.push(`/digest/${digestId}`);
   };
 
