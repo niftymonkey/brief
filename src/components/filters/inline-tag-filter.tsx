@@ -98,9 +98,10 @@ export function InlineTagFilter({ availableTags }: InlineTagFilterProps) {
       const theoreticalFilterSpace = toolbarWidth - Math.min(searchMaxWidth, toolbarWidth * 0.5) - sidebarToggle - LAYOUT.TOOLBAR_PADDING;
 
       // Calculate space available for tags within the filter section
-      // Filter section contains: [separator] [tags] [separator] [date filter]
+      // When wrapped: filter section has full toolbar width (search is on its own row)
+      // When single line: use theoretical space (accounts for search bar)
       const availableForTags = isWrapped
-        ? theoreticalFilterSpace - dateFilterWidth - LAYOUT.SEPARATOR_WIDTH - LAYOUT.GAP_3 * 2
+        ? toolbarWidth - LAYOUT.TOOLBAR_PADDING - dateFilterWidth - LAYOUT.SEPARATOR_WIDTH - LAYOUT.GAP_3 * 2
         : theoreticalFilterSpace - dateFilterWidth - separatorWidth * 2 - LAYOUT.GAP_3;
 
       // Measure actual tag widths from the hidden measurement container

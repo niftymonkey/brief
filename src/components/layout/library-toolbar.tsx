@@ -64,10 +64,10 @@ export function LibraryToolbar({ availableTags = [] }: LibraryToolbarProps) {
           </TooltipProvider>
         )}
 
-        {/* Search - grows to fill but capped so filter section gets space */}
+        {/* Search - full width when wrapped, capped at 600px on single line */}
         <div
           data-search-container
-          className="flex-[1_1_400px] min-w-[200px] max-w-[600px]"
+          className="flex-[1_1_400px] min-w-[200px] min-[900px]:max-w-[600px]"
         >
           <DigestSearch />
         </div>
