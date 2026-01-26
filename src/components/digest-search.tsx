@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryState, parseAsString } from "nuqs";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect, useTransition } from "react";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,13 @@ export function DigestSearch() {
     return () => clearTimeout(timeout);
   }, [inputValue, search, setSearch]);
 
+  const handleClear = () => {
+    setInputValue("");
+    setSearch(null);
+  };
+
+  const hasValue = inputValue.length > 0;
+
   return (
     <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--color-text-tertiary)]" />
@@ -47,12 +54,23 @@ export function DigestSearch() {
         onChange={(e) => setInputValue(e.target.value)}
         placeholder="Search digests..."
         className={cn(
-          "w-full h-auto pl-10 pr-4 py-2.5 text-base",
+          "w-full h-auto pl-10 py-2.5 text-base",
+          hasValue ? "pr-10" : "pr-4",
           "bg-[var(--color-bg-secondary)] border-[var(--color-border)] rounded-lg",
           "placeholder:text-[var(--color-text-tertiary)]",
           isPending && "opacity-70"
         )}
       />
+      {hasValue && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
+          aria-label="Clear search"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }

@@ -12,12 +12,17 @@ import {
   DigestGrid,
   DigestGridSkeleton,
 } from "@/components/library-content";
-import { getDigests } from "@/lib/db";
+import { getDigests, getUserTags } from "@/lib/db";
 import { isEmailAllowed } from "@/lib/access";
 import { cn } from "@/lib/utils";
 
 interface PageProps {
-  searchParams: Promise<{ search?: string }>;
+  searchParams: Promise<{
+    search?: string;
+    tags?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }>;
 }
 
 function LandingPage() {
@@ -63,29 +68,39 @@ function LandingPage() {
   );
 }
 
+interface FilterParams {
+  search?: string;
+  tags?: string[];
+  dateFrom?: Date;
+  dateTo?: Date;
+}
+
 async function DigestGridContent({
   userId,
-  search,
+  filters,
   hasAccess,
 }: {
   userId: string;
-  search?: string;
+  filters: FilterParams;
   hasAccess: boolean;
 }) {
-  const { digests } = await getDigests({ userId, search, limit: 50 });
+  const { search, tags, dateFrom, dateTo } = filters;
+  const { digests } = await getDigests({ userId, search, tags, dateFrom, dateTo, limit: 50 });
+
+  const hasFilters = search || (tags && tags.length > 0) || dateFrom || dateTo;
 
   if (digests.length === 0) {
-    // Show AccessRestricted for non-allowed users with no digests (and no active search)
-    if (!hasAccess && !search) {
+    // Show AccessRestricted for non-allowed users with no digests (and no active filters)
+    if (!hasAccess && !hasFilters) {
       return <AccessRestricted />;
     }
 
     return (
       <div className="text-center py-12">
         <p className="text-[var(--color-text-secondary)]">
-          {search ? "No digests match your search" : "No digests yet"}
+          {hasFilters ? "No digests match your filters" : "No digests yet"}
         </p>
-        {!search && hasAccess && (
+        {!hasFilters && hasAccess && (
           <div className="mt-4">
             <NewDigestDialog variant="outline" />
           </div>
@@ -103,7 +118,7 @@ async function DigestGridContent({
   );
 }
 
-async function AuthenticatedDashboard({ search }: { search?: string }) {
+async function AuthenticatedDashboard({ filters }: { filters: FilterParams }) {
   const { user } = await withAuth();
 
   if (!user) {
@@ -111,12 +126,18 @@ async function AuthenticatedDashboard({ search }: { search?: string }) {
   }
 
   const hasAccess = isEmailAllowed(user.email);
-  const { total } = await getDigests({ userId: user.id, limit: 1 });
+  const [{ total }, availableTags] = await Promise.all([
+    getDigests({ userId: user.id, limit: 1 }),
+    getUserTags(user.id),
+  ]);
+
+  // Create a stable key for Suspense based on all filter params
+  const suspenseKey = JSON.stringify(filters);
 
   return (
     <>
       <Header />
-      <LibraryShell>
+      <LibraryShell availableTags={availableTags}>
         <div className="flex items-baseline justify-between mb-4">
           <h2 className="text-lg font-heading font-semibold text-[var(--color-text-primary)]">
             Your Library
@@ -126,10 +147,10 @@ async function AuthenticatedDashboard({ search }: { search?: string }) {
           </span>
         </div>
 
-        <Suspense key={search} fallback={<DigestGridSkeleton />}>
+        <Suspense key={suspenseKey} fallback={<DigestGridSkeleton />}>
           <DigestGridContent
             userId={user.id}
-            search={search}
+            filters={filters}
             hasAccess={hasAccess}
           />
         </Suspense>
@@ -139,6 +160,15 @@ async function AuthenticatedDashboard({ search }: { search?: string }) {
 }
 
 export default async function RootPage({ searchParams }: PageProps) {
-  const { search } = await searchParams;
-  return <AuthenticatedDashboard search={search} />;
+  const params = await searchParams;
+
+  // Parse filter params
+  const filters: FilterParams = {
+    search: params.search,
+    tags: params.tags ? params.tags.split(",").filter(Boolean) : undefined,
+    dateFrom: params.dateFrom ? new Date(params.dateFrom) : undefined,
+    dateTo: params.dateTo ? new Date(params.dateTo) : undefined,
+  };
+
+  return <AuthenticatedDashboard filters={filters} />;
 }

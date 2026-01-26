@@ -66,6 +66,7 @@ export interface DigestResult {
 export interface Tag {
   id: string;
   name: string;
+  usageCount?: number; // Number of digests using this tag
 }
 
 // Database types

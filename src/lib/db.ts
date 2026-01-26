@@ -455,71 +455,104 @@ function buildTsQuery(search: string): string {
     .join(" & "); // AND between terms
 }
 
-/**
- * Get recent digests for a specific user with optional search
- * Uses PostgreSQL full-text search with ranking when search is provided
- */
-export async function getDigests(options: {
+interface GetDigestsOptions {
   userId: string;
   limit?: number;
   offset?: number;
   search?: string;
-}): Promise<{ digests: DigestSummary[]; total: number; hasMore: boolean }> {
-  const { userId, limit = 20, offset = 0, search } = options;
+  tags?: string[];      // Tag names to filter by (AND logic)
+  dateFrom?: Date;      // Filter createdAt >= dateFrom
+  dateTo?: Date;        // Filter createdAt <= dateTo
+}
 
-  let digests: DigestSummary[];
-  let total: number;
+/**
+ * Get recent digests for a specific user with optional search and filters
+ * Uses PostgreSQL full-text search with ranking when search is provided
+ * Tag filtering uses AND logic - all selected tags must match
+ */
+export async function getDigests(options: GetDigestsOptions): Promise<{ digests: DigestSummary[]; total: number; hasMore: boolean }> {
+  const { userId, limit = 20, offset = 0, search, tags, dateFrom, dateTo } = options;
 
+  // Build dynamic WHERE clauses
+  const conditions: string[] = ["d.user_id = $1"];
+  const params: (string | number | Date)[] = [userId];
+  let paramIndex = 2;
+
+  // Full-text search condition
+  let tsQuery: string | null = null;
   if (search) {
-    const tsQuery = buildTsQuery(search);
-
-    const countResult = await sql<{ count: string }>`
-      SELECT COUNT(*) as count
-      FROM digests
-      WHERE user_id = ${userId}
-        AND search_vector @@ to_tsquery('english', ${tsQuery})
-    `;
-    total = parseInt(countResult.rows[0].count, 10);
-
-    // Use ts_rank to order by relevance, then by created_at
-    const result = await sql<DigestSummary>`
-      SELECT
-        id,
-        video_id as "videoId",
-        title,
-        channel_name as "channelName",
-        thumbnail_url as "thumbnailUrl",
-        created_at as "createdAt"
-      FROM digests
-      WHERE user_id = ${userId}
-        AND search_vector @@ to_tsquery('english', ${tsQuery})
-      ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC, created_at DESC
-      LIMIT ${limit}
-      OFFSET ${offset}
-    `;
-    digests = result.rows;
-  } else {
-    const countResult = await sql<{ count: string }>`
-      SELECT COUNT(*) as count FROM digests WHERE user_id = ${userId}
-    `;
-    total = parseInt(countResult.rows[0].count, 10);
-
-    const result = await sql<DigestSummary>`
-      SELECT
-        id,
-        video_id as "videoId",
-        title,
-        channel_name as "channelName",
-        thumbnail_url as "thumbnailUrl",
-        created_at as "createdAt"
-      FROM digests
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT ${limit}
-      OFFSET ${offset}
-    `;
-    digests = result.rows;
+    tsQuery = buildTsQuery(search);
+    conditions.push(`d.search_vector @@ to_tsquery('english', $${paramIndex})`);
+    params.push(tsQuery);
+    paramIndex++;
   }
+
+  // Tag filtering with AND logic (all tags must match)
+  if (tags && tags.length > 0) {
+    const tagPlaceholders = tags.map((_, i) => `$${paramIndex + i}`).join(", ");
+    conditions.push(`
+      d.id IN (
+        SELECT dt.digest_id
+        FROM digest_tags dt
+        JOIN tags t ON dt.tag_id = t.id
+        WHERE t.user_id = $1 AND t.name IN (${tagPlaceholders})
+        GROUP BY dt.digest_id
+        HAVING COUNT(DISTINCT t.name) = $${paramIndex + tags.length}
+      )
+    `);
+    params.push(...tags, tags.length);
+    paramIndex += tags.length + 1;
+  }
+
+  // Date range filtering
+  if (dateFrom) {
+    conditions.push(`d.created_at >= $${paramIndex}`);
+    params.push(dateFrom);
+    paramIndex++;
+  }
+  if (dateTo) {
+    // Add one day to include the full end date
+    const endOfDay = new Date(dateTo);
+    endOfDay.setHours(23, 59, 59, 999);
+    conditions.push(`d.created_at <= $${paramIndex}`);
+    params.push(endOfDay);
+    paramIndex++;
+  }
+
+  const whereClause = conditions.join(" AND ");
+
+  // Count query
+  const countQuery = `
+    SELECT COUNT(*) as count
+    FROM digests d
+    WHERE ${whereClause}
+  `;
+  const countResult = await sql.query<{ count: string }>(countQuery, params);
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  // Data query with ordering
+  const orderClause = search
+    ? `ORDER BY ts_rank(d.search_vector, to_tsquery('english', $2)) DESC, d.created_at DESC`
+    : `ORDER BY d.created_at DESC`;
+
+  const dataQuery = `
+    SELECT
+      d.id,
+      d.video_id as "videoId",
+      d.title,
+      d.channel_name as "channelName",
+      d.thumbnail_url as "thumbnailUrl",
+      d.created_at as "createdAt"
+    FROM digests d
+    WHERE ${whereClause}
+    ${orderClause}
+    LIMIT $${paramIndex}
+    OFFSET $${paramIndex + 1}
+  `;
+  params.push(limit, offset);
+
+  const result = await sql.query<DigestSummary>(dataQuery, params);
+  const digests = result.rows;
 
   // Batch fetch tags for all digests
   if (digests.length > 0) {
@@ -646,16 +679,24 @@ export async function toggleDigestSharing(
 // ============================================
 
 /**
- * Get all tags for a user (their vocabulary)
+ * Get all tags for a user (their vocabulary) with usage counts
+ * Sorted by usage count descending so most-used tags appear first
  */
 export async function getUserTags(userId: string): Promise<Tag[]> {
-  const result = await sql<Tag>`
-    SELECT id, name
-    FROM tags
-    WHERE user_id = ${userId}
-    ORDER BY name ASC
+  const result = await sql<Tag & { usagecount: number }>`
+    SELECT t.id, t.name, COUNT(dt.digest_id)::int as usagecount
+    FROM tags t
+    LEFT JOIN digest_tags dt ON t.id = dt.tag_id
+    WHERE t.user_id = ${userId}
+    GROUP BY t.id, t.name
+    ORDER BY usagecount DESC, t.name ASC
   `;
-  return result.rows;
+  // Map the lowercase column name to camelCase
+  return result.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    usageCount: row.usagecount,
+  }));
 }
 
 /**
