@@ -1,38 +1,59 @@
-import { Supadata } from "@supadata/js";
+import { Supadata, type Transcript } from "@supadata/js";
 import { fetchTranscript as fetchYouTubeTranscript } from "youtube-transcript-plus";
 import type { TranscriptEntry } from "./types";
 
 /**
+ * Convert Supadata transcript to our TranscriptEntry format
+ */
+function convertSupadataTranscript(transcript: Transcript): TranscriptEntry[] {
+  if (typeof transcript.content === "string") {
+    throw new Error("Transcript returned without timestamps - cannot process");
+  }
+  if (!transcript.content) {
+    throw new Error("No transcript content available");
+  }
+  // Supadata returns offset/duration in milliseconds, we need seconds
+  return transcript.content.map((entry) => ({
+    text: entry.text,
+    offset: entry.offset / 1000,
+    duration: entry.duration / 1000,
+    lang: transcript.lang,
+  }));
+}
+
+/**
  * Fetches transcript using Supadata API (for cloud deployments)
- * Supadata returns timestamps in milliseconds, needs conversion to seconds
+ * Uses mode: 'auto' which falls back to AI generation if native transcript unavailable
  */
 async function fetchWithSupadata(videoId: string): Promise<TranscriptEntry[]> {
   const supadata = new Supadata({
     apiKey: process.env.SUPADATA_API_KEY!,
   });
 
-  const result = await supadata.youtube.transcript({
-    videoId,
+  // Use the newer transcript() API with mode: 'auto' which may have better success
+  // than the deprecated youtube.transcript() method
+  const result = await supadata.transcript({
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+    mode: "auto",
   });
 
-  // Handle async job case (unlikely for YouTube but SDK supports it)
+  // Handle error returned as data (Supadata SDK quirk - doesn't always throw)
+  if ("error" in result) {
+    const { details, message } = result as { details?: string; message?: string };
+    throw new Error(details || message || "Unknown Supadata error");
+  }
+
+  // Handle async job case - transcript is being generated
   if ("jobId" in result) {
-    throw new Error("Transcript generation queued - not supported yet");
+    console.log(
+      `[TRANSCRIPT] Transcript generation queued, jobId: ${result.jobId}`
+    );
+    throw new Error(
+      "TRANSCRIPT_GENERATING: This video's transcript is being generated. Please try again in 1-2 minutes."
+    );
   }
 
-  // Handle case where content is a string (no timestamps)
-  if (typeof result.content === "string") {
-    throw new Error("Transcript returned without timestamps - cannot process");
-  }
-
-  // Convert to our TranscriptEntry format
-  // Supadata returns offset/duration in milliseconds, we need seconds
-  return result.content.map((entry) => ({
-    text: entry.text,
-    offset: entry.offset / 1000,
-    duration: entry.duration / 1000,
-    lang: result.lang,
-  }));
+  return convertSupadataTranscript(result);
 }
 
 /**
@@ -91,6 +112,13 @@ export async function fetchTranscript(
 
     const errorMsg =
       error instanceof Error ? error.message?.toLowerCase() : "";
+
+    // Pass through transcript generation message as-is
+    if (errorMsg.includes("transcript_generating")) {
+      throw new Error(
+        "This video's transcript is being generated. Please try again in 1-2 minutes."
+      );
+    }
 
     if (errorMsg.includes("disabled") || errorMsg.includes("not available")) {
       throw new Error(
