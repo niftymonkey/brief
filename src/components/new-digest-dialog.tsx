@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Plus, Youtube } from "lucide-react";
 import { Button, type buttonVariants } from "@/components/ui/button";
 import {
@@ -26,6 +26,16 @@ export function NewDigestDialog({ variant = "default" }: NewDigestDialogProps) {
   const [currentStep, setCurrentStep] = useState<Step | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Close the progress modal when the route changes after navigation
+  useEffect(() => {
+    if (isLoading && currentStep === "redirecting") {
+      setIsLoading(false);
+      setCurrentStep(null);
+      setError(null);
+    }
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLoadingStart = () => {
     setOpen(false);
@@ -41,9 +51,9 @@ export function NewDigestDialog({ variant = "default" }: NewDigestDialogProps) {
   };
 
   const handleDigestComplete = (digestId: string) => {
-    // Keep modal open with "redirecting" step - it will unmount when navigation completes
     setCurrentStep("redirecting");
     router.push(`/digest/${digestId}`);
+    router.refresh();
   };
 
   const handleProgressClose = () => {
