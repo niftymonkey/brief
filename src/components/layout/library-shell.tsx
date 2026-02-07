@@ -1,6 +1,7 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { LibrarySidebar } from "./library-sidebar";
 import { LibraryToolbar } from "./library-toolbar";
 import { ActiveFilters } from "@/components/filters";
@@ -17,6 +18,18 @@ interface LibraryShellProps {
 }
 
 export function LibraryShell({ children, availableTags = [] }: LibraryShellProps) {
+  const router = useRouter();
+
+  // Refresh server data when the page is restored from bfcache (browser back/forward).
+  // This ensures tags and other mutations made on detail pages are reflected.
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) router.refresh();
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, [router]);
+
   return (
     <ContentPendingProvider>
       <div className="flex flex-1">
