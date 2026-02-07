@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TagBadge } from "@/components/tag-badge";
+import { revalidateLibrary } from "@/lib/actions";
 import type { Tag } from "@/lib/types";
 
 interface TagInputProps {
@@ -98,6 +99,7 @@ export function TagInput({ digestId, initialTags }: TagInputProps) {
         setTags((prev) =>
           prev.map((t) => (t.id === tempId ? { ...newTag, isPending: false } : t))
         );
+        revalidateLibrary();
       } else {
         // Remove optimistic tag on failure
         setTags((prev) => prev.filter((t) => t.id !== tempId));
@@ -119,7 +121,9 @@ export function TagInput({ digestId, initialTags }: TagInputProps) {
         method: "DELETE",
       });
 
-      if (!res.ok && removedTag) {
+      if (res.ok) {
+        revalidateLibrary();
+      } else if (removedTag) {
         // Revert on failure
         setTags((prev) => [...prev, removedTag]);
       }
@@ -151,7 +155,9 @@ export function TagInput({ digestId, initialTags }: TagInputProps) {
         method: "DELETE",
       });
 
-      if (!res.ok) {
+      if (res.ok) {
+        revalidateLibrary();
+      } else {
         // Revert on failure - refetch tags
         fetch("/api/tags")
           .then((res) => res.json())
