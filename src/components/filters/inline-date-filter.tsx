@@ -1,7 +1,6 @@
 "use client";
 
 import { useQueryState, parseAsIsoDate } from "nuqs";
-import { useTransition } from "react";
 import { Calendar, X } from "lucide-react";
 import {
   Popover,
@@ -72,19 +71,16 @@ const presets: Preset[] = [
 ];
 
 export function InlineDateFilter() {
-  const [isPending, startTransition] = useTransition();
   const [dateFrom, setDateFrom] = useQueryState(
     "dateFrom",
     parseAsIsoDate.withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
   const [dateTo, setDateTo] = useQueryState(
     "dateTo",
     parseAsIsoDate.withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
 
@@ -128,10 +124,7 @@ export function InlineDateFilter() {
 
   return (
     <div
-      className={cn(
-        "flex items-center gap-1 shrink-0",
-        isPending && "opacity-70"
-      )}
+      className="flex items-center gap-1 shrink-0"
     >
       {/* Inline preset buttons - only on xl screens */}
       <div className="hidden xl:flex items-center gap-1">

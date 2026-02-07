@@ -1,7 +1,6 @@
 "use client";
 
 import { useQueryState, parseAsIsoDate } from "nuqs";
-import { useTransition } from "react";
 import { Calendar, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -13,21 +12,17 @@ import {
 import { cn } from "@/lib/utils";
 
 export function DateFilter() {
-  const [isPending, startTransition] = useTransition();
-
   const [dateFrom, setDateFrom] = useQueryState(
     "dateFrom",
     parseAsIsoDate.withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
 
   const [dateTo, setDateTo] = useQueryState(
     "dateTo",
     parseAsIsoDate.withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
 
@@ -78,8 +73,7 @@ export function DateFilter() {
           size="sm"
           className={cn(
             "h-9 gap-1.5",
-            hasSelection && "bg-[var(--color-accent)]/10 border-[var(--color-accent)]/30",
-            isPending && "opacity-70"
+            hasSelection && "bg-[var(--color-accent)]/10 border-[var(--color-accent)]/30"
           )}
         >
           <Calendar className="w-4 h-4" />

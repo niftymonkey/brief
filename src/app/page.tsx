@@ -4,14 +4,13 @@ import { ArrowRight } from "lucide-react";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { Header } from "@/components/header";
 import { LandingHeader } from "@/components/landing-header";
-import { DigestCard } from "@/components/digest-card";
 import { NewDigestDialog } from "@/components/new-digest-dialog";
 import { AccessRestricted } from "@/components/access-restricted";
 import {
   LibraryShell,
-  DigestGrid,
   DigestGridSkeleton,
 } from "@/components/library-content";
+import { FilteredDigestGrid } from "@/components/filtered-digest-grid";
 import { getDigests, getUserTags } from "@/lib/db";
 import { isEmailAllowed } from "@/lib/access";
 import { cn } from "@/lib/utils";
@@ -19,9 +18,6 @@ import { cn } from "@/lib/utils";
 interface PageProps {
   searchParams: Promise<{
     search?: string;
-    tags?: string;
-    dateFrom?: string;
-    dateTo?: string;
   }>;
 }
 
@@ -68,57 +64,48 @@ function LandingPage() {
   );
 }
 
-interface FilterParams {
-  search?: string;
-  tags?: string[];
-  dateFrom?: Date;
-  dateTo?: Date;
-}
-
 async function DigestGridContent({
   userId,
-  filters,
+  search,
   hasAccess,
 }: {
   userId: string;
-  filters: FilterParams;
+  search?: string;
   hasAccess: boolean;
 }) {
-  const { search, tags, dateFrom, dateTo } = filters;
-  const { digests } = await getDigests({ userId, search, tags, dateFrom, dateTo, limit: 50 });
+  // Server only filters by search (full-text search needs the DB)
+  // Tags and dates are filtered client-side for instant UX
+  const { digests } = await getDigests({ userId, search, limit: 500 });
 
-  const hasFilters = search || (tags && tags.length > 0) || dateFrom || dateTo;
-
-  if (digests.length === 0) {
-    // Show AccessRestricted for non-allowed users with no digests (and no active filters)
-    if (!hasAccess && !hasFilters) {
+  if (digests.length === 0 && !search) {
+    if (!hasAccess) {
       return <AccessRestricted />;
     }
 
     return (
       <div className="text-center py-12">
-        <p className="text-[var(--color-text-secondary)]">
-          {hasFilters ? "No digests match your filters" : "No digests yet"}
-        </p>
-        {!hasFilters && hasAccess && (
-          <div className="mt-4">
-            <NewDigestDialog variant="outline" />
-          </div>
-        )}
+        <p className="text-[var(--color-text-secondary)]">No digests yet</p>
+        <div className="mt-4">
+          <NewDigestDialog variant="outline" />
+        </div>
       </div>
     );
   }
 
-  return (
-    <DigestGrid>
-      {digests.map((digest) => (
-        <DigestCard key={digest.id} digest={digest} />
-      ))}
-    </DigestGrid>
-  );
+  if (digests.length === 0 && search) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-[var(--color-text-secondary)]">
+          No digests match your search
+        </p>
+      </div>
+    );
+  }
+
+  return <FilteredDigestGrid digests={digests} hasAccess={hasAccess} />;
 }
 
-async function AuthenticatedDashboard({ filters }: { filters: FilterParams }) {
+async function AuthenticatedDashboard({ search }: { search?: string }) {
   const { user } = await withAuth();
 
   if (!user) {
@@ -130,9 +117,6 @@ async function AuthenticatedDashboard({ filters }: { filters: FilterParams }) {
     getDigests({ userId: user.id, limit: 1 }),
     getUserTags(user.id),
   ]);
-
-  // Create a stable key for Suspense based on all filter params
-  const suspenseKey = JSON.stringify(filters);
 
   return (
     <>
@@ -147,10 +131,10 @@ async function AuthenticatedDashboard({ filters }: { filters: FilterParams }) {
           </span>
         </div>
 
-        <Suspense key={suspenseKey} fallback={<DigestGridSkeleton />}>
+        <Suspense fallback={<DigestGridSkeleton />}>
           <DigestGridContent
             userId={user.id}
-            filters={filters}
+            search={search}
             hasAccess={hasAccess}
           />
         </Suspense>
@@ -162,13 +146,5 @@ async function AuthenticatedDashboard({ filters }: { filters: FilterParams }) {
 export default async function RootPage({ searchParams }: PageProps) {
   const params = await searchParams;
 
-  // Parse filter params
-  const filters: FilterParams = {
-    search: params.search,
-    tags: params.tags ? params.tags.split(",").filter(Boolean) : undefined,
-    dateFrom: params.dateFrom ? new Date(params.dateFrom) : undefined,
-    dateTo: params.dateTo ? new Date(params.dateTo) : undefined,
-  };
-
-  return <AuthenticatedDashboard filters={filters} />;
+  return <AuthenticatedDashboard search={params.search} />;
 }

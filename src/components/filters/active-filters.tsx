@@ -1,34 +1,28 @@
 "use client";
 
 import { useQueryState, parseAsArrayOf, parseAsString, parseAsIsoDate } from "nuqs";
-import { useTransition } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function ActiveFilters() {
-  const [isPending, startTransition] = useTransition();
-
   const [selectedTags, setSelectedTags] = useQueryState(
     "tags",
     parseAsArrayOf(parseAsString, ",").withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
 
   const [dateFrom, setDateFrom] = useQueryState(
     "dateFrom",
     parseAsIsoDate.withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
 
   const [dateTo, setDateTo] = useQueryState(
     "dateTo",
     parseAsIsoDate.withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
 
@@ -60,11 +54,7 @@ export function ActiveFilters() {
 
   return (
     <div
-      className={cn(
-        "flex items-center gap-2 flex-wrap px-4 py-2 border-b border-[var(--color-border)]",
-        "bg-[var(--color-bg-primary)]",
-        isPending && "opacity-70"
-      )}
+      className="flex items-center gap-2 flex-wrap px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]"
     >
       <span className="text-xs text-[var(--color-text-tertiary)] mr-1">Filters:</span>
 

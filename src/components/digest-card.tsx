@@ -25,7 +25,7 @@ export function DigestCard({ digest }: DigestCardProps) {
             src={digest.thumbnailUrl}
             alt={digest.title}
             loading="lazy"
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-[var(--color-text-tertiary)]">
