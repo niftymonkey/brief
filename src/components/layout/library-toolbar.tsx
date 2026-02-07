@@ -72,19 +72,19 @@ export function LibraryToolbar({ availableTags = [] }: LibraryToolbarProps) {
           <DigestSearch />
         </div>
 
-        {/* Filter section - grows to fill remaining space */}
+        {/* Filter section - grows into remaining space, can shrink */}
         <div
           data-filter-section
-          className="flex items-center gap-3 flex-[1_0_auto] min-w-0"
+          className="flex items-center gap-3 flex-[1_1_0%] min-w-0"
         >
           {/* Separator - hide when likely wrapped */}
-          <div className="hidden min-[900px]:block h-5 w-px bg-[var(--color-border)]" />
+          <div className="hidden min-[900px]:block h-5 w-px shrink-0 bg-[var(--color-border)]" />
 
           {/* Inline tag pills */}
           <InlineTagFilter availableTags={availableTags} />
 
-          {/* Separator - ml-auto pushes date filter to the right */}
-          <div className="ml-auto h-5 w-px bg-[var(--color-border)]" />
+          {/* Separator */}
+          <div className="h-5 w-px shrink-0 bg-[var(--color-border)]" />
 
           {/* Date presets */}
           <InlineDateFilter />

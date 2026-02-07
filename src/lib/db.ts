@@ -689,7 +689,7 @@ export async function getUserTags(userId: string): Promise<Tag[]> {
     LEFT JOIN digest_tags dt ON t.id = dt.tag_id
     WHERE t.user_id = ${userId}
     GROUP BY t.id, t.name
-    ORDER BY usagecount DESC, t.name ASC
+    ORDER BY t.name ASC
   `;
   // Map the lowercase column name to camelCase
   return result.rows.map((row) => ({
