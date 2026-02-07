@@ -3,13 +3,14 @@
 import { useQueryState, parseAsString } from "nuqs";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useEffect, useTransition } from "react";
+import { useContentPending } from "./filters/content-pending-context";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 
 const DEBOUNCE_MS = 300;
 
 export function DigestSearch() {
-  const [isPending, startTransition] = useTransition();
+  const { startTransition } = useContentPending();
   const [search, setSearch] = useQueryState(
     "search",
     parseAsString.withOptions({
@@ -57,8 +58,7 @@ export function DigestSearch() {
           "w-full h-auto pl-10 py-2.5 text-base",
           hasValue ? "pr-10" : "pr-4",
           "bg-[var(--color-bg-secondary)] border-[var(--color-border)] rounded-lg",
-          "placeholder:text-[var(--color-text-tertiary)]",
-          isPending && "opacity-70"
+          "placeholder:text-[var(--color-text-tertiary)]"
         )}
       />
       {hasValue && (

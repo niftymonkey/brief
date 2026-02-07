@@ -1,7 +1,6 @@
 "use client";
 
 import { useQueryState, parseAsArrayOf, parseAsString } from "nuqs";
-import { useTransition } from "react";
 import { Tag as TagIcon, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,12 +24,10 @@ interface TagFilterProps {
 }
 
 export function TagFilter({ availableTags }: TagFilterProps) {
-  const [isPending, startTransition] = useTransition();
   const [selectedTags, setSelectedTags] = useQueryState(
     "tags",
     parseAsArrayOf(parseAsString, ",").withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
 
@@ -62,8 +59,7 @@ export function TagFilter({ availableTags }: TagFilterProps) {
           size="sm"
           className={cn(
             "h-9 gap-1.5",
-            hasSelection && "bg-[var(--color-accent)]/10 border-[var(--color-accent)]/30",
-            isPending && "opacity-70"
+            hasSelection && "bg-[var(--color-accent)]/10 border-[var(--color-accent)]/30"
           )}
         >
           <TagIcon className="w-4 h-4" />

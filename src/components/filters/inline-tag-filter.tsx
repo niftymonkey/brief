@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryState, parseAsArrayOf, parseAsString } from "nuqs";
-import { useTransition, useRef, useState, useLayoutEffect } from "react";
+import { useRef, useState, useLayoutEffect } from "react";
 import { Tag as TagIcon, X, Check, ChevronDown } from "lucide-react";
 import {
   Popover,
@@ -28,12 +28,10 @@ interface InlineTagFilterProps {
 }
 
 export function InlineTagFilter({ availableTags }: InlineTagFilterProps) {
-  const [isPending, startTransition] = useTransition();
   const [selectedTags, setSelectedTags] = useQueryState(
     "tags",
     parseAsArrayOf(parseAsString, ",").withOptions({
-      shallow: false,
-      startTransition,
+      shallow: true,
     })
   );
 
@@ -173,10 +171,7 @@ export function InlineTagFilter({ availableTags }: InlineTagFilterProps) {
       {/* Visible tags */}
       <div
         ref={containerRef}
-        className={cn(
-          "flex items-center gap-1.5",
-          isPending && "opacity-70"
-        )}
+        className="flex items-center gap-1.5"
       >
         {visibleTags.map((tag) => (
           <TagPill key={tag.id} tag={tag} />
