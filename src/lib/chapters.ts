@@ -52,12 +52,14 @@ export function extractChapters(
   // Proximity dedup: descriptions often list timestamps twice (TOC + detailed notes)
   // with slight variations (e.g., 2:30 vs 2:31). Collapse chapters starting within
   // 2 seconds of an already-accepted chapter.
-  const uniqueChapters = exactDeduped.filter((chapter, index) => {
-    if (index === 0) return true;
-    return !exactDeduped
-      .slice(0, index)
-      .some((prev) => Math.abs(prev.start - chapter.start) <= 2);
-  });
+  const uniqueChapters = exactDeduped.reduce<typeof exactDeduped>((accepted, chapter) => {
+    if (accepted.length === 0) return [chapter];
+    const tooClose = accepted.some(
+      (prev) => Math.abs(prev.start - chapter.start) <= 2
+    );
+    if (!tooClose) accepted.push(chapter);
+    return accepted;
+  }, []);
 
   // YouTube requires minimum 3 chapters, first must start at 0:00
   if (uniqueChapters.length < 3) return null;
