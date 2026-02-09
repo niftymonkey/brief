@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { DigestViewer } from "@/components/digest-viewer";
+import { BriefViewer } from "@/components/brief-viewer";
 import { Card, CardContent } from "@/components/ui/card";
-import { getSharedDigestBySlug } from "@/lib/db";
+import { getSharedBriefBySlug } from "@/lib/db";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -12,28 +12,28 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const digest = await getSharedDigestBySlug(slug);
+  const brief = await getSharedBriefBySlug(slug);
 
-  if (!digest) {
+  if (!brief) {
     return {
-      title: "Not Found | YouTube Digest",
+      title: "Not Found | Brief",
     };
   }
 
-  const thumbnailUrl = digest.thumbnailUrl || `https://i.ytimg.com/vi/${digest.videoId}/hqdefault.jpg`;
-  const description = digest.summary.length > 160
-    ? digest.summary.slice(0, 157) + "..."
-    : digest.summary;
+  const thumbnailUrl = brief.thumbnailUrl || `https://i.ytimg.com/vi/${brief.videoId}/hqdefault.jpg`;
+  const description = brief.summary.length > 160
+    ? brief.summary.slice(0, 157) + "..."
+    : brief.summary;
 
   return {
-    title: `${digest.title} | YouTube Digest`,
+    title: `${brief.title} | Brief`,
     description,
     robots: {
       index: false,
       follow: false,
     },
     openGraph: {
-      title: digest.title,
+      title: brief.title,
       description,
       type: "article",
       images: [
@@ -41,13 +41,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           url: thumbnailUrl,
           width: 480,
           height: 360,
-          alt: digest.title,
+          alt: brief.title,
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: digest.title,
+      title: brief.title,
       description,
       images: [thumbnailUrl],
     },
@@ -69,16 +69,16 @@ function formatDuration(isoDuration: string | null): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-export default async function SharedDigestPage({ params }: PageProps) {
+export default async function SharedBriefPage({ params }: PageProps) {
   const { slug } = await params;
-  const digest = await getSharedDigestBySlug(slug);
+  const brief = await getSharedBriefBySlug(slug);
 
-  if (!digest) {
+  if (!brief) {
     notFound();
   }
 
-  const publishDate = digest.publishedAt
-    ? new Date(digest.publishedAt).toLocaleDateString("en-US", {
+  const publishDate = brief.publishedAt
+    ? new Date(brief.publishedAt).toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
         day: "numeric",
@@ -89,24 +89,24 @@ export default async function SharedDigestPage({ params }: PageProps) {
     <main className="flex-1 px-4 py-4">
       <article className="max-w-3xl mx-auto">
         {/* Embedded YouTube Player and Chapters */}
-        <DigestViewer
-          videoId={digest.videoId}
-          title={digest.title}
-          sections={digest.sections}
-          hasCreatorChapters={digest.hasCreatorChapters}
+        <BriefViewer
+          videoId={brief.videoId}
+          title={brief.title}
+          sections={brief.sections}
+          hasCreatorChapters={brief.hasCreatorChapters}
         >
           {/* Title */}
           <h1 className="text-xl md:text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
-            {digest.title}
+            {brief.title}
           </h1>
 
           {/* Meta line */}
           <div className="flex flex-wrap items-center gap-2 text-[var(--color-text-secondary)] mb-4">
-            <span>{digest.channelName}</span>
-            {digest.duration && (
+            <span>{brief.channelName}</span>
+            {brief.duration && (
               <>
                 <span className="text-[var(--color-text-tertiary)]">•</span>
-                <span>{formatDuration(digest.duration)}</span>
+                <span>{formatDuration(brief.duration)}</span>
               </>
             )}
             {publishDate && (
@@ -123,13 +123,13 @@ export default async function SharedDigestPage({ params }: PageProps) {
               The Gist
             </h2>
             <p className="text-lg text-[var(--color-text-primary)] leading-relaxed pt-2">
-              {digest.summary}
+              {brief.summary}
             </p>
           </section>
-        </DigestViewer>
+        </BriefViewer>
 
         {/* Links & Resources */}
-        {(digest.relatedLinks.length > 0 || digest.otherLinks.length > 0) && (
+        {(brief.relatedLinks.length > 0 || brief.otherLinks.length > 0) && (
           <section className="mt-6 mb-4">
             <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1.5 pb-1 border-b border-[var(--color-border)]">
               Links & Resources
@@ -137,13 +137,13 @@ export default async function SharedDigestPage({ params }: PageProps) {
 
             <Card className="border-[var(--color-border)] bg-[var(--color-bg-secondary)] py-0">
               <CardContent className="px-5 py-4 space-y-3">
-                {digest.relatedLinks.length > 0 && (
+                {brief.relatedLinks.length > 0 && (
                   <div>
                     <h3 className="font-medium text-[var(--color-text-primary)] mb-1.5">
                       From the video
                     </h3>
                     <ul className="space-y-1">
-                      {digest.relatedLinks.map((link, index) => (
+                      {brief.relatedLinks.map((link, index) => (
                         <li key={index}>
                           <a
                             href={link.url}
@@ -164,13 +164,13 @@ export default async function SharedDigestPage({ params }: PageProps) {
                   </div>
                 )}
 
-                {digest.otherLinks.length > 0 && (
+                {brief.otherLinks.length > 0 && (
                   <div>
                     <h3 className="font-medium text-[var(--color-text-primary)] mb-1.5">
                       Other links
                     </h3>
                     <ul className="space-y-1">
-                      {digest.otherLinks.map((link, index) => (
+                      {brief.otherLinks.map((link, index) => (
                         <li key={index}>
                           <a
                             href={link.url}
@@ -198,7 +198,7 @@ export default async function SharedDigestPage({ params }: PageProps) {
         {/* CTA */}
         <section className="mt-6 py-6 px-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-center">
           <p className="text-[var(--color-text-secondary)] mb-4">
-            Create your own digests with AI summaries, timestamps, and more.
+            Create your own briefs with AI summaries, timestamps, and more.
           </p>
           <Link
             href="/auth"

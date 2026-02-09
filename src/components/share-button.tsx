@@ -11,13 +11,13 @@ import {
 } from "@/components/ui/popover";
 
 interface ShareButtonProps {
-  digestId: string;
+  briefId: string;
   isShared: boolean;
   slug: string | null;
   title: string;
 }
 
-export function ShareButton({ digestId, isShared: initialIsShared, slug: initialSlug, title }: ShareButtonProps) {
+export function ShareButton({ briefId, isShared: initialIsShared, slug: initialSlug, title }: ShareButtonProps) {
   const [isShared, setIsShared] = useState(initialIsShared);
   const [slug, setSlug] = useState(initialSlug);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -29,7 +29,7 @@ export function ShareButton({ digestId, isShared: initialIsShared, slug: initial
   const handleToggleShare = async () => {
     setIsUpdating(true);
     try {
-      const response = await fetch(`/api/digest/${digestId}/share`, {
+      const response = await fetch(`/api/brief/${briefId}/share`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isShared: !isShared, title }),
@@ -77,7 +77,7 @@ export function ShareButton({ digestId, isShared: initialIsShared, slug: initial
           variant="outline"
           size="icon-sm"
           className={isShared ? "text-[var(--color-accent)] border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]" : "text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"}
-          title={isShared ? "Manage sharing" : "Share digest"}
+          title={isShared ? "Manage sharing" : "Share brief"}
         >
           {isUpdating ? (
             <Loader2 className="w-4 h-4 animate-spin" />

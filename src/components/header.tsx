@@ -1,6 +1,6 @@
 import { withAuth, signOut } from "@workos-inc/authkit-nextjs";
 import { isEmailAllowed } from "@/lib/access";
-import { NewDigestDialog } from "./new-digest-dialog";
+import { NewBriefDialog } from "./new-brief-dialog";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 import { HeaderContent } from "./header-content";
@@ -17,7 +17,7 @@ export async function Header() {
   return (
     <header className="sticky top-0 z-50 px-4 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--color-bg-primary)]/80">
       <HeaderContent>
-        {user && hasAccess && <NewDigestDialog />}
+        {user && hasAccess && <NewBriefDialog />}
         {user && (
           <UserMenu
             user={{

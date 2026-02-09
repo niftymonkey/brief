@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from "react";
 
-const STORAGE_KEY = "youtube-digest-sidebar-enabled";
+const STORAGE_KEY = "brief-sidebar-enabled";
 
 /**
  * Hook to determine if the sidebar feature is enabled.
  * Reads from localStorage, defaulting to false.
  *
- * To enable: localStorage.setItem("youtube-digest-sidebar-enabled", "true")
- * To disable: localStorage.setItem("youtube-digest-sidebar-enabled", "false")
+ * To enable: localStorage.setItem("brief-sidebar-enabled", "true")
+ * To disable: localStorage.setItem("brief-sidebar-enabled", "false")
  */
 export function useSidebarEnabled(): boolean {
   const [enabled, setEnabled] = useState(false);

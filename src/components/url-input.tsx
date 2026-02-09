@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ProgressModal, type Step } from "@/components/progress-modal";
 
 interface UrlInputProps {
-  onDigestComplete: (digestId: string) => void;
+  onBriefComplete: (briefId: string) => void;
   onLoadingStart?: () => void;
   onStepChange?: (step: Step | null) => void;
   onError?: (error: string | null) => void;
@@ -15,7 +15,7 @@ interface UrlInputProps {
 }
 
 export function UrlInput({
-  onDigestComplete,
+  onBriefComplete,
   onLoadingStart,
   onStepChange,
   onError,
@@ -60,14 +60,14 @@ export function UrlInput({
     onLoadingStart?.();
 
     try {
-      const response = await fetch("/api/digest", {
+      const response = await fetch("/api/brief", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
 
       if (!response.ok || !response.body) {
-        throw new Error("Failed to create digest");
+        throw new Error("Failed to create brief");
       }
 
       const reader = response.body.getReader();
@@ -88,12 +88,12 @@ export function UrlInput({
               updateStep(data.step);
               updateError(data.message);
             } else if (data.step === "complete") {
-              if (data.data?.digestId) {
+              if (data.data?.briefId) {
                 updateStep("redirecting");
-                onDigestComplete(data.data.digestId);
+                onBriefComplete(data.data.briefId);
               } else {
                 updateStep("error");
-                updateError("Digest completed but no ID was returned");
+                updateError("Brief completed but no ID was returned");
               }
             } else {
               updateStep(data.step);
@@ -124,8 +124,8 @@ export function UrlInput({
       {showProgressModal && (
         <ProgressModal
           isOpen={isLoading}
-          title="Creating Digest"
-          errorTitle="Failed to Create Digest"
+          title="Creating Brief"
+          errorTitle="Failed to Create Brief"
           icon={Youtube}
           currentStep={currentStep}
           error={error}

@@ -1,14 +1,14 @@
 {
-  "name": "youtube-digest",
+  "name": "brief",
   "version": "0.1.0",
-  "description": "Generate AI-powered content summaries from YouTube videos with timestamps",
+  "description": "AI-powered structured video breakdowns with timestamps, chapters, and a personal reference library",
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "digest": "tsx src/cli.ts",
+    "brief": "tsx src/cli.ts",
     "migrate": "tsx scripts/migrate.ts",
     "backfill-search": "tsx scripts/backfill-search.ts",
     "security": "pnpm security:code && pnpm security:secrets",
@@ -21,7 +21,7 @@
     "ai",
     "claude",
     "summary",
-    "digest"
+    "brief"
   ],
   "author": "",
   "license": "MIT",

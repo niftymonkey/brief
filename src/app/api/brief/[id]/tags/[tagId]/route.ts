@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
-import { removeTagFromDigest } from "@/lib/db";
+import { removeTagFromBrief } from "@/lib/db";
 
 export async function DELETE(
   request: NextRequest,
@@ -16,13 +16,13 @@ export async function DELETE(
 
   if (!id || !tagId) {
     return NextResponse.json(
-      { error: "Digest ID and Tag ID are required" },
+      { error: "Brief ID and Tag ID are required" },
       { status: 400 }
     );
   }
 
   try {
-    const removed = await removeTagFromDigest(user.id, id, tagId);
+    const removed = await removeTagFromBrief(user.id, id, tagId);
 
     if (!removed) {
       return NextResponse.json({ error: "Tag not found" }, { status: 404 });

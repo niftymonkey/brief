@@ -1,6 +1,6 @@
 # Web Application Documentation
 
-Full-featured web app with user accounts and saved digests.
+Full-featured web app with user accounts and saved briefs.
 
 ## Quick Start
 
@@ -51,10 +51,10 @@ The app uses different transcript sources based on environment:
 
 ## Features
 
-- **User Accounts** - Save and organize your digests
-- **Digest Caching** - Re-generating a digest for the same video is instant
+- **User Accounts** - Save and organize your briefs
+- **Brief Caching** - Re-generating a brief for the same video is instant
 - **Clickable Timestamps** - Jump to any point in the video on YouTube
-- **Regenerate** - Re-process any digest with updated AI
+- **Regenerate** - Re-process any brief with updated AI
 
 ## Database Setup
 

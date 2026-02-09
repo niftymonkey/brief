@@ -14,7 +14,7 @@ export { fetchVideoMetadata } from "./metadata";
 export { fetchTranscript } from "./transcript";
 
 // AI summarization
-export { generateDigest } from "./summarize";
+export { generateBrief } from "./summarize";
 
 // Prompts
 export { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts";
@@ -23,12 +23,12 @@ export { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts
 export { extractChapters, parseDurationToSeconds } from "./chapters";
 
 // Output formatting
-export { formatMarkdown, saveDigestToFile } from "./formatter";
+export { formatMarkdown, saveBriefToFile } from "./formatter";
 
 // Database operations
 export {
-  saveDigest,
-  getDigestById,
-  getDigestByVideoId,
-  getDigests,
+  saveBrief,
+  getBriefById,
+  getBriefByVideoId,
+  getBriefs,
 } from "./db";

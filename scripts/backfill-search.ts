@@ -2,7 +2,7 @@
 /**
  * Backfill Search Text Script
  *
- * This script populates the search_text column for existing digests
+ * This script populates the search_text column for existing briefs
  * Run this after the 004_add_full_text_search.sql migration
  *
  * Usage: pnpm backfill-search [--prod] [--dry-run]
@@ -14,7 +14,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as readline from "readline";
 
-interface DbDigest {
+interface DbBrief {
   id: string;
   title: string;
   summary: string;
@@ -43,14 +43,14 @@ interface Link {
   description: string;
 }
 
-function buildSearchText(digest: DbDigest): string {
+function buildSearchText(brief: DbBrief): string {
   const parts: string[] = [];
 
-  if (digest.summary) {
-    parts.push(digest.summary);
+  if (brief.summary) {
+    parts.push(brief.summary);
   }
 
-  for (const section of digest.sections || []) {
+  for (const section of brief.sections || []) {
     if (section.title) {
       parts.push(section.title);
     }
@@ -63,8 +63,8 @@ function buildSearchText(digest: DbDigest): string {
     }
   }
 
-  if (digest.tangents) {
-    for (const tangent of digest.tangents) {
+  if (brief.tangents) {
+    for (const tangent of brief.tangents) {
       if (tangent.title) {
         parts.push(tangent.title);
       }
@@ -74,7 +74,7 @@ function buildSearchText(digest: DbDigest): string {
     }
   }
 
-  const allLinks = [...(digest.relatedLinks || []), ...(digest.otherLinks || [])];
+  const allLinks = [...(brief.relatedLinks || []), ...(brief.otherLinks || [])];
   for (const link of allLinks) {
     if (link.title) {
       parts.push(link.title);
@@ -147,8 +147,8 @@ async function runBackfill() {
   }
 
   try {
-    // Get all digests that need backfilling (where search_text is NULL)
-    const digestsResult = await sql<DbDigest>`
+    // Get all briefs that need backfilling (where search_text is NULL)
+    const briefsResult = await sql<DbBrief>`
       SELECT
         id,
         title,
@@ -161,37 +161,37 @@ async function runBackfill() {
       WHERE search_text IS NULL
     `;
 
-    const digests = digestsResult.rows;
-    console.log(`Found ${digests.length} digest(s) to backfill\n`);
+    const briefs = briefsResult.rows;
+    console.log(`Found ${briefs.length} brief(s) to backfill\n`);
 
-    if (digests.length === 0) {
-      console.log("Nothing to backfill. All digests have search_text populated.\n");
+    if (briefs.length === 0) {
+      console.log("Nothing to backfill. All briefs have search_text populated.\n");
       process.exit(0);
     }
 
     let updated = 0;
-    for (const digest of digests) {
-      const searchText = buildSearchText(digest);
+    for (const brief of briefs) {
+      const searchText = buildSearchText(brief);
 
       if (isDryRun) {
-        console.log(`[${updated + 1}/${digests.length}] Would update: ${digest.title.substring(0, 50)}...`);
+        console.log(`[${updated + 1}/${briefs.length}] Would update: ${brief.title.substring(0, 50)}...`);
         console.log(`   Search text length: ${searchText.length} chars`);
       } else {
         await sql`
           UPDATE digests
           SET search_text = ${searchText}
-          WHERE id = ${digest.id}
+          WHERE id = ${brief.id}
         `;
-        console.log(`[${updated + 1}/${digests.length}] Updated: ${digest.title.substring(0, 50)}...`);
+        console.log(`[${updated + 1}/${briefs.length}] Updated: ${brief.title.substring(0, 50)}...`);
       }
       updated++;
     }
 
     console.log();
     if (isDryRun) {
-      console.log(`Dry run complete. Would have updated ${updated} digest(s).\n`);
+      console.log(`Dry run complete. Would have updated ${updated} brief(s).\n`);
     } else {
-      console.log(`Backfill complete. Updated ${updated} digest(s).\n`);
+      console.log(`Backfill complete. Updated ${updated} brief(s).\n`);
     }
 
     process.exit(0);

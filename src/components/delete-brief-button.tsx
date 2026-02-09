@@ -14,11 +14,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-interface DeleteDigestButtonProps {
-  digestId: string;
+interface DeleteBriefButtonProps {
+  briefId: string;
 }
 
-export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
+export function DeleteBriefButton({ briefId }: DeleteBriefButtonProps) {
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -27,7 +27,7 @@ export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/digest/${digestId}`, {
+      const response = await fetch(`/api/brief/${briefId}`, {
         method: "DELETE",
       });
 
@@ -39,11 +39,11 @@ export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
         router.refresh();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to delete digest");
+        alert(data.error || "Failed to delete brief");
         setIsDeleting(false);
       }
     } catch {
-      alert("Failed to delete digest");
+      alert("Failed to delete brief");
       setIsDeleting(false);
     }
   };
@@ -57,7 +57,7 @@ export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
           variant="outline"
           size="icon-sm"
           className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-red-500 hover:border-red-500/50 hover:bg-[var(--color-bg-tertiary)]"
-          title="Delete digest"
+          title="Delete brief"
         >
           <Trash2 className="w-4 h-4" />
         </Button>
@@ -71,9 +71,9 @@ export function DeleteDigestButton({ digestId }: DeleteDigestButtonProps) {
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Delete digest?</DialogTitle>
+              <DialogTitle>Delete brief?</DialogTitle>
               <DialogDescription>
-                This action cannot be undone. The digest will be permanently deleted.
+                This action cannot be undone. The brief will be permanently deleted.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

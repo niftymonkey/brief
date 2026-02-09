@@ -2,7 +2,7 @@
 
 ## Context
 
-Issue #29 adds a tagging system for digests. This document explains the schema design choices and their performance implications.
+Issue #29 adds a tagging system for briefs. This document explains the schema design choices and their performance implications.
 
 ## Why Normalized Schema Over JSONB
 
@@ -30,10 +30,10 @@ CREATE INDEX idx_tags_user_id ON tags(user_id);
 -- Look up tag by name for a user (add tag operation)
 CREATE INDEX idx_tags_user_name ON tags(user_id, name);
 
--- Find tags for a digest
+-- Find tags for a brief
 CREATE INDEX idx_digest_tags_digest_id ON digest_tags(digest_id);
 
--- Find digests with a tag (future filtering)
+-- Find briefs with a tag (future filtering)
 CREATE INDEX idx_digest_tags_tag_id ON digest_tags(tag_id);
 ```
 
@@ -46,14 +46,14 @@ INSERT INTO tags (user_id, name) VALUES ($1, $2)
 ON CONFLICT (user_id, name) DO UPDATE SET name = EXCLUDED.name
 RETURNING id, name;
 
--- 2. Link to digest
+-- 2. Link to brief
 INSERT INTO digest_tags (digest_id, tag_id) VALUES ($1, $2)
 ON CONFLICT DO NOTHING;
 ```
 
-### Fetching Digests with Tags (Batch)
+### Fetching Briefs with Tags (Batch)
 ```sql
--- After fetching digests, batch-load their tags
+-- After fetching briefs, batch-load their tags
 SELECT dt.digest_id, t.id, t.name
 FROM tags t
 JOIN digest_tags dt ON t.id = dt.tag_id
@@ -63,7 +63,7 @@ ORDER BY t.name;
 
 ### Future: Filtering by Tag (Issue #30)
 ```sql
--- Find digests with specific tag
+-- Find briefs with specific tag
 SELECT d.*
 FROM digests d
 JOIN digest_tags dt ON d.id = dt.digest_id
@@ -88,13 +88,13 @@ ORDER BY ts_rank(d.search_vector, to_tsquery('english', $3)) DESC;
 |-----------|------------|-------|
 | Add tag | O(1) | Two indexed inserts |
 | Remove tag | O(1) | Single indexed delete |
-| Get digest tags | O(n) | n = number of tags on digest |
+| Get brief tags | O(n) | n = number of tags on brief |
 | Get user vocabulary | O(n) | n = unique tags user has created |
-| Batch load tags | O(n) | n = total tags across requested digests |
+| Batch load tags | O(n) | n = total tags across requested briefs |
 | Filter by tag | O(log n) | Indexed join, very fast |
 
 ## Limits
 
-- **20 tags per digest**: Soft limit enforced in application layer
+- **20 tags per brief**: Soft limit enforced in application layer
 - **50 char tag name**: Database constraint prevents abuse
 - **Case-insensitive**: Tags normalized to lowercase on insert

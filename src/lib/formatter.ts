@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import type { VideoMetadata, StructuredDigest, KeyPoint } from "./types";
+import type { VideoMetadata, StructuredBrief, KeyPoint } from "./types";
 
 /**
  * Parses a timestamp string (MM:SS or H:MM:SS) to seconds
@@ -68,15 +68,15 @@ function formatDuration(isoDuration: string): string {
 }
 
 /**
- * Formats video metadata and structured digest into a complete markdown document
+ * Formats video metadata and structured brief into a complete markdown document
  *
  * @param metadata - Video metadata
- * @param digest - Structured digest with sections and links
+ * @param brief - Structured brief with sections and links
  * @returns Formatted markdown document
  */
 export function formatMarkdown(
   metadata: VideoMetadata,
-  digest: StructuredDigest
+  brief: StructuredBrief
 ): string {
   const publishDate = new Date(metadata.publishedAt).toLocaleDateString(
     "en-US",
@@ -96,7 +96,7 @@ export function formatMarkdown(
   });
 
   // Render section overview (quick navigation table with anchor links)
-  const sectionRows = digest.sections
+  const sectionRows = brief.sections
     .map((section, index) => {
       const anchor = `section-${index + 1}`;
       return `| [${section.title}](#${anchor}) | ${section.timestampStart} |`;
@@ -107,7 +107,7 @@ export function formatMarkdown(
 ${sectionRows}`;
 
   // Render content sections
-  const sectionsMarkdown = digest.sections
+  const sectionsMarkdown = brief.sections
     .map((section, index) => {
       const anchor = `section-${index + 1}`;
       const contentMarkdown = buildKeyPointsMarkdown(section.keyPoints);
@@ -120,18 +120,18 @@ ${contentMarkdown}`;
 
   // Render related links
   let relatedLinksMarkdown = "";
-  if (digest.relatedLinks.length > 0) {
+  if (brief.relatedLinks.length > 0) {
     relatedLinksMarkdown = `### Related Links
 
-${digest.relatedLinks.map((link) => `- **[${link.title}](${link.url})** - ${link.description}`).join("\n")}`;
+${brief.relatedLinks.map((link) => `- **[${link.title}](${link.url})** - ${link.description}`).join("\n")}`;
   }
 
   // Render other links
   let otherLinksMarkdown = "";
-  if (digest.otherLinks.length > 0) {
+  if (brief.otherLinks.length > 0) {
     otherLinksMarkdown = `### Other Links
 
-${digest.otherLinks.map((link) => `- **[${link.title}](${link.url})** - ${link.description}`).join("\n")}`;
+${brief.otherLinks.map((link) => `- **[${link.title}](${link.url})** - ${link.description}`).join("\n")}`;
   }
 
   return `# ${metadata.title}
@@ -146,7 +146,7 @@ ${digest.otherLinks.map((link) => `- **[${link.title}](${link.url})** - ${link.d
 
 ## At a Glance
 
-${digest.summary}
+${brief.summary}
 
 ## Chapters
 
@@ -163,14 +163,14 @@ ${otherLinksMarkdown ? `\n${otherLinksMarkdown}` : ""}
 }
 
 /**
- * Saves the digest to an organized file structure (CLI only)
+ * Saves the brief to an organized file structure (CLI only)
  * Creates: outputs/{channel-slug}/{title-slug}.md
  *
  * @param content - Markdown content to save
  * @param metadata - Video metadata for file path generation
  * @returns Full path to the saved file
  */
-export async function saveDigestToFile(
+export async function saveBriefToFile(
   content: string,
   metadata: VideoMetadata
 ): Promise<string> {

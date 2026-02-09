@@ -1,7 +1,7 @@
 "use client";
 
 import { PanelLeft } from "lucide-react";
-import { DigestSearch } from "@/components/digest-search";
+import { BriefSearch } from "@/components/brief-search";
 import {
   TagFilter,
   DateFilter,
@@ -69,7 +69,7 @@ export function LibraryToolbar({ availableTags = [] }: LibraryToolbarProps) {
           data-search-container
           className="flex-[1_1_400px] min-w-[200px] min-[900px]:max-w-[600px]"
         >
-          <DigestSearch />
+          <BriefSearch />
         </div>
 
         {/* Filter section - grows into remaining space, can shrink */}

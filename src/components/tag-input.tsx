@@ -29,7 +29,7 @@ import { revalidateLibrary } from "@/lib/actions";
 import type { Tag } from "@/lib/types";
 
 interface TagInputProps {
-  digestId: string;
+  briefId: string;
   initialTags: Tag[];
 }
 
@@ -39,7 +39,7 @@ interface OptimisticTag extends Tag {
 
 const MAX_TAGS = 20;
 
-export function TagInput({ digestId, initialTags }: TagInputProps) {
+export function TagInput({ briefId, initialTags }: TagInputProps) {
   const [tags, setTags] = useState<OptimisticTag[]>(initialTags);
   const [userTags, setUserTags] = useState<Tag[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -65,7 +65,7 @@ export function TagInput({ digestId, initialTags }: TagInputProps) {
     const normalizedName = tagName.toLowerCase().trim();
     if (!normalizedName) return;
 
-    // Check if tag already exists on this digest
+    // Check if tag already exists on this brief
     if (tags.some((t) => t.name === normalizedName)) {
       setInputValue("");
       return;
@@ -87,7 +87,7 @@ export function TagInput({ digestId, initialTags }: TagInputProps) {
     setInputValue("");
 
     try {
-      const res = await fetch(`/api/digest/${digestId}/tags`, {
+      const res = await fetch(`/api/brief/${briefId}/tags`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: normalizedName }),
@@ -117,7 +117,7 @@ export function TagInput({ digestId, initialTags }: TagInputProps) {
     setTags((prev) => prev.filter((t) => t.id !== tagId));
 
     try {
-      const res = await fetch(`/api/digest/${digestId}/tags/${tagId}`, {
+      const res = await fetch(`/api/brief/${briefId}/tags/${tagId}`, {
         method: "DELETE",
       });
 
@@ -143,7 +143,7 @@ export function TagInput({ digestId, initialTags }: TagInputProps) {
     // Optimistic update - remove from suggestions
     setUserTags((prev) => prev.filter((t) => t.id !== tagId));
 
-    // Also remove from current digest if applied
+    // Also remove from current brief if applied
     if (tags.some((t) => t.id === tagId)) {
       setTags((prev) => prev.filter((t) => t.id !== tagId));
     }
@@ -314,7 +314,7 @@ export function TagInput({ digestId, initialTags }: TagInputProps) {
           <DialogHeader>
             <DialogTitle>Delete tag?</DialogTitle>
             <DialogDescription>
-              This will permanently delete the tag &quot;{tagToDelete?.name}&quot; and remove it from all your digests. This action cannot be undone.
+              This will permanently delete the tag &quot;{tagToDelete?.name}&quot; and remove it from all your briefs. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

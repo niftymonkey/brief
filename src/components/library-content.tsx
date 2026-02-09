@@ -9,14 +9,14 @@ export { Shell as LibraryShell };
 
 const gridClasses = "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5";
 
-interface DigestGridProps {
+interface BriefGridProps {
   children: ReactNode;
 }
 
 /**
  * Responsive grid wrapper with up to 5 columns on wide screens
  */
-export function DigestGrid({ children }: DigestGridProps) {
+export function BriefGrid({ children }: BriefGridProps) {
   return (
     <div className={cn("grid gap-4", gridClasses)}>
       {children}
@@ -24,11 +24,11 @@ export function DigestGrid({ children }: DigestGridProps) {
   );
 }
 
-interface DigestGridSkeletonProps {
+interface BriefGridSkeletonProps {
   count?: number;
 }
 
-export function DigestGridSkeleton({ count = 6 }: DigestGridSkeletonProps) {
+export function BriefGridSkeleton({ count = 6 }: BriefGridSkeletonProps) {
   return (
     <div className={cn("grid gap-4", gridClasses)}>
       {[...Array(count)].map((_, i) => (

@@ -1,17 +1,17 @@
 "use client";
 
 import { useQueryState, parseAsArrayOf, parseAsString, parseAsIsoDate } from "nuqs";
-import { DigestCard } from "@/components/digest-card";
-import { DigestGrid } from "@/components/library-content";
-import { NewDigestDialog } from "@/components/new-digest-dialog";
-import type { DigestSummary } from "@/lib/types";
+import { BriefCard } from "@/components/brief-card";
+import { BriefGrid } from "@/components/library-content";
+import { NewBriefDialog } from "@/components/new-brief-dialog";
+import type { BriefSummary } from "@/lib/types";
 
-interface FilteredDigestGridProps {
-  digests: DigestSummary[];
+interface FilteredBriefGridProps {
+  briefs: BriefSummary[];
   hasAccess: boolean;
 }
 
-export function FilteredDigestGrid({ digests, hasAccess }: FilteredDigestGridProps) {
+export function FilteredBriefGrid({ briefs, hasAccess }: FilteredBriefGridProps) {
   const [selectedTags] = useQueryState("tags", parseAsArrayOf(parseAsString, ","));
   const [dateFrom] = useQueryState("dateFrom", parseAsIsoDate);
   const [dateTo] = useQueryState("dateTo", parseAsIsoDate);
@@ -19,17 +19,17 @@ export function FilteredDigestGrid({ digests, hasAccess }: FilteredDigestGridPro
   const tags = selectedTags ?? [];
 
   // Client-side filtering -- instant, no server round-trip
-  const filtered = digests.filter((digest) => {
-    // Tag filter (AND logic: digest must have ALL selected tags)
+  const filtered = briefs.filter((brief) => {
+    // Tag filter (AND logic: brief must have ALL selected tags)
     if (tags.length > 0) {
-      const digestTagNames = digest.tags?.map((t) => t.name) ?? [];
-      if (!tags.every((tag) => digestTagNames.includes(tag))) {
+      const briefTagNames = brief.tags?.map((t) => t.name) ?? [];
+      if (!tags.every((tag) => briefTagNames.includes(tag))) {
         return false;
       }
     }
 
     // Date range filter
-    const createdAt = new Date(digest.createdAt);
+    const createdAt = new Date(brief.createdAt);
     if (dateFrom && createdAt < dateFrom) {
       return false;
     }
@@ -50,11 +50,11 @@ export function FilteredDigestGrid({ digests, hasAccess }: FilteredDigestGridPro
     return (
       <div className="text-center py-12">
         <p className="text-[var(--color-text-secondary)]">
-          {hasFilters ? "No digests match your filters" : "No digests yet"}
+          {hasFilters ? "No briefs match your filters" : "No briefs yet"}
         </p>
         {!hasFilters && hasAccess && (
           <div className="mt-4">
-            <NewDigestDialog variant="outline" />
+            <NewBriefDialog variant="outline" />
           </div>
         )}
       </div>
@@ -62,10 +62,10 @@ export function FilteredDigestGrid({ digests, hasAccess }: FilteredDigestGridPro
   }
 
   return (
-    <DigestGrid>
-      {filtered.map((digest) => (
-        <DigestCard key={digest.id} digest={digest} />
+    <BriefGrid>
+      {filtered.map((brief) => (
+        <BriefCard key={brief.id} brief={brief} />
       ))}
-    </DigestGrid>
+    </BriefGrid>
   );
 }
