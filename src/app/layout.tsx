@@ -26,10 +26,10 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "YouTube Digest",
+  title: "Brief",
   description: "Quickly understand any YouTube video. AI-powered summaries, timestamps, and extracted links.",
   openGraph: {
-    title: "YouTube Digest",
+    title: "Brief",
     description: "Quickly understand any YouTube video. AI-powered summaries, timestamps, and extracted links.",
     type: "website",
   },

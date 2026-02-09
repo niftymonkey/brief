@@ -4,14 +4,14 @@ import { ArrowRight } from "lucide-react";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { Header } from "@/components/header";
 import { LandingHeader } from "@/components/landing-header";
-import { NewDigestDialog } from "@/components/new-digest-dialog";
+import { NewBriefDialog } from "@/components/new-brief-dialog";
 import { AccessRestricted } from "@/components/access-restricted";
 import {
   LibraryShell,
-  DigestGridSkeleton,
+  BriefGridSkeleton,
 } from "@/components/library-content";
-import { FilteredDigestGrid } from "@/components/filtered-digest-grid";
-import { getDigests, getUserTags } from "@/lib/db";
+import { FilteredBriefGrid } from "@/components/filtered-brief-grid";
+import { getBriefs, getUserTags } from "@/lib/db";
 import { isEmailAllowed } from "@/lib/access";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +42,7 @@ function LandingPage() {
             </p>
 
             <p className="text-sm text-[var(--color-text-tertiary)] mb-8">
-              Full-text digest search · Shareable digests
+              Full-text search · Shareable briefs
             </p>
 
             <Link
@@ -64,7 +64,7 @@ function LandingPage() {
   );
 }
 
-async function DigestGridContent({
+async function BriefGridContent({
   userId,
   search,
   hasAccess,
@@ -75,34 +75,34 @@ async function DigestGridContent({
 }) {
   // Server only filters by search (full-text search needs the DB)
   // Tags and dates are filtered client-side for instant UX
-  const { digests } = await getDigests({ userId, search, limit: 500 });
+  const { briefs } = await getBriefs({ userId, search, limit: 500 });
 
-  if (digests.length === 0 && !search) {
+  if (briefs.length === 0 && !search) {
     if (!hasAccess) {
       return <AccessRestricted />;
     }
 
     return (
       <div className="text-center py-12">
-        <p className="text-[var(--color-text-secondary)]">No digests yet</p>
+        <p className="text-[var(--color-text-secondary)]">No briefs yet</p>
         <div className="mt-4">
-          <NewDigestDialog variant="outline" />
+          <NewBriefDialog variant="outline" />
         </div>
       </div>
     );
   }
 
-  if (digests.length === 0 && search) {
+  if (briefs.length === 0 && search) {
     return (
       <div className="text-center py-12">
         <p className="text-[var(--color-text-secondary)]">
-          No digests match your search
+          No briefs match your search
         </p>
       </div>
     );
   }
 
-  return <FilteredDigestGrid digests={digests} hasAccess={hasAccess} />;
+  return <FilteredBriefGrid briefs={briefs} hasAccess={hasAccess} />;
 }
 
 async function AuthenticatedDashboard({ search }: { search?: string }) {
@@ -114,7 +114,7 @@ async function AuthenticatedDashboard({ search }: { search?: string }) {
 
   const hasAccess = isEmailAllowed(user.email);
   const [{ total }, availableTags] = await Promise.all([
-    getDigests({ userId: user.id, limit: 1 }),
+    getBriefs({ userId: user.id, limit: 1 }),
     getUserTags(user.id),
   ]);
 
@@ -127,12 +127,12 @@ async function AuthenticatedDashboard({ search }: { search?: string }) {
             Your Library
           </h2>
           <span className="text-[var(--color-text-secondary)]">
-            {total} {total === 1 ? "digest" : "digests"} saved
+            {total} {total === 1 ? "brief" : "briefs"} saved
           </span>
         </div>
 
-        <Suspense fallback={<DigestGridSkeleton />}>
-          <DigestGridContent
+        <Suspense fallback={<BriefGridSkeleton />}>
+          <BriefGridContent
             userId={user.id}
             search={search}
             hasAccess={hasAccess}

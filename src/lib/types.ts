@@ -24,7 +24,7 @@ export interface TranscriptEntry {
   lang?: string;
 }
 
-export interface DigestConfig {
+export interface BriefConfig {
   anthropicApiKey: string;
   youtubeApiKey: string;
 }
@@ -45,10 +45,10 @@ export interface ContentSection {
   title: string;
   timestampStart: string;  // e.g., "0:00"
   timestampEnd: string;    // e.g., "5:30"
-  keyPoints: KeyPoint[] | string[];  // KeyPoint[] for new digests, string[] for legacy
+  keyPoints: KeyPoint[] | string[];  // KeyPoint[] for new briefs, string[] for legacy
 }
 
-export interface StructuredDigest {
+export interface StructuredBrief {
   summary: string;       // "At a Glance" overview of the video
   sections: ContentSection[];
   relatedLinks: Link[];  // Content-related links
@@ -56,9 +56,9 @@ export interface StructuredDigest {
   // Tangents are flagged on individual KeyPoints via isTangent
 }
 
-export interface DigestResult {
+export interface BriefResult {
   metadata: VideoMetadata;
-  digest: StructuredDigest;
+  brief: StructuredBrief;
   outputPath?: string;
 }
 
@@ -66,11 +66,11 @@ export interface DigestResult {
 export interface Tag {
   id: string;
   name: string;
-  usageCount?: number; // Number of digests using this tag
+  usageCount?: number; // Number of briefs using this tag
 }
 
 // Database types
-export interface DbDigest {
+export interface DbBrief {
   id: string;
   userId: string;
   videoId: string;
@@ -92,7 +92,7 @@ export interface DbDigest {
   tags?: Tag[];
 }
 
-export interface DigestSummary {
+export interface BriefSummary {
   id: string;
   userId?: string;
   videoId: string;

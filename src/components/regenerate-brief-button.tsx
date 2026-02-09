@@ -11,12 +11,12 @@ import {
 } from "@/components/ui/popover";
 import { ProgressModal, type Step } from "@/components/progress-modal";
 
-interface RegenerateDigestButtonProps {
-  digestId: string;
+interface RegenerateBriefButtonProps {
+  briefId: string;
   videoId: string;
 }
 
-export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestButtonProps) {
+export function RegenerateBriefButton({ briefId, videoId }: RegenerateBriefButtonProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -41,7 +41,7 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
     setError(null);
 
     try {
-      const response = await fetch(`/api/digest/${digestId}/regenerate`, {
+      const response = await fetch(`/api/brief/${briefId}/regenerate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videoId }),
@@ -81,7 +81,7 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
         }
       }
     } catch {
-      setError("Failed to regenerate digest");
+      setError("Failed to regenerate brief");
     }
   };
 
@@ -95,7 +95,7 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
     <>
       <ProgressModal
         isOpen={isRegenerating}
-        title="Regenerating Digest"
+        title="Regenerating Brief"
         errorTitle="Regeneration Failed"
         icon={RefreshCw}
         iconSpins={true}
@@ -111,7 +111,7 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
             variant="outline"
             size="icon-sm"
             className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
-            title="Regenerate digest"
+            title="Regenerate brief"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -122,7 +122,7 @@ export function RegenerateDigestButton({ digestId, videoId }: RegenerateDigestBu
         >
           <div className="flex items-center gap-3">
             <span className="text-sm text-[var(--color-text-primary)]">
-              Regenerate digest?
+              Regenerate brief?
             </span>
             <div className="flex items-center gap-2">
               <button

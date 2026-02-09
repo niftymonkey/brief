@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
-import { toggleDigestSharing } from "@/lib/db";
+import { toggleBriefSharing } from "@/lib/db";
 
 export async function PATCH(
   request: NextRequest,
@@ -15,7 +15,7 @@ export async function PATCH(
   const { id } = await params;
 
   if (!id) {
-    return NextResponse.json({ error: "Digest ID is required" }, { status: 400 });
+    return NextResponse.json({ error: "Brief ID is required" }, { status: 400 });
   }
 
   try {
@@ -29,15 +29,15 @@ export async function PATCH(
       );
     }
 
-    const result = await toggleDigestSharing(user.id, id, isShared, title);
+    const result = await toggleBriefSharing(user.id, id, isShared, title);
 
     if (!result) {
-      return NextResponse.json({ error: "Digest not found" }, { status: 404 });
+      return NextResponse.json({ error: "Brief not found" }, { status: 404 });
     }
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[SHARE DIGEST] Error:", error);
+    console.error("[SHARE BRIEF] Error:", error);
     return NextResponse.json({ error: "Failed to update sharing" }, { status: 500 });
   }
 }

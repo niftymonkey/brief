@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
-import { addTagToDigest, getDigestTags } from "@/lib/db";
+import { addTagToBrief, getBriefTags } from "@/lib/db";
 
 export async function GET(
   request: NextRequest,
@@ -15,14 +15,14 @@ export async function GET(
   const { id } = await params;
 
   if (!id) {
-    return NextResponse.json({ error: "Digest ID is required" }, { status: 400 });
+    return NextResponse.json({ error: "Brief ID is required" }, { status: 400 });
   }
 
   try {
-    const tags = await getDigestTags(id);
+    const tags = await getBriefTags(id);
     return NextResponse.json(tags);
   } catch (error) {
-    console.error("[GET DIGEST TAGS] Error:", error);
+    console.error("[GET BRIEF TAGS] Error:", error);
     return NextResponse.json({ error: "Failed to get tags" }, { status: 500 });
   }
 }
@@ -40,7 +40,7 @@ export async function POST(
   const { id } = await params;
 
   if (!id) {
-    return NextResponse.json({ error: "Digest ID is required" }, { status: 400 });
+    return NextResponse.json({ error: "Brief ID is required" }, { status: 400 });
   }
 
   try {
@@ -51,7 +51,7 @@ export async function POST(
       return NextResponse.json({ error: "Tag name is required" }, { status: 400 });
     }
 
-    const tag = await addTagToDigest(user.id, id, name);
+    const tag = await addTagToBrief(user.id, id, name);
     return NextResponse.json(tag);
   } catch (error) {
     console.error("[ADD TAG] Error:", error);

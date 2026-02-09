@@ -10,7 +10,7 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "metadata", label: "Fetching video info" },
   { key: "transcript", label: "Extracting transcript" },
   { key: "analyzing", label: "Analyzing content" },
-  { key: "saving", label: "Saving digest" },
+  { key: "saving", label: "Saving brief" },
   { key: "redirecting", label: "Redirecting" },
 ];
 

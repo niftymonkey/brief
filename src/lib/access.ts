@@ -1,5 +1,5 @@
 /**
- * Email-based access control for digest generation.
+ * Email-based access control for brief generation.
  * Temporary solution until BYOK is implemented.
  */
 
@@ -24,9 +24,9 @@ function getAllowedEmails(): Set<string> {
 const allowedEmails = getAllowedEmails();
 
 /**
- * Check if an email is allowed to generate digests.
+ * Check if an email is allowed to generate briefs.
  * Returns true only if the email is explicitly in the allow list.
- * If ALLOWED_EMAILS is not set or empty, no one can generate digests.
+ * If ALLOWED_EMAILS is not set or empty, no one can generate briefs.
  */
 export function isEmailAllowed(email: string | undefined | null): boolean {
   if (!email) {

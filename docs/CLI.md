@@ -1,6 +1,6 @@
 # CLI Documentation
 
-Command-line tool for generating YouTube video digests.
+Command-line tool for generating YouTube video briefs.
 
 ## Installation
 
@@ -26,7 +26,7 @@ cp .env.example .env
 ## Usage
 
 ```bash
-pnpm digest <youtube-url>
+pnpm brief <youtube-url>
 ```
 
 Supports standard, short, and mobile YouTube URLs:
@@ -36,9 +36,9 @@ Supports standard, short, and mobile YouTube URLs:
 
 ## Output
 
-Digests are saved to `outputs/{channel-slug}/{title-slug}.md`
+Briefs are saved to `outputs/{channel-slug}/{title-slug}.md`
 
-Each digest includes:
+Each brief includes:
 - Video metadata and a 2-3 sentence "At a Glance" summary
 - Sections table with clickable timestamps
 - Key points for each section (2-4 bullets synthesizing the content)

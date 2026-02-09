@@ -5,7 +5,7 @@ import { YouTubePlayer } from "./youtube-player";
 import { ChapterGrid } from "./chapter-grid";
 import type { ContentSection } from "@/lib/types";
 
-interface DigestViewerProps {
+interface BriefViewerProps {
   videoId: string;
   title: string;
   sections: ContentSection[];
@@ -13,13 +13,13 @@ interface DigestViewerProps {
   children?: ReactNode;
 }
 
-export function DigestViewer({
+export function BriefViewer({
   videoId,
   title,
   sections,
   hasCreatorChapters,
   children,
-}: DigestViewerProps) {
+}: BriefViewerProps) {
   const [seekToFn, setSeekToFn] = useState<((seconds: number) => void) | null>(null);
 
   const handlePlayerReady = useCallback((seekFn: (seconds: number) => void) => {

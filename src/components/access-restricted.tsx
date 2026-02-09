@@ -19,12 +19,12 @@ export function AccessRestricted() {
         </h2>
 
         <p className="text-[var(--color-text-secondary)] mb-4">
-          Digest generation is currently limited to early access users.
+          Brief generation is currently limited to early access users.
         </p>
 
         <p className="text-sm text-[var(--color-text-tertiary)]">
           We&apos;re working on Bring Your Own Key (BYOK) support, which will
-          let you use your own API keys to generate digests. Stay tuned!
+          let you use your own API keys to generate briefs. Stay tuned!
         </p>
       </div>
     </div>

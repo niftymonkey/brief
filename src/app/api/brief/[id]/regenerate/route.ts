@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
-import { generateDigest } from "@/lib/summarize";
+import { generateBrief } from "@/lib/summarize";
 import { extractChapters } from "@/lib/chapters";
 import { isEmailAllowed } from "@/lib/access";
-import { updateDigest, getDigestById } from "@/lib/db";
+import { updateBrief, getBriefById } from "@/lib/db";
 
 type Step = "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
 
@@ -27,7 +27,7 @@ export async function POST(
     return NextResponse.json(
       {
         error: "Access restricted",
-        message: "Digest regeneration is currently limited to approved users.",
+        message: "Brief regeneration is currently limited to approved users.",
       },
       { status: 403 }
     );
@@ -37,7 +37,7 @@ export async function POST(
   const { videoId } = await request.json();
 
   if (!id || !videoId) {
-    return NextResponse.json({ error: "Digest ID and video ID are required" }, { status: 400 });
+    return NextResponse.json({ error: "Brief ID and video ID are required" }, { status: 400 });
   }
 
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
@@ -52,15 +52,15 @@ export async function POST(
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // Verify digest exists and belongs to user
-        const existingDigest = await getDigestById(id, user.id);
-        if (!existingDigest) {
-          controller.enqueue(encoder.encode(createEvent("error", "Digest not found")));
+        // Verify brief exists and belongs to user
+        const existingBrief = await getBriefById(id, user.id);
+        if (!existingBrief) {
+          controller.enqueue(encoder.encode(createEvent("error", "Brief not found")));
           controller.close();
           return;
         }
 
-        console.log(`[REGENERATE] Starting regeneration for digest ${id}, videoId: ${videoId}`);
+        console.log(`[REGENERATE] Starting regeneration for brief ${id}, videoId: ${videoId}`);
 
         // Step 1: Fetch metadata
         controller.enqueue(encoder.encode(createEvent("metadata", "Fetching video info...")));
@@ -76,23 +76,23 @@ export async function POST(
         const transcript = await fetchTranscript(videoId);
         console.log(`[REGENERATE] Transcript fetched: ${transcript.length} entries`);
 
-        // Step 3: Generate digest
+        // Step 3: Generate brief
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
-        const digest = await generateDigest(transcript, metadata, anthropicApiKey, chapters);
-        console.log(`[REGENERATE] Digest generated`);
+        const brief = await generateBrief(transcript, metadata, anthropicApiKey, chapters);
+        console.log(`[REGENERATE] Brief generated`);
 
         // Step 4: Save
-        controller.enqueue(encoder.encode(createEvent("saving", "Saving digest...")));
+        controller.enqueue(encoder.encode(createEvent("saving", "Saving brief...")));
         const hasCreatorChapters = chapters !== null && chapters.length > 0;
-        await updateDigest(user.id, id, metadata, digest, hasCreatorChapters);
-        console.log(`[REGENERATE] Digest updated in database, hasCreatorChapters: ${hasCreatorChapters}`);
+        await updateBrief(user.id, id, metadata, brief, hasCreatorChapters);
+        console.log(`[REGENERATE] Brief updated in database, hasCreatorChapters: ${hasCreatorChapters}`);
 
         // Complete
         controller.enqueue(encoder.encode(createEvent("complete", "Done!")));
         controller.close();
       } catch (error) {
         console.error("[REGENERATE] Error:", error);
-        const message = error instanceof Error ? error.message : "Failed to regenerate digest";
+        const message = error instanceof Error ? error.message : "Failed to regenerate brief";
         controller.enqueue(encoder.encode(createEvent("error", message)));
         controller.close();
       }

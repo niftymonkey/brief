@@ -16,11 +16,11 @@ import { ProgressModal, type Step } from "@/components/progress-modal";
 import { UrlInput } from "@/components/url-input";
 import type { VariantProps } from "class-variance-authority";
 
-interface NewDigestDialogProps {
+interface NewBriefDialogProps {
   variant?: VariantProps<typeof buttonVariants>["variant"];
 }
 
-export function NewDigestDialog({ variant = "default" }: NewDigestDialogProps) {
+export function NewBriefDialog({ variant = "default" }: NewBriefDialogProps) {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step | null>(null);
@@ -50,9 +50,9 @@ export function NewDigestDialog({ variant = "default" }: NewDigestDialogProps) {
     setError(err);
   };
 
-  const handleDigestComplete = (digestId: string) => {
+  const handleBriefComplete = (briefId: string) => {
     setCurrentStep("redirecting");
-    router.push(`/digest/${digestId}`);
+    router.push(`/brief/${briefId}`);
     router.refresh();
   };
 
@@ -66,8 +66,8 @@ export function NewDigestDialog({ variant = "default" }: NewDigestDialogProps) {
     <>
       <ProgressModal
         isOpen={isLoading}
-        title="Creating Digest"
-        errorTitle="Failed to Create Digest"
+        title="Creating Brief"
+        errorTitle="Failed to Create Brief"
         icon={Youtube}
         currentStep={currentStep}
         error={error}
@@ -81,18 +81,18 @@ export function NewDigestDialog({ variant = "default" }: NewDigestDialogProps) {
             className={variant === "default" ? "bg-[var(--color-accent-dark)] !text-white hover:bg-[var(--color-accent)]" : undefined}
           >
             <Plus className="w-4 h-4" />
-            New Digest
+            New Brief
           </Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Create a new digest</DialogTitle>
+            <DialogTitle>Create a new brief</DialogTitle>
             <DialogDescription>
               Paste a YouTube URL to generate a structured summary with timestamps, key insights, and extracted links.
             </DialogDescription>
           </DialogHeader>
           <UrlInput
-            onDigestComplete={handleDigestComplete}
+            onBriefComplete={handleBriefComplete}
             onLoadingStart={handleLoadingStart}
             onStepChange={handleStepChange}
             onError={handleError}

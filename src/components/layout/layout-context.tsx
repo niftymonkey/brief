@@ -29,7 +29,7 @@ interface LayoutContextValue {
 
 const LayoutContext = createContext<LayoutContextValue | null>(null);
 
-const SIDEBAR_WIDTH_KEY = "youtube-digest-sidebar-width";
+const SIDEBAR_WIDTH_KEY = "brief-sidebar-width";
 
 export function LayoutProvider({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);

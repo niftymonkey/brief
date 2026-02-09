@@ -6,9 +6,9 @@ import {
   extractVideoId,
   fetchVideoMetadata,
   fetchTranscript,
-  generateDigest,
+  generateBrief,
   formatMarkdown,
-  saveDigestToFile,
+  saveBriefToFile,
 } from "./lib/index.js";
 
 // Configure marked to use terminal renderer
@@ -24,9 +24,9 @@ async function main() {
   // Validate arguments
   if (args.length === 0) {
     console.error("❌ Error: No YouTube URL provided\n");
-    console.error("Usage: pnpm digest <youtube-url>\n");
+    console.error("Usage: pnpm brief <youtube-url>\n");
     console.error(
-      "Example: pnpm digest https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      "Example: pnpm brief https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     );
     process.exit(1);
   }
@@ -89,16 +89,16 @@ async function main() {
     console.log(`✅ Channel: ${metadata.channelTitle}`);
     console.log(`✅ Retrieved ${transcript.length} caption entries\n`);
 
-    // Step 3: Generate digest with Claude
-    console.log("🤖 Generating digest with Claude...");
-    const digest = await generateDigest(transcript, metadata, anthropicApiKey);
-    console.log("✅ Digest generated\n");
+    // Step 3: Generate brief with Claude
+    console.log("🤖 Generating brief with Claude...");
+    const brief = await generateBrief(transcript, metadata, anthropicApiKey);
+    console.log("✅ Brief generated\n");
 
     // Step 4: Format markdown
-    const markdown = formatMarkdown(metadata, digest);
+    const markdown = formatMarkdown(metadata, brief);
 
     // Step 5: Save to file
-    const outputPath = await saveDigestToFile(markdown, metadata);
+    const outputPath = await saveBriefToFile(markdown, metadata);
     console.log(`💾 Saving to: ${outputPath}`);
     console.log("✅ File saved successfully\n");
 

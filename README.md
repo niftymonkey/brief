@@ -1,4 +1,4 @@
-# YouTube Digest
+# Brief
 
 AI-powered summaries from YouTube videos. Available as a CLI tool or web application. BYOK (bring your own API keys).
 
@@ -13,17 +13,17 @@ AI-powered summaries from YouTube videos. Available as a CLI tool or web applica
 
 ### CLI
 
-Quick command-line tool for generating digests from any YouTube video. The CLI was the original proof-of-concept for this project and may lag behind the web app in shared functionality.
+Quick command-line tool for generating briefs from any YouTube video. The CLI was the original proof-of-concept for this project and may lag behind the web app in shared functionality.
 
 ```bash
-pnpm digest <youtube-url>
+pnpm brief <youtube-url>
 ```
 
 [CLI Documentation](docs/CLI.md)
 
 ### Web Application
 
-Full-featured web app with user accounts and saved digests.
+Full-featured web app with user accounts and saved briefs.
 
 ```bash
 pnpm dev

@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import type { TranscriptEntry, VideoMetadata, StructuredDigest, ContentSection, Chapter, KeyPoint } from "./types";
+import type { TranscriptEntry, VideoMetadata, StructuredBrief, ContentSection, Chapter, KeyPoint } from "./types";
 import { combineUrls } from "./url-extractor";
 import { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts";
 
@@ -90,19 +90,19 @@ function mergeTangentOnlyChapters(
 }
 
 /**
- * Sorts digest content chronologically:
+ * Sorts brief content chronologically:
  * - Sections (chapters) by their start timestamp
  * - Key points within each section by their timestamp
  */
-function sortDigestChronologically(digest: StructuredDigest): StructuredDigest {
+function sortBriefChronologically(brief: StructuredBrief): StructuredBrief {
   // First sort sections by start timestamp
-  const sortedSections = [...digest.sections].sort(
+  const sortedSections = [...brief.sections].sort(
     (a, b) => parseTimestamp(a.timestampStart) - parseTimestamp(b.timestampStart)
   );
 
   // Then sort key points within each section
   const sectionsWithSortedPoints = sortedSections.map((section) => {
-    // Legacy digests have string[] keyPoints - skip sorting
+    // Legacy briefs have string[] keyPoints - skip sorting
     if (section.keyPoints.length === 0 || typeof section.keyPoints[0] === "string") {
       return section;
     }
@@ -114,15 +114,15 @@ function sortDigestChronologically(digest: StructuredDigest): StructuredDigest {
   });
 
   return {
-    ...digest,
+    ...brief,
     sections: sectionsWithSortedPoints,
   };
 }
 
 /**
- * Creates a Zod schema for structured digest output with configurable key points range
+ * Creates a Zod schema for structured brief output with configurable key points range
  */
-function createDigestSchema(keyPointsMin: number, keyPointsMax: number) {
+function createBriefSchema(keyPointsMin: number, keyPointsMax: number) {
   return z.object({
     summary: z.string().describe("A brief 2-3 sentence TL;DW (Too Long; Didn't Watch) summary capturing the essence of the video"),
 
@@ -160,20 +160,20 @@ function createDigestSchema(keyPointsMin: number, keyPointsMax: number) {
 }
 
 /**
- * Generates a structured AI-powered digest of a video transcript using Claude
+ * Generates a structured AI-powered brief of a video transcript using Claude
  *
  * @param transcript - Array of transcript entries with timestamps
  * @param metadata - Video metadata including description and pinned comment
  * @param apiKey - Anthropic API key
  * @param chapters - Optional creator-defined chapters to use as section structure
- * @returns Structured digest with sections and categorized links
+ * @returns Structured brief with sections and categorized links
  */
-export async function generateDigest(
+export async function generateBrief(
   transcript: TranscriptEntry[],
   metadata: VideoMetadata,
   apiKey: string,
   chapters?: Chapter[] | null
-): Promise<StructuredDigest> {
+): Promise<StructuredBrief> {
   // Format transcript with timestamps
   const formattedTranscript = transcript
     .map((entry) => {
@@ -204,7 +204,7 @@ export async function generateDigest(
       );
 
   // Use 2-4 key points per chapter for quick scanning (worst case: 6 chapters × 4 points = 24 points ≈ 2 min read)
-  const digestSchema = createDigestSchema(2, 4);
+  const briefSchema = createBriefSchema(2, 4);
 
   try {
     const anthropic = createAnthropic({ apiKey });
@@ -212,16 +212,16 @@ export async function generateDigest(
 
     const result = await generateText({
       model,
-      output: Output.object({ schema: digestSchema }),
+      output: Output.object({ schema: briefSchema }),
       system: systemPrompt,
       prompt: userPrompt,
     });
 
-    const digest = result.output as StructuredDigest;
+    const brief = result.output as StructuredBrief;
 
     // Deduplicate sections with the same title (LLM can occasionally produce duplicates)
     const seenTitles = new Set<string>();
-    const dedupedSections = digest.sections.filter((section) => {
+    const dedupedSections = brief.sections.filter((section) => {
       const key = section.title.toLowerCase().trim();
       if (seenTitles.has(key)) return false;
       seenTitles.add(key);
@@ -232,8 +232,8 @@ export async function generateDigest(
     const processedSections = mergeTangentOnlyChapters(dedupedSections, !!hasChapters);
 
     // Sort sections and key points chronologically
-    return sortDigestChronologically({
-      ...digest,
+    return sortBriefChronologically({
+      ...brief,
       sections: processedSections,
     });
   } catch (error: any) {
@@ -249,6 +249,6 @@ export async function generateDigest(
       );
     }
 
-    throw new Error(`Failed to generate digest: ${error.message || JSON.stringify(error)}`);
+    throw new Error(`Failed to generate brief: ${error.message || JSON.stringify(error)}`);
   }
 }

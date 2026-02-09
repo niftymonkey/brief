@@ -1,9 +1,9 @@
 import { sql } from "@vercel/postgres";
 import type {
-  DbDigest,
-  DigestSummary,
+  DbBrief,
+  BriefSummary,
   VideoMetadata,
-  StructuredDigest,
+  StructuredBrief,
   Link,
   Tag,
 } from "./types";
@@ -28,19 +28,19 @@ function getThumbnailUrl(videoId: string): string {
 }
 
 /**
- * Build searchable text from digest content for full-text search
+ * Build searchable text from brief content for full-text search
  * Extracts text from summary, sections, and links
  */
-function buildSearchText(digest: StructuredDigest): string {
+function buildSearchText(brief: StructuredBrief): string {
   const parts: string[] = [];
 
   // Add summary
-  if (digest.summary) {
-    parts.push(digest.summary);
+  if (brief.summary) {
+    parts.push(brief.summary);
   }
 
   // Add section titles and key points
-  for (const section of digest.sections) {
+  for (const section of brief.sections) {
     if (section.title) {
       parts.push(section.title);
     }
@@ -54,7 +54,7 @@ function buildSearchText(digest: StructuredDigest): string {
   }
 
   // Add link titles and descriptions
-  const allLinks = [...digest.relatedLinks, ...digest.otherLinks];
+  const allLinks = [...brief.relatedLinks, ...brief.otherLinks];
   for (const link of allLinks) {
     if (link.title) {
       parts.push(link.title);
@@ -68,23 +68,23 @@ function buildSearchText(digest: StructuredDigest): string {
 }
 
 /**
- * Save a new digest to the database
+ * Save a new brief to the database
  */
-export async function saveDigest(
+export async function saveBrief(
   userId: string,
   metadata: VideoMetadata,
-  digest: StructuredDigest,
+  brief: StructuredBrief,
   hasCreatorChapters: boolean
-): Promise<DbDigest> {
+): Promise<DbBrief> {
   const startTime = Date.now();
-  console.log(`[DB] saveDigest called, userId: ${userId}, videoId: ${metadata.videoId}`);
+  console.log(`[DB] saveBrief called, userId: ${userId}, videoId: ${metadata.videoId}`);
 
   const channelSlug = createSlug(metadata.channelTitle);
   const thumbnailUrl = getThumbnailUrl(metadata.videoId);
-  const searchText = buildSearchText(digest);
+  const searchText = buildSearchText(brief);
 
   try {
-    const result = await sql<DbDigest>`
+    const result = await sql<DbBrief>`
     INSERT INTO digests (
       user_id,
       video_id,
@@ -109,10 +109,10 @@ export async function saveDigest(
       ${metadata.duration},
       ${metadata.publishedAt},
       ${thumbnailUrl},
-      ${digest.summary},
-      ${JSON.stringify(digest.sections)},
-      ${JSON.stringify(digest.relatedLinks)},
-      ${JSON.stringify(digest.otherLinks)},
+      ${brief.summary},
+      ${JSON.stringify(brief.sections)},
+      ${JSON.stringify(brief.relatedLinks)},
+      ${JSON.stringify(brief.otherLinks)},
       ${hasCreatorChapters},
       ${searchText}
     )
@@ -137,29 +137,29 @@ export async function saveDigest(
       updated_at as "updatedAt"
     `;
 
-    console.log(`[DB] saveDigest success in ${Date.now() - startTime}ms`);
+    console.log(`[DB] saveBrief success in ${Date.now() - startTime}ms`);
     return result.rows[0];
   } catch (error) {
-    console.error(`[DB] saveDigest failed in ${Date.now() - startTime}ms:`, error);
+    console.error(`[DB] saveBrief failed in ${Date.now() - startTime}ms:`, error);
     throw error;
   }
 }
 
 /**
- * Update an existing digest (for refreshing stale digests)
+ * Update an existing brief (for refreshing stale briefs)
  */
-export async function updateDigest(
+export async function updateBrief(
   userId: string,
-  digestId: string,
+  briefId: string,
   metadata: VideoMetadata,
-  digest: StructuredDigest,
+  brief: StructuredBrief,
   hasCreatorChapters: boolean
-): Promise<DbDigest> {
+): Promise<DbBrief> {
   const channelSlug = createSlug(metadata.channelTitle);
   const thumbnailUrl = getThumbnailUrl(metadata.videoId);
-  const searchText = buildSearchText(digest);
+  const searchText = buildSearchText(brief);
 
-  const result = await sql<DbDigest>`
+  const result = await sql<DbBrief>`
     UPDATE digests SET
       title = ${metadata.title},
       channel_name = ${metadata.channelTitle},
@@ -167,14 +167,14 @@ export async function updateDigest(
       duration = ${metadata.duration},
       published_at = ${metadata.publishedAt},
       thumbnail_url = ${thumbnailUrl},
-      summary = ${digest.summary},
-      sections = ${JSON.stringify(digest.sections)},
-      related_links = ${JSON.stringify(digest.relatedLinks)},
-      other_links = ${JSON.stringify(digest.otherLinks)},
+      summary = ${brief.summary},
+      sections = ${JSON.stringify(brief.sections)},
+      related_links = ${JSON.stringify(brief.relatedLinks)},
+      other_links = ${JSON.stringify(brief.otherLinks)},
       has_creator_chapters = ${hasCreatorChapters},
       search_text = ${searchText},
       updated_at = NOW()
-    WHERE id = ${digestId} AND user_id = ${userId}
+    WHERE id = ${briefId} AND user_id = ${userId}
     RETURNING
       id,
       user_id as "userId",
@@ -200,16 +200,16 @@ export async function updateDigest(
 }
 
 /**
- * Get a digest by ID (optionally verify ownership)
+ * Get a brief by ID (optionally verify ownership)
  */
-export async function getDigestById(
+export async function getBriefById(
   id: string,
   userId?: string
-): Promise<DbDigest | null> {
-  let digest: DbDigest | null = null;
+): Promise<DbBrief | null> {
+  let brief: DbBrief | null = null;
 
   if (userId) {
-    const result = await sql<DbDigest>`
+    const result = await sql<DbBrief>`
       SELECT
         id,
         user_id as "userId",
@@ -232,9 +232,9 @@ export async function getDigestById(
       FROM digests
       WHERE id = ${id} AND user_id = ${userId}
     `;
-    digest = result.rows[0] || null;
+    brief = result.rows[0] || null;
   } else {
-    const result = await sql<DbDigest>`
+    const result = await sql<DbBrief>`
       SELECT
         id,
         user_id as "userId",
@@ -257,29 +257,29 @@ export async function getDigestById(
       FROM digests
       WHERE id = ${id}
     `;
-    digest = result.rows[0] || null;
+    brief = result.rows[0] || null;
   }
 
-  // Fetch tags for the digest
-  if (digest) {
-    digest.tags = await getDigestTags(id);
+  // Fetch tags for the brief
+  if (brief) {
+    brief.tags = await getBriefTags(id);
   }
 
-  return digest;
+  return brief;
 }
 
 /**
- * Get a digest by video ID for a specific user
+ * Get a brief by video ID for a specific user
  */
-export async function getDigestByVideoId(
+export async function getBriefByVideoId(
   userId: string,
   videoId: string
-): Promise<DbDigest | null> {
+): Promise<DbBrief | null> {
   const startTime = Date.now();
-  console.log(`[DB] getDigestByVideoId called, userId: ${userId}, videoId: ${videoId}`);
+  console.log(`[DB] getBriefByVideoId called, userId: ${userId}, videoId: ${videoId}`);
 
   try {
-    const result = await sql<DbDigest>`
+    const result = await sql<DbBrief>`
       SELECT
         id,
         user_id as "userId",
@@ -305,26 +305,26 @@ export async function getDigestByVideoId(
       LIMIT 1
     `;
 
-    console.log(`[DB] getDigestByVideoId success in ${Date.now() - startTime}ms, found: ${!!result.rows[0]}`);
+    console.log(`[DB] getBriefByVideoId success in ${Date.now() - startTime}ms, found: ${!!result.rows[0]}`);
     return result.rows[0] || null;
   } catch (error) {
-    console.error(`[DB] getDigestByVideoId failed in ${Date.now() - startTime}ms:`, error);
+    console.error(`[DB] getBriefByVideoId failed in ${Date.now() - startTime}ms:`, error);
     throw error;
   }
 }
 
 /**
- * Find any existing digest for a video (global cache lookup)
- * Returns the most recent digest regardless of user
+ * Find any existing brief for a video (global cache lookup)
+ * Returns the most recent brief regardless of user
  */
-export async function findGlobalDigestByVideoId(
+export async function findGlobalBriefByVideoId(
   videoId: string
-): Promise<DbDigest | null> {
+): Promise<DbBrief | null> {
   const startTime = Date.now();
-  console.log(`[DB] findGlobalDigestByVideoId called, videoId: ${videoId}`);
+  console.log(`[DB] findGlobalBriefByVideoId called, videoId: ${videoId}`);
 
   try {
-    const result = await sql<DbDigest>`
+    const result = await sql<DbBrief>`
       SELECT
         id,
         user_id as "userId",
@@ -350,34 +350,34 @@ export async function findGlobalDigestByVideoId(
       LIMIT 1
     `;
 
-    console.log(`[DB] findGlobalDigestByVideoId success in ${Date.now() - startTime}ms, found: ${!!result.rows[0]}`);
+    console.log(`[DB] findGlobalBriefByVideoId success in ${Date.now() - startTime}ms, found: ${!!result.rows[0]}`);
     return result.rows[0] || null;
   } catch (error) {
-    console.error(`[DB] findGlobalDigestByVideoId failed in ${Date.now() - startTime}ms:`, error);
+    console.error(`[DB] findGlobalBriefByVideoId failed in ${Date.now() - startTime}ms:`, error);
     throw error;
   }
 }
 
 /**
- * Copy an existing digest to a new user
+ * Copy an existing brief to a new user
  */
-export async function copyDigestForUser(
-  sourceDigest: DbDigest,
+export async function copyBriefForUser(
+  sourceBrief: DbBrief,
   userId: string
-): Promise<DbDigest> {
+): Promise<DbBrief> {
   const startTime = Date.now();
-  console.log(`[DB] copyDigestForUser called, userId: ${userId}, sourceDigestId: ${sourceDigest.id}`);
+  console.log(`[DB] copyBriefForUser called, userId: ${userId}, sourceBriefId: ${sourceBrief.id}`);
 
-  // Build search_text from the source digest
+  // Build search_text from the source brief
   const searchText = buildSearchText({
-    summary: sourceDigest.summary,
-    sections: sourceDigest.sections,
-    relatedLinks: sourceDigest.relatedLinks,
-    otherLinks: sourceDigest.otherLinks,
+    summary: sourceBrief.summary,
+    sections: sourceBrief.sections,
+    relatedLinks: sourceBrief.relatedLinks,
+    otherLinks: sourceBrief.otherLinks,
   });
 
   try {
-    const result = await sql<DbDigest>`
+    const result = await sql<DbBrief>`
     INSERT INTO digests (
       user_id,
       video_id,
@@ -395,18 +395,18 @@ export async function copyDigestForUser(
       search_text
     ) VALUES (
       ${userId},
-      ${sourceDigest.videoId},
-      ${sourceDigest.title},
-      ${sourceDigest.channelName},
-      ${sourceDigest.channelSlug},
-      ${sourceDigest.duration},
-      ${sourceDigest.publishedAt?.toISOString() ?? null},
-      ${sourceDigest.thumbnailUrl},
-      ${sourceDigest.summary},
-      ${JSON.stringify(sourceDigest.sections)},
-      ${JSON.stringify(sourceDigest.relatedLinks)},
-      ${JSON.stringify(sourceDigest.otherLinks)},
-      ${sourceDigest.hasCreatorChapters},
+      ${sourceBrief.videoId},
+      ${sourceBrief.title},
+      ${sourceBrief.channelName},
+      ${sourceBrief.channelSlug},
+      ${sourceBrief.duration},
+      ${sourceBrief.publishedAt?.toISOString() ?? null},
+      ${sourceBrief.thumbnailUrl},
+      ${sourceBrief.summary},
+      ${JSON.stringify(sourceBrief.sections)},
+      ${JSON.stringify(sourceBrief.relatedLinks)},
+      ${JSON.stringify(sourceBrief.otherLinks)},
+      ${sourceBrief.hasCreatorChapters},
       ${searchText}
     )
     RETURNING
@@ -430,10 +430,10 @@ export async function copyDigestForUser(
       updated_at as "updatedAt"
     `;
 
-    console.log(`[DB] copyDigestForUser success in ${Date.now() - startTime}ms`);
+    console.log(`[DB] copyBriefForUser success in ${Date.now() - startTime}ms`);
     return result.rows[0];
   } catch (error) {
-    console.error(`[DB] copyDigestForUser failed in ${Date.now() - startTime}ms:`, error);
+    console.error(`[DB] copyBriefForUser failed in ${Date.now() - startTime}ms:`, error);
     throw error;
   }
 }
@@ -455,7 +455,7 @@ function buildTsQuery(search: string): string {
     .join(" & "); // AND between terms
 }
 
-interface GetDigestsOptions {
+interface GetBriefsOptions {
   userId: string;
   limit?: number;
   offset?: number;
@@ -466,11 +466,11 @@ interface GetDigestsOptions {
 }
 
 /**
- * Get recent digests for a specific user with optional search and filters
+ * Get recent briefs for a specific user with optional search and filters
  * Uses PostgreSQL full-text search with ranking when search is provided
  * Tag filtering uses AND logic - all selected tags must match
  */
-export async function getDigests(options: GetDigestsOptions): Promise<{ digests: DigestSummary[]; total: number; hasMore: boolean }> {
+export async function getBriefs(options: GetBriefsOptions): Promise<{ briefs: BriefSummary[]; total: number; hasMore: boolean }> {
   const { userId, limit = 20, offset = 0, search, tags, dateFrom, dateTo } = options;
 
   // Build dynamic WHERE clauses
@@ -551,25 +551,25 @@ export async function getDigests(options: GetDigestsOptions): Promise<{ digests:
   `;
   params.push(limit, offset);
 
-  const result = await sql.query<DigestSummary>(dataQuery, params);
-  const digests = result.rows;
+  const result = await sql.query<BriefSummary>(dataQuery, params);
+  const briefs = result.rows;
 
-  // Batch fetch tags for all digests
-  if (digests.length > 0) {
-    const digestIds = digests.map((d) => d.id);
-    const tagsMap = await getTagsForDigests(digestIds);
-    for (const digest of digests) {
-      digest.tags = tagsMap.get(digest.id) || [];
+  // Batch fetch tags for all briefs
+  if (briefs.length > 0) {
+    const briefIds = briefs.map((d) => d.id);
+    const tagsMap = await getTagsForBriefs(briefIds);
+    for (const brief of briefs) {
+      brief.tags = tagsMap.get(brief.id) || [];
     }
   }
 
-  return { digests, total, hasMore: offset + digests.length < total };
+  return { briefs, total, hasMore: offset + briefs.length < total };
 }
 
 /**
- * Check if a user has any digests
+ * Check if a user has any briefs
  */
-export async function hasDigests(userId: string): Promise<boolean> {
+export async function hasBriefs(userId: string): Promise<boolean> {
   const result = await sql<{ exists: boolean }>`
     SELECT EXISTS(SELECT 1 FROM digests WHERE user_id = ${userId} LIMIT 1) as exists
   `;
@@ -577,9 +577,9 @@ export async function hasDigests(userId: string): Promise<boolean> {
 }
 
 /**
- * Delete a digest by ID (with user ownership verification)
+ * Delete a brief by ID (with user ownership verification)
  */
-export async function deleteDigest(userId: string, id: string): Promise<boolean> {
+export async function deleteBrief(userId: string, id: string): Promise<boolean> {
   const result = await sql`
     DELETE FROM digests WHERE id = ${id} AND user_id = ${userId}
   `;
@@ -587,12 +587,12 @@ export async function deleteDigest(userId: string, id: string): Promise<boolean>
 }
 
 /**
- * Get a shared digest by its slug (public access, no auth required)
+ * Get a shared brief by its slug (public access, no auth required)
  */
-export async function getSharedDigestBySlug(
+export async function getSharedBriefBySlug(
   slug: string
-): Promise<DbDigest | null> {
-  const result = await sql<DbDigest>`
+): Promise<DbBrief | null> {
+  const result = await sql<DbBrief>`
     SELECT
       id,
       user_id as "userId",
@@ -620,13 +620,13 @@ export async function getSharedDigestBySlug(
 }
 
 /**
- * Toggle sharing state for a digest
+ * Toggle sharing state for a brief
  * When enabling, generates a unique slug from the title
  * When disabling, keeps the slug (in case user re-enables later)
  */
-export async function toggleDigestSharing(
+export async function toggleBriefSharing(
   userId: string,
-  digestId: string,
+  briefId: string,
   isShared: boolean,
   title?: string
 ): Promise<{ isShared: boolean; slug: string | null } | null> {
@@ -642,7 +642,7 @@ export async function toggleDigestSharing(
         is_shared = ${isShared},
         slug = COALESCE(slug, ${baseSlug}),
         updated_at = NOW()
-      WHERE id = ${digestId} AND user_id = ${userId}
+      WHERE id = ${briefId} AND user_id = ${userId}
       RETURNING is_shared, slug
     `;
 
@@ -660,7 +660,7 @@ export async function toggleDigestSharing(
   const result = await sql<{ is_shared: boolean; slug: string | null }>`
     UPDATE digests
     SET is_shared = ${isShared}, updated_at = NOW()
-    WHERE id = ${digestId} AND user_id = ${userId}
+    WHERE id = ${briefId} AND user_id = ${userId}
     RETURNING is_shared, slug
   `;
 
@@ -700,62 +700,62 @@ export async function getUserTags(userId: string): Promise<Tag[]> {
 }
 
 /**
- * Get tags for a specific digest
+ * Get tags for a specific brief
  */
-export async function getDigestTags(digestId: string): Promise<Tag[]> {
+export async function getBriefTags(briefId: string): Promise<Tag[]> {
   const result = await sql<Tag>`
     SELECT t.id, t.name
     FROM tags t
     JOIN digest_tags dt ON t.id = dt.tag_id
-    WHERE dt.digest_id = ${digestId}
+    WHERE dt.digest_id = ${briefId}
     ORDER BY t.name ASC
   `;
   return result.rows;
 }
 
 /**
- * Get tags for multiple digests in a single query (batch)
+ * Get tags for multiple briefs in a single query (batch)
  */
-export async function getTagsForDigests(
-  digestIds: string[]
+export async function getTagsForBriefs(
+  briefIds: string[]
 ): Promise<Map<string, Tag[]>> {
-  if (digestIds.length === 0) {
+  if (briefIds.length === 0) {
     return new Map();
   }
 
   // Build parameterized query for IN clause
-  const placeholders = digestIds.map((_, i) => `$${i + 1}`).join(", ");
+  const placeholders = briefIds.map((_, i) => `$${i + 1}`).join(", ");
   const query = `
-    SELECT dt.digest_id as "digestId", t.id, t.name
+    SELECT dt.digest_id as "briefId", t.id, t.name
     FROM tags t
     JOIN digest_tags dt ON t.id = dt.tag_id
     WHERE dt.digest_id IN (${placeholders})
     ORDER BY t.name ASC
   `;
 
-  const result = await sql.query<{ digestId: string; id: string; name: string }>(
+  const result = await sql.query<{ briefId: string; id: string; name: string }>(
     query,
-    digestIds
+    briefIds
   );
 
   const tagsMap = new Map<string, Tag[]>();
   for (const row of result.rows) {
-    const tags = tagsMap.get(row.digestId) || [];
+    const tags = tagsMap.get(row.briefId) || [];
     tags.push({ id: row.id, name: row.name });
-    tagsMap.set(row.digestId, tags);
+    tagsMap.set(row.briefId, tags);
   }
 
   return tagsMap;
 }
 
 /**
- * Add a tag to a digest
+ * Add a tag to a brief
  * Creates the tag if it doesn't exist in user's vocabulary
  * Tag names are normalized to lowercase
  */
-export async function addTagToDigest(
+export async function addTagToBrief(
   userId: string,
-  digestId: string,
+  briefId: string,
   tagName: string
 ): Promise<Tag> {
   const normalizedName = tagName.toLowerCase().trim();
@@ -768,20 +768,20 @@ export async function addTagToDigest(
     throw new Error("Tag name cannot exceed 50 characters");
   }
 
-  // First, verify the digest belongs to the user
-  const digestCheck = await sql`
-    SELECT id FROM digests WHERE id = ${digestId} AND user_id = ${userId}
+  // First, verify the brief belongs to the user
+  const briefCheck = await sql`
+    SELECT id FROM digests WHERE id = ${briefId} AND user_id = ${userId}
   `;
-  if (digestCheck.rows.length === 0) {
-    throw new Error("Digest not found");
+  if (briefCheck.rows.length === 0) {
+    throw new Error("Brief not found");
   }
 
-  // Check current tag count for this digest
+  // Check current tag count for this brief
   const countResult = await sql<{ count: string }>`
-    SELECT COUNT(*) as count FROM digest_tags WHERE digest_id = ${digestId}
+    SELECT COUNT(*) as count FROM digest_tags WHERE digest_id = ${briefId}
   `;
   if (parseInt(countResult.rows[0].count, 10) >= 20) {
-    throw new Error("Maximum of 20 tags per digest");
+    throw new Error("Maximum of 20 tags per brief");
   }
 
   // Insert or get the tag
@@ -793,10 +793,10 @@ export async function addTagToDigest(
   `;
   const tag = tagResult.rows[0];
 
-  // Link tag to digest (ignore if already linked)
+  // Link tag to brief (ignore if already linked)
   await sql`
     INSERT INTO digest_tags (digest_id, tag_id)
-    VALUES (${digestId}, ${tag.id})
+    VALUES (${briefId}, ${tag.id})
     ON CONFLICT (digest_id, tag_id) DO NOTHING
   `;
 
@@ -804,21 +804,21 @@ export async function addTagToDigest(
 }
 
 /**
- * Remove a tag from a digest
+ * Remove a tag from a brief
  * Only removes the association, not the tag itself
  */
-export async function removeTagFromDigest(
+export async function removeTagFromBrief(
   userId: string,
-  digestId: string,
+  briefId: string,
   tagId: string
 ): Promise<boolean> {
   // Verify ownership through the digests table
   const result = await sql`
     DELETE FROM digest_tags
-    WHERE digest_id = ${digestId}
+    WHERE digest_id = ${briefId}
       AND tag_id = ${tagId}
       AND EXISTS (
-        SELECT 1 FROM digests WHERE id = ${digestId} AND user_id = ${userId}
+        SELECT 1 FROM digests WHERE id = ${briefId} AND user_id = ${userId}
       )
   `;
   return (result.rowCount ?? 0) > 0;
@@ -826,7 +826,7 @@ export async function removeTagFromDigest(
 
 /**
  * Delete a tag entirely from a user's vocabulary
- * Also removes all associations with digests
+ * Also removes all associations with briefs
  */
 export async function deleteTag(tagId: string, userId: string): Promise<boolean> {
   // First delete all digest_tags associations for this tag

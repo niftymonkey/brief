@@ -1,4 +1,4 @@
-# Comprehensive Search Plan for YouTube Digest
+# Comprehensive Search Plan for Brief
 
 ## Current State
 
@@ -34,7 +34,7 @@ This is a simple substring match with no indexing support for the wildcards.
 ### Alternative Considered: External Search (Algolia, Meilisearch, Typesense)
 - **Pros**: More features, typo tolerance, faceted search
 - **Cons**: Additional cost ($$$), data sync complexity, added latency
-- **Verdict**: Overkill for this use case. PG FTS handles 100k+ digests easily.
+- **Verdict**: Overkill for this use case. PG FTS handles 100k+ briefs easily.
 
 ---
 
@@ -119,8 +119,8 @@ const result = await sql`
 
 ### Option B: Store Full Transcripts
 - **Pros**: Can search exact phrases from video
-- **Cons**: ~50-200KB per digest, significant storage growth
-- **Storage impact**: For 1000 digests → ~50-200MB additional
+- **Cons**: ~50-200KB per brief, significant storage growth
+- **Storage impact**: For 1000 briefs → ~50-200MB additional
 - **Vercel Postgres limits**: Hobby = 256MB, Pro = 512MB
 
 ### Option C: Store Condensed Transcript (Hybrid)
