@@ -121,6 +121,7 @@ export function InlineTagFilter({ availableTags }: InlineTagFilterProps) {
 
   const visibleTags = availableTags.slice(0, visibleCount);
   const overflowCount = availableTags.length - visibleCount;
+  const hasSelectedTags = selected.length > 0;
 
   const TagPill = ({ tag, isMeasure = false }: { tag: Tag; isMeasure?: boolean }) => {
     const isSelected = selected.includes(tag.name);
@@ -155,86 +156,115 @@ export function InlineTagFilter({ availableTags }: InlineTagFilterProps) {
     );
   };
 
+  const TagPopoverContent = (
+    <PopoverContent align="end" className="w-56 p-0">
+      <Command shouldFilter={true}>
+        <CommandInput placeholder="Search tags..." />
+        <CommandList>
+          <CommandEmpty>No tags found.</CommandEmpty>
+          <CommandGroup>
+            {availableTags.map((tag) => {
+              const isChecked = selected.includes(tag.name);
+              return (
+                <CommandItem
+                  key={tag.id}
+                  value={tag.name}
+                  onSelect={() => toggleTag(tag.name)}
+                  className="cursor-pointer"
+                >
+                  <div
+                    className={cn(
+                      "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
+                      isChecked
+                        ? "bg-primary border-primary text-primary-foreground"
+                        : "border-input"
+                    )}
+                  >
+                    {isChecked && <Check className="h-3 w-3" />}
+                  </div>
+                  <TagIcon className="mr-2 h-4 w-4 text-[var(--color-text-tertiary)]" />
+                  <span className="flex-1">{tag.name}</span>
+                  {tag.usageCount !== undefined && (
+                    <span className="text-xs text-[var(--color-text-tertiary)]">
+                      {tag.usageCount}
+                    </span>
+                  )}
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </PopoverContent>
+  );
+
   return (
-    <div ref={outerRef} className="flex-1 min-w-0 relative">
-      {/* Hidden measurement container - positioned at origin to prevent overflow */}
-      <div
-        ref={measureRef}
-        className="absolute left-0 top-0 opacity-0 pointer-events-none flex items-center gap-1.5"
-        aria-hidden="true"
-      >
-        {availableTags.map((tag) => (
-          <TagPill key={`measure-${tag.id}`} tag={tag} isMeasure />
-        ))}
+    <>
+      {/* Compact mode: icon button only between 540-780px */}
+      <div className="hidden min-[540px]:flex min-[780px]:hidden shrink-0">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className={cn(
+                "p-1.5 rounded-full",
+                "transition-all duration-150 cursor-pointer",
+                hasSelectedTags
+                  ? "bg-[var(--color-accent)] text-white"
+                  : "bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-hover)] hover:text-[var(--color-text-primary)]"
+              )}
+              title="Tag filter"
+            >
+              <TagIcon className="w-4 h-4" />
+            </button>
+          </PopoverTrigger>
+          {TagPopoverContent}
+        </Popover>
       </div>
 
-      {/* Visible tags */}
-      <div
-        ref={containerRef}
-        className="flex items-center gap-1.5"
-      >
-        {visibleTags.map((tag) => (
-          <TagPill key={tag.id} tag={tag} />
-        ))}
+      {/* Inline mode: pills below 540px (wrapped row) and at 780px+ */}
+      <div ref={outerRef} className="min-[540px]:hidden min-[780px]:block flex-1 min-w-0 relative">
+        {/* Hidden measurement container - positioned off-screen to prevent horizontal scroll */}
+        <div
+          ref={measureRef}
+          style={{ position: "fixed", top: 0, left: -9999, visibility: "hidden" }}
+          className="pointer-events-none flex items-center gap-1.5"
+          aria-hidden="true"
+        >
+          {availableTags.map((tag) => (
+            <TagPill key={`measure-${tag.id}`} tag={tag} isMeasure />
+          ))}
+        </div>
 
-        {/* Overflow popover - only if needed */}
-        {overflowCount > 0 && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm whitespace-nowrap",
-                  "bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]",
-                  "hover:bg-[var(--color-border-hover)] hover:text-[var(--color-text-primary)]",
-                  "transition-colors cursor-pointer"
-                )}
-              >
-                +{overflowCount}
-                <ChevronDown className="w-3 h-3" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-56 p-0">
-              <Command shouldFilter={true}>
-                <CommandInput placeholder="Search tags..." />
-                <CommandList>
-                  <CommandEmpty>No tags found.</CommandEmpty>
-                  <CommandGroup>
-                    {availableTags.map((tag) => {
-                      const isChecked = selected.includes(tag.name);
-                      return (
-                        <CommandItem
-                          key={tag.id}
-                          value={tag.name}
-                          onSelect={() => toggleTag(tag.name)}
-                          className="cursor-pointer"
-                        >
-                          <div
-                            className={cn(
-                              "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
-                              isChecked
-                                ? "bg-primary border-primary text-primary-foreground"
-                                : "border-input"
-                            )}
-                          >
-                            {isChecked && <Check className="h-3 w-3" />}
-                          </div>
-                          <TagIcon className="mr-2 h-4 w-4 text-[var(--color-text-tertiary)]" />
-                          <span className="flex-1">{tag.name}</span>
-                          {tag.usageCount !== undefined && (
-                            <span className="text-xs text-[var(--color-text-tertiary)]">
-                              {tag.usageCount}
-                            </span>
-                          )}
-                        </CommandItem>
-                      );
-                    })}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-        )}
+        {/* Visible tags */}
+        <div
+          ref={containerRef}
+          className="flex items-center gap-1.5"
+        >
+          {visibleTags.map((tag) => (
+            <TagPill key={tag.id} tag={tag} />
+          ))}
+
+          {/* Overflow popover - only if needed */}
+          {overflowCount > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm whitespace-nowrap",
+                    "bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]",
+                    "hover:bg-[var(--color-border-hover)] hover:text-[var(--color-text-primary)]",
+                    "transition-colors cursor-pointer"
+                  )}
+                >
+                  +{overflowCount}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              {TagPopoverContent}
+            </Popover>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
