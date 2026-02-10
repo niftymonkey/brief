@@ -260,7 +260,7 @@ export function TagInput({ briefId, initialTags }: TagInputProps) {
                     <CommandItem
                       value={`create:${normalizedInput}`}
                       onSelect={handleSelect}
-                      className="data-[selected=true]:bg-[oklch(25%_0.03_25)] data-[selected=true]:text-[var(--color-text-primary)]"
+                      className="data-[selected=true]:bg-[oklch(94%_0.04_25)] dark:data-[selected=true]:bg-[oklch(25%_0.03_25)] data-[selected=true]:text-[var(--color-text-primary)]"
                     >
                       <Plus className="w-4 h-4 mr-2 text-[var(--color-text-tertiary)]" />
                       Create &quot;{normalizedInput}&quot;
@@ -275,7 +275,7 @@ export function TagInput({ briefId, initialTags }: TagInputProps) {
                         key={tag.id}
                         value={tag.name}
                         onSelect={handleSelect}
-                        className="group/item justify-between data-[selected=true]:bg-[oklch(25%_0.03_25)] data-[selected=true]:text-[var(--color-text-primary)]"
+                        className="group/item justify-between data-[selected=true]:bg-[oklch(94%_0.04_25)] dark:data-[selected=true]:bg-[oklch(25%_0.03_25)] data-[selected=true]:text-[var(--color-text-primary)]"
                       >
                         <span className="flex items-center">
                           <TagIcon className="w-4 h-4 mr-2 text-[var(--color-text-tertiary)]" />
