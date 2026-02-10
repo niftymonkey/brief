@@ -4,9 +4,11 @@ import { TagBadge } from "@/components/tag-badge";
 
 interface BriefCardProps {
   brief: BriefSummary;
+  activeTags?: string[];
+  onTagClick?: (tagName: string) => void;
 }
 
-export function BriefCard({ brief }: BriefCardProps) {
+export function BriefCard({ brief, activeTags, onTagClick }: BriefCardProps) {
   const createdDate = new Date(brief.createdAt).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -47,7 +49,7 @@ export function BriefCard({ brief }: BriefCardProps) {
         {brief.tags && brief.tags.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2 overflow-hidden">
             {brief.tags.slice(0, 3).map((tag) => (
-              <TagBadge key={tag.id} name={tag.name} size="sm" />
+              <TagBadge key={tag.id} name={tag.name} size="sm" active={activeTags?.includes(tag.name)} onClick={onTagClick ? () => onTagClick(tag.name) : undefined} />
             ))}
             {brief.tags.length > 3 && (
               <span className="text-xs text-[var(--color-text-tertiary)] shrink-0">

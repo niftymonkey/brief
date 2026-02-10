@@ -12,11 +12,21 @@ interface FilteredBriefGridProps {
 }
 
 export function FilteredBriefGrid({ briefs, hasAccess }: FilteredBriefGridProps) {
-  const [selectedTags] = useQueryState("tags", parseAsArrayOf(parseAsString, ","));
+  const [selectedTags, setSelectedTags] = useQueryState("tags", parseAsArrayOf(parseAsString, ","));
   const [dateFrom] = useQueryState("dateFrom", parseAsIsoDate);
   const [dateTo] = useQueryState("dateTo", parseAsIsoDate);
 
   const tags = selectedTags ?? [];
+
+  function handleTagClick(tagName: string) {
+    const current = selectedTags ?? [];
+    if (current.includes(tagName)) {
+      const next = current.filter((t) => t !== tagName);
+      setSelectedTags(next.length > 0 ? next : null);
+    } else {
+      setSelectedTags([...current, tagName]);
+    }
+  }
 
   // Client-side filtering -- instant, no server round-trip
   const filtered = briefs.filter((brief) => {
@@ -64,7 +74,7 @@ export function FilteredBriefGrid({ briefs, hasAccess }: FilteredBriefGridProps)
   return (
     <BriefGrid>
       {filtered.map((brief) => (
-        <BriefCard key={brief.id} brief={brief} />
+        <BriefCard key={brief.id} brief={brief} activeTags={tags} onTagClick={handleTagClick} />
       ))}
     </BriefGrid>
   );
