@@ -75,7 +75,7 @@ export function LibraryToolbar({ availableTags = [] }: LibraryToolbarProps) {
         {/* Filter section - full-width pills when wrapped (<540), compact icons (540-780), inline pills (780+) */}
         <div
           data-filter-section
-          className="flex items-center gap-3 flex-[1_1_100%] min-[540px]:flex-none min-[780px]:flex-[1_1_0%] min-[780px]:min-w-0"
+          className="flex items-center gap-3 flex-[1_1_100%] min-w-0 min-[540px]:flex-none min-[780px]:flex-[1_1_0%] min-[780px]:min-w-0"
         >
           {/* Separator - hide when likely wrapped */}
           <div className="hidden min-[900px]:block h-5 w-px shrink-0 bg-[var(--color-border)]" />
