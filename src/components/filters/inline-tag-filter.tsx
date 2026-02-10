@@ -157,10 +157,11 @@ export function InlineTagFilter({ availableTags }: InlineTagFilterProps) {
 
   return (
     <div ref={outerRef} className="flex-1 min-w-0 relative">
-      {/* Hidden measurement container - positioned at origin to prevent overflow */}
+      {/* Hidden measurement container - positioned off-screen to prevent horizontal scroll */}
       <div
         ref={measureRef}
-        className="absolute left-0 top-0 opacity-0 pointer-events-none flex items-center gap-1.5"
+        style={{ position: "fixed", top: 0, left: -9999, visibility: "hidden" }}
+        className="pointer-events-none flex items-center gap-1.5"
         aria-hidden="true"
       >
         {availableTags.map((tag) => (
