@@ -10,11 +10,26 @@ overrides:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/extension:
+    dependencies:
+      '@brief/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  apps/web:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.15
         version: 3.0.15(zod@4.3.5)
+      '@brief/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@googleapis/youtube':
         specifier: ^18.0.0
         version: 18.0.0
@@ -151,6 +166,12 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/shared:
+    devDependencies:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -1558,6 +1579,7 @@ packages:
   '@vercel/postgres@0.10.0':
     resolution: {integrity: sha512-fSD23DxGND40IzSkXjcFcxr53t3Tiym59Is0jSYIFpG4/0f0KO9SGtcp1sXiebvPaGe7N/tU05cH4yt2S6/IPg==}
     engines: {node: '>=18.14'}
+    deprecated: '@vercel/postgres is deprecated. If you are setting up a new database, you can choose an alternate storage solution from the Vercel Marketplace. If you had an existing Vercel Postgres database, it should have been migrated to Neon as a native Vercel integration. You can find more details and the guide to migrate to Neon''s SDKs here: https://neon.com/docs/guides/vercel-postgres-transition-guide'
 
   '@workos-inc/authkit-nextjs@2.13.0':
     resolution: {integrity: sha512-ppxzhfakPumHPPggYSROaAlgxfS7viFMPmWPG76Tp6Rh9G7YqkBSp7xtvMtM6gXOFFMvvEJRcKEta6YHeercTQ==}
