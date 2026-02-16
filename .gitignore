@@ -11,3 +11,6 @@ dist/
 .env*.local
 
 tsconfig.tsbuildinfo
+
+# Extension build output
+.output/
