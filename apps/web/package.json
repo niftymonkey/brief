@@ -1,6 +1,7 @@
 {
   "name": "@brief/web",
   "version": "0.1.0",
+  "private": true,
   "description": "AI-powered structured video breakdowns with timestamps, chapters, and a personal reference library",
   "type": "module",
   "scripts": {
