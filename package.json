@@ -10,7 +10,9 @@
     "brief": "pnpm --filter @brief/web brief",
     "migrate": "pnpm --filter @brief/web migrate",
     "backfill-search": "pnpm --filter @brief/web backfill-search",
-    "security": "pnpm --filter @brief/web security"
+    "security": "pnpm --filter @brief/web security",
+    "ext:dev": "pnpm --filter @brief/extension dev",
+    "ext:build": "pnpm --filter @brief/extension build"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
