@@ -104,7 +104,11 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error(`[BRIEFS] Async brief failed: ${jobId}`, error);
       const message = error instanceof Error ? error.message : "Failed to create brief";
-      await updateBriefStatus(jobId, "failed", message);
+      try {
+        await updateBriefStatus(jobId, "failed", message);
+      } catch (statusError) {
+        console.error(`[BRIEFS] Failed to update status to failed: ${jobId}`, statusError);
+      }
     }
   });
 

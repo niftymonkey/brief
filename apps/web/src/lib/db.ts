@@ -231,6 +231,8 @@ export async function getBriefById(
         is_shared as "isShared",
         slug,
         has_creator_chapters as "hasCreatorChapters",
+        status,
+        error_message as "errorMessage",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -256,6 +258,8 @@ export async function getBriefById(
         is_shared as "isShared",
         slug,
         has_creator_chapters as "hasCreatorChapters",
+        status,
+        error_message as "errorMessage",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -301,6 +305,8 @@ export async function getBriefByVideoId(
         is_shared as "isShared",
         slug,
         has_creator_chapters as "hasCreatorChapters",
+        status,
+        error_message as "errorMessage",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -346,6 +352,8 @@ export async function findGlobalBriefByVideoId(
         is_shared as "isShared",
         slug,
         has_creator_chapters as "hasCreatorChapters",
+        status,
+        error_message as "errorMessage",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
