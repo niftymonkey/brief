@@ -1,0 +1,318 @@
+@import "https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap";
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 340px;
+  font-family: "DM Sans", system-ui, sans-serif;
+  font-size: 13px;
+  color: #2d2a26;
+  background: #faf9f7;
+}
+
+/* ─── Header ─── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid #eae8e3;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.brand-icon {
+  width: 20px;
+  height: 20px;
+  background: #6366f1;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand-icon svg {
+  width: 10px;
+  height: 10px;
+}
+
+.brand-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.header-link {
+  font-size: 11px;
+  color: #6366f1;
+  text-decoration: none;
+  font-weight: 500;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+
+.header-link:hover {
+  opacity: 1;
+}
+
+/* ─── Current Video Card ─── */
+.current-video {
+  padding: 14px 16px;
+  border-bottom: 1px solid #eae8e3;
+}
+
+.current-video-title {
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: #5c5750;
+  margin-bottom: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.create-error {
+  font-size: 12px;
+  color: #d4513e;
+  margin-bottom: 8px;
+}
+
+.create-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 0;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.create-btn:hover {
+  background: #5558e6;
+}
+
+.create-btn:active {
+  transform: scale(0.985);
+}
+
+.create-btn:disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.create-btn svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.85;
+}
+
+/* ─── Briefs List ─── */
+.briefs-section {
+  padding: 10px 0 4px;
+}
+
+.briefs-section.with-border {
+  border-top: 1px solid #eae8e3;
+}
+
+.section-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a09a92;
+  padding: 0 16px 8px;
+}
+
+.brief-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 16px;
+  transition: background 0.12s;
+  cursor: default;
+  text-decoration: none;
+  color: inherit;
+}
+
+a.brief-row {
+  cursor: pointer;
+}
+
+a.brief-row:hover {
+  background: #f3f1ed;
+}
+
+.brief-row-active {
+  border-left: 2.5px solid #6366f1;
+  padding-left: 13.5px;
+}
+
+.brief-current-label {
+  color: #6366f1;
+  font-weight: 500;
+}
+
+.brief-status-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 5px;
+}
+
+.brief-status-dot.processing {
+  background: #6366f1;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.brief-status-dot.completed {
+  background: #4aba6a;
+}
+
+.brief-status-dot.failed {
+  background: #e55353;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.75);
+  }
+}
+
+.brief-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.brief-title {
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: #2d2a26;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brief-meta {
+  font-size: 11px;
+  color: #a09a92;
+  margin-top: 1px;
+}
+
+.brief-meta.completed-meta {
+  color: #4aba6a;
+}
+
+.brief-meta.failed-meta {
+  color: #d4513e;
+}
+
+.brief-arrow {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  color: #c5c0b8;
+  transition: color 0.12s, transform 0.12s;
+}
+
+a.brief-row:hover .brief-arrow {
+  color: #6366f1;
+  transform: translateX(2px);
+}
+
+/* ─── Empty State ─── */
+.empty-state {
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 10px;
+  color: #d5d0c8;
+}
+
+.empty-text {
+  font-size: 12.5px;
+  color: #a09a92;
+  line-height: 1.5;
+}
+
+/* ─── Message States ─── */
+.message-state {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.message-state p {
+  font-size: 13px;
+  color: #7a756d;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.signin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 18px;
+  background: #2d2a26;
+  color: #faf9f7;
+  border: none;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.signin-btn:hover {
+  background: #434039;
+}
+
+/* ─── Creating Spinner ─── */
+.creating-spinner {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
