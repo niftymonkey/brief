@@ -24,6 +24,7 @@ type TabState =
 export default function App() {
   const [tab, setTab] = useState<TabState>({ kind: "loading" });
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [briefs, setBriefs] = useState<RecentBrief[]>([]);
 
   useEffect(() => {
@@ -81,6 +82,7 @@ export default function App() {
     const { url, title } = tab;
 
     setCreating(true);
+    setCreateError(null);
     try {
       const result = await createBrief(url);
 
@@ -98,13 +100,15 @@ export default function App() {
     } catch (err) {
       if (err instanceof AuthError) {
         setTab({ kind: "not-authenticated" });
+      } else {
+        setCreateError("Something went wrong. Please try again.");
       }
     } finally {
       setCreating(false);
     }
   }
 
-  const isAuthenticated = tab.kind !== "not-authenticated";
+  const isAuthenticated = tab.kind !== "not-authenticated" && tab.kind !== "loading";
   const alreadyExists =
     tab.kind === "youtube" &&
     briefs.some(
@@ -122,6 +126,7 @@ export default function App() {
       {tab.kind === "youtube" && !alreadyExists && (
         <div className="current-video">
           <div className="current-video-title">{tab.title}</div>
+          {createError && <div className="create-error">{createError}</div>}
           <button
             className="create-btn"
             onClick={handleCreate}
