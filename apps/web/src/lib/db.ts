@@ -133,6 +133,8 @@ export async function saveBrief(
       is_shared as "isShared",
       slug,
       has_creator_chapters as "hasCreatorChapters",
+      status,
+      error_message as "errorMessage",
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -192,6 +194,8 @@ export async function updateBrief(
       is_shared as "isShared",
       slug,
       has_creator_chapters as "hasCreatorChapters",
+      status,
+      error_message as "errorMessage",
       created_at as "createdAt",
       updated_at as "updatedAt"
   `;
@@ -300,7 +304,7 @@ export async function getBriefByVideoId(
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
-      WHERE user_id = ${userId} AND video_id = ${videoId}
+      WHERE user_id = ${userId} AND video_id = ${videoId} AND status = 'completed'
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -345,7 +349,7 @@ export async function findGlobalBriefByVideoId(
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
-      WHERE video_id = ${videoId}
+      WHERE video_id = ${videoId} AND status = 'completed'
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -426,6 +430,8 @@ export async function copyBriefForUser(
       is_shared as "isShared",
       slug,
       has_creator_chapters as "hasCreatorChapters",
+      status,
+      error_message as "errorMessage",
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -474,7 +480,8 @@ export async function getBriefs(options: GetBriefsOptions): Promise<{ briefs: Br
   const { userId, limit = 20, offset = 0, search, tags, dateFrom, dateTo } = options;
 
   // Build dynamic WHERE clauses
-  const conditions: string[] = ["d.user_id = $1"];
+  // Only show completed briefs in the library (exclude queued/processing/failed)
+  const conditions: string[] = ["d.user_id = $1", "d.status = 'completed'"];
   const params: (string | number | Date)[] = [userId];
   let paramIndex = 2;
 
@@ -610,6 +617,8 @@ export async function getSharedBriefBySlug(
       is_shared as "isShared",
       slug,
       has_creator_chapters as "hasCreatorChapters",
+      status,
+      error_message as "errorMessage",
       created_at as "createdAt",
       updated_at as "updatedAt"
     FROM digests
@@ -671,6 +680,128 @@ export async function toggleBriefSharing(
   return {
     isShared: result.rows[0].is_shared,
     slug: result.rows[0].slug,
+  };
+}
+
+// ============================================
+// Async Brief Status Functions
+// ============================================
+
+/**
+ * Create a pending brief placeholder for async processing
+ */
+export async function createPendingBrief(
+  userId: string,
+  videoId: string
+): Promise<string> {
+  const thumbnailUrl = getThumbnailUrl(videoId);
+
+  const result = await sql<{ id: string }>`
+    INSERT INTO digests (
+      user_id,
+      video_id,
+      title,
+      channel_name,
+      channel_slug,
+      thumbnail_url,
+      summary,
+      sections,
+      related_links,
+      other_links,
+      status
+    ) VALUES (
+      ${userId},
+      ${videoId},
+      'Processing...',
+      '',
+      '',
+      ${thumbnailUrl},
+      '',
+      '[]'::jsonb,
+      '[]'::jsonb,
+      '[]'::jsonb,
+      'queued'
+    )
+    RETURNING id
+  `;
+
+  return result.rows[0].id;
+}
+
+/**
+ * Update the status of a pending brief
+ */
+export async function updateBriefStatus(
+  briefId: string,
+  status: string,
+  errorMessage?: string
+): Promise<void> {
+  await sql`
+    UPDATE digests
+    SET status = ${status},
+        error_message = ${errorMessage ?? null},
+        updated_at = NOW()
+    WHERE id = ${briefId}
+  `;
+}
+
+/**
+ * Fill in a pending brief with actual content and mark as completed
+ */
+export async function completePendingBrief(
+  userId: string,
+  briefId: string,
+  metadata: VideoMetadata,
+  brief: StructuredBrief,
+  hasCreatorChapters: boolean
+): Promise<void> {
+  const channelSlug = createSlug(metadata.channelTitle);
+  const thumbnailUrl = getThumbnailUrl(metadata.videoId);
+  const searchText = buildSearchText(brief);
+
+  await sql`
+    UPDATE digests SET
+      title = ${metadata.title},
+      channel_name = ${metadata.channelTitle},
+      channel_slug = ${channelSlug},
+      duration = ${metadata.duration},
+      published_at = ${metadata.publishedAt},
+      thumbnail_url = ${thumbnailUrl},
+      summary = ${brief.summary},
+      sections = ${JSON.stringify(brief.sections)},
+      related_links = ${JSON.stringify(brief.relatedLinks)},
+      other_links = ${JSON.stringify(brief.otherLinks)},
+      has_creator_chapters = ${hasCreatorChapters},
+      search_text = ${searchText},
+      status = 'completed',
+      error_message = NULL,
+      updated_at = NOW()
+    WHERE id = ${briefId} AND user_id = ${userId}
+  `;
+}
+
+/**
+ * Get the status of a brief (for polling)
+ */
+export async function getBriefStatus(
+  briefId: string,
+  userId: string
+): Promise<{ status: string; briefId: string; error?: string } | null> {
+  const result = await sql<{ id: string; status: string; error_message: string | null }>`
+    SELECT id, status, error_message
+    FROM digests
+    WHERE id = ${briefId} AND user_id = ${userId}
+  `;
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0];
+  return {
+    status: row.status,
+    briefId: row.id,
+    ...(row.error_message ? { error: row.error_message } : {}),
   };
 }
 

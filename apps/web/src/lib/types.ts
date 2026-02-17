@@ -87,6 +87,8 @@ export interface DbBrief {
   isShared: boolean;
   slug: string | null;
   hasCreatorChapters: boolean | null;
+  status: string;
+  errorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
   tags?: Tag[];
