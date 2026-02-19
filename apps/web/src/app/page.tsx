@@ -60,6 +60,15 @@ function LandingPage() {
           </div>
         </section>
       </main>
+      <footer className="px-4 py-6 text-center">
+        <Link
+          href="/privacy"
+          target="_blank"
+          className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors"
+        >
+          Privacy Policy
+        </Link>
+      </footer>
     </>
   );
 }
