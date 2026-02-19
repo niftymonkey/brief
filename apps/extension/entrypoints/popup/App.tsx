@@ -7,7 +7,7 @@ import {
   addRecentBrief,
   addCompletedBrief,
   retryBrief,
-  removeRecentBrief,
+  updateBriefStatus,
   markAllSeen,
   type RecentBrief,
 } from "@/lib/storage";
@@ -269,21 +269,26 @@ function BriefRow({ brief, active, onAuthError }: { brief: RecentBrief; active: 
   const [retrying, setRetrying] = useState(false);
   const activeClass = active ? " brief-row-active" : "";
 
+  const [retryError, setRetryError] = useState<string | null>(null);
+
   async function handleRetry() {
     setRetrying(true);
+    setRetryError(null);
     try {
       const result = await createBrief(brief.videoUrl);
       if (result.status === "completed" && result.briefId) {
-        // Cache hit — replace the failed entry with the completed one
-        await removeRecentBrief(brief.jobId);
-        await addCompletedBrief(result.jobId, brief.videoUrl, brief.videoTitle, result.briefId);
+        // Cache hit — atomic replace via retryBrief then update to completed
+        await retryBrief(brief.jobId, result.jobId);
+        await updateBriefStatus(result.jobId, "completed", result.briefId);
       } else {
         await retryBrief(brief.jobId, result.jobId);
-        chrome.runtime.sendMessage({ type: "brief-created" });
+        chrome.runtime.sendMessage({ type: "brief-created" }).catch(() => {});
       }
     } catch (err) {
       if (err instanceof AuthError) {
         onAuthError();
+      } else {
+        setRetryError("Retry failed. Please try again.");
       }
     } finally {
       setRetrying(false);
@@ -297,7 +302,7 @@ function BriefRow({ brief, active, onAuthError }: { brief: RecentBrief; active: 
         <div className="brief-info">
           <div className="brief-title">{brief.videoTitle}</div>
           <div className="brief-meta failed-meta">
-            {brief.error || "Failed"}
+            {retryError || brief.error || "Failed"}
             {active && <span className="brief-current-label"> · This video</span>}
           </div>
         </div>
