@@ -4,6 +4,7 @@ export interface RecentBrief {
   videoTitle: string;
   status: "processing" | "completed" | "failed";
   briefId?: string;
+  error?: string;
   createdAt: number;
   /** Whether the user has seen this completed brief (opened popup after completion). */
   seen?: boolean;
@@ -29,13 +30,32 @@ export async function addRecentBrief(
 export async function updateBriefStatus(
   jobId: string,
   status: "completed" | "failed",
-  briefId?: string
+  briefId?: string,
+  error?: string
 ): Promise<void> {
   const briefs = await getRecentBriefs();
   const brief = briefs.find((b) => b.jobId === jobId);
   if (brief) {
     brief.status = status;
     if (briefId) brief.briefId = briefId;
+    if (error) brief.error = error;
+    await chrome.storage.local.set({ [STORAGE_KEY]: briefs });
+  }
+}
+
+/** Replace a failed entry in-place with a new processing job (same list slot). */
+export async function retryBrief(
+  oldJobId: string,
+  newJobId: string
+): Promise<void> {
+  const briefs = await getRecentBriefs();
+  const brief = briefs.find((b) => b.jobId === oldJobId);
+  if (brief) {
+    brief.jobId = newJobId;
+    brief.status = "processing";
+    brief.error = undefined;
+    brief.briefId = undefined;
+    brief.createdAt = Date.now();
     await chrome.storage.local.set({ [STORAGE_KEY]: briefs });
   }
 }

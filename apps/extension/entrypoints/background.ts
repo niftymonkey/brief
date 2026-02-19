@@ -10,11 +10,12 @@ import { APP_URL } from "@/lib/config";
 
 const POLL_DELAY_MS = 30_000;
 const POLL_INTERVAL_MS = 30_000;
+const STALE_JOB_MS = 5 * 60_000;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
 function notify(id: string, title: string, message: string) {
   chrome.notifications
-    .create(id, { type: "basic", iconUrl: "icon.ico", title, message })
+    .create(id, { type: "basic", iconUrl: "icon-128.png", title, message })
     .catch(() => {});
 }
 
@@ -51,26 +52,34 @@ function startPolling(delayMs: number) {
   if (pollTimer) clearTimeout(pollTimer);
 
   pollTimer = setTimeout(async () => {
-    await pollPendingJobs();
+    const authOk = await pollPendingJobs();
 
-    const briefs = await getRecentBriefs();
-    if (getProcessingBriefs(briefs).length > 0) {
-      startPolling(POLL_INTERVAL_MS);
-    } else {
-      pollTimer = null;
+    if (authOk) {
+      const briefs = await getRecentBriefs();
+      if (getProcessingBriefs(briefs).length > 0) {
+        startPolling(POLL_INTERVAL_MS);
+        return;
+      }
     }
+    pollTimer = null;
   }, delayMs);
 }
 
-async function pollPendingJobs() {
+/** Returns false if auth failed (stops polling). */
+async function pollPendingJobs(): Promise<boolean> {
   const briefs = await getRecentBriefs();
   const processing = getProcessingBriefs(briefs);
   if (processing.length === 0) {
     updateBadge();
-    return;
+    return true;
   }
 
   for (const job of processing) {
+    if (Date.now() - job.createdAt > STALE_JOB_MS) {
+      await updateBriefStatus(job.jobId, "failed", undefined, "Timed out — please try again.");
+      continue;
+    }
+
     try {
       const result = await checkBriefStatus(job.jobId);
 
@@ -84,7 +93,7 @@ async function pollPendingJobs() {
             : "Your brief is ready!"
         );
       } else if (result.status === "failed") {
-        await updateBriefStatus(job.jobId, "failed");
+        await updateBriefStatus(job.jobId, "failed", undefined, result.error);
         notify(
           `brief-failed-${job.jobId}`,
           "Brief Failed",
@@ -93,7 +102,8 @@ async function pollPendingJobs() {
       }
     } catch (err) {
       if (err instanceof AuthError) {
-        break;
+        updateBadge();
+        return false;
       }
       if (err instanceof Error && err.message === "Brief not found") {
         await removeRecentBrief(job.jobId);
@@ -103,6 +113,7 @@ async function pollPendingJobs() {
   }
 
   updateBadge();
+  return true;
 }
 
 /** Re-check completed briefs still exist on the server; remove any that were deleted. */

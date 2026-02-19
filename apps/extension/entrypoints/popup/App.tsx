@@ -6,6 +6,8 @@ import {
   getRecentBriefs,
   addRecentBrief,
   addCompletedBrief,
+  retryBrief,
+  updateBriefStatus,
   markAllSeen,
   type RecentBrief,
 } from "@/lib/storage";
@@ -180,6 +182,7 @@ export default function App() {
           briefs={briefs}
           showBorder={tab.kind === "not-youtube"}
           currentVideoId={tab.kind === "youtube" ? tab.videoId : undefined}
+          onAuthError={() => setTab({ kind: "not-authenticated" })}
         />
       )}
     </>
@@ -215,10 +218,12 @@ function BriefsList({
   briefs,
   showBorder,
   currentVideoId,
+  onAuthError,
 }: {
   briefs: RecentBrief[];
   showBorder: boolean;
   currentVideoId?: string;
+  onAuthError: () => void;
 }) {
   if (briefs.length === 0) {
     return (
@@ -253,26 +258,68 @@ function BriefsList({
           key={brief.jobId}
           brief={brief}
           active={currentVideoId === extractVideoId(brief.videoUrl)}
+          onAuthError={onAuthError}
         />
       ))}
     </div>
   );
 }
 
-function BriefRow({ brief, active }: { brief: RecentBrief; active: boolean }) {
+function BriefRow({ brief, active, onAuthError }: { brief: RecentBrief; active: boolean; onAuthError: () => void }) {
+  const [retrying, setRetrying] = useState(false);
   const activeClass = active ? " brief-row-active" : "";
-  const statusLabel =
-    brief.status === "processing"
-      ? "Processing..."
-      : brief.status === "completed"
-        ? "Ready"
-        : "Failed";
-  const metaClass =
-    brief.status === "completed"
-      ? " completed-meta"
-      : brief.status === "failed"
-        ? " failed-meta"
-        : "";
+
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  async function handleRetry() {
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const result = await createBrief(brief.videoUrl);
+      if (result.status === "completed" && result.briefId) {
+        // Cache hit — atomic replace via retryBrief then update to completed
+        await retryBrief(brief.jobId, result.jobId);
+        await updateBriefStatus(result.jobId, "completed", result.briefId);
+      } else {
+        await retryBrief(brief.jobId, result.jobId);
+        chrome.runtime.sendMessage({ type: "brief-created" }).catch(() => {});
+      }
+    } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthError();
+      } else {
+        setRetryError("Retry failed. Please try again.");
+      }
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  if (brief.status === "failed") {
+    return (
+      <div className={`brief-row${activeClass}`}>
+        <div className="brief-status-dot failed" />
+        <div className="brief-info">
+          <div className="brief-title">{brief.videoTitle}</div>
+          <div className="brief-meta failed-meta">
+            {retryError || brief.error || "Failed"}
+            {active && <span className="brief-current-label"> · This video</span>}
+          </div>
+        </div>
+        <button
+          className="retry-btn"
+          onClick={handleRetry}
+          disabled={retrying}
+          title="Retry"
+        >
+          {retrying ? <SpinnerIcon /> : <RetryIcon />}
+        </button>
+      </div>
+    );
+  }
+
+  const statusLabel = brief.status === "processing" ? "Processing..." : "Ready";
+  const metaClass = brief.status === "completed" ? " completed-meta" : "";
 
   const meta = (
     <div className={`brief-meta${metaClass}`}>
@@ -339,4 +386,24 @@ function ArrowIcon() {
       <path d="M5 3l4 4-4 4" />
     </svg>
   );
+}
+
+function RetryIcon() {
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M1.5 2.5v3.5h3.5" />
+      <path d="M2.1 8.5a5 5 0 1 0 .7-4l-1.3 1" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return <div className="retry-spinner" />;
 }

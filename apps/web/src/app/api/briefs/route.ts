@@ -9,6 +9,7 @@ import { extractChapters } from "@/lib/chapters";
 import { isEmailAllowed } from "@/lib/access";
 import {
   getBriefByVideoId,
+  getPendingBriefByVideoId,
   findGlobalBriefByVideoId,
   copyBriefForUser,
   createPendingBrief,
@@ -64,6 +65,15 @@ export async function POST(request: NextRequest) {
   if (userBrief && !isStale(userBrief)) {
     return NextResponse.json(
       { jobId: userBrief.id, status: "completed", briefId: userBrief.id },
+      { status: 200 }
+    );
+  }
+
+  // Check if already queued/processing for this user
+  const pendingBrief = await getPendingBriefByVideoId(userId, videoId);
+  if (pendingBrief) {
+    return NextResponse.json(
+      { jobId: pendingBrief.id, status: pendingBrief.status },
       { status: 200 }
     );
   }

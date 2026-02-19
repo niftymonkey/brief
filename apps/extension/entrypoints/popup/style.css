@@ -231,6 +231,10 @@ a.brief-row:hover {
 
 .brief-meta.failed-meta {
   color: #d4513e;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .brief-arrow {
@@ -245,6 +249,48 @@ a.brief-row:hover {
 a.brief-row:hover .brief-arrow {
   color: #6366f1;
   transform: translateX(2px);
+}
+
+/* ─── Retry Button ─── */
+.retry-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid #e0ddd8;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #a09a92;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.retry-btn:hover {
+  color: #6366f1;
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.retry-btn:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.retry-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.retry-spinner {
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid #e0ddd8;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
 }
 
 /* ─── Empty State ─── */
