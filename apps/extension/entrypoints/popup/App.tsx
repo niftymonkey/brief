@@ -182,6 +182,7 @@ export default function App() {
           briefs={briefs}
           showBorder={tab.kind === "not-youtube"}
           currentVideoId={tab.kind === "youtube" ? tab.videoId : undefined}
+          onAuthError={() => setTab({ kind: "not-authenticated" })}
         />
       )}
     </>
@@ -217,10 +218,12 @@ function BriefsList({
   briefs,
   showBorder,
   currentVideoId,
+  onAuthError,
 }: {
   briefs: RecentBrief[];
   showBorder: boolean;
   currentVideoId?: string;
+  onAuthError: () => void;
 }) {
   if (briefs.length === 0) {
     return (
@@ -255,13 +258,14 @@ function BriefsList({
           key={brief.jobId}
           brief={brief}
           active={currentVideoId === extractVideoId(brief.videoUrl)}
+          onAuthError={onAuthError}
         />
       ))}
     </div>
   );
 }
 
-function BriefRow({ brief, active }: { brief: RecentBrief; active: boolean }) {
+function BriefRow({ brief, active, onAuthError }: { brief: RecentBrief; active: boolean; onAuthError: () => void }) {
   const [retrying, setRetrying] = useState(false);
   const activeClass = active ? " brief-row-active" : "";
 
@@ -277,8 +281,10 @@ function BriefRow({ brief, active }: { brief: RecentBrief; active: boolean }) {
         await retryBrief(brief.jobId, result.jobId);
         chrome.runtime.sendMessage({ type: "brief-created" });
       }
-    } catch {
-      // If retry itself fails, leave the failed state as-is
+    } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthError();
+      }
     } finally {
       setRetrying(false);
     }

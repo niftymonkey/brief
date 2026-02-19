@@ -706,6 +706,7 @@ export async function getPendingBriefByVideoId(
     SELECT id, status
     FROM digests
     WHERE user_id = ${userId} AND video_id = ${videoId} AND status IN ('queued', 'processing')
+      AND created_at > NOW() - INTERVAL '5 minutes'
     ORDER BY created_at DESC
     LIMIT 1
   `;
