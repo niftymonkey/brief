@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Shield } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -57,7 +58,7 @@ export function UserMenu({ user, signOutAction }: UserMenuProps) {
   const displayName = getDisplayName(user.firstName, user.lastName, user.email);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button className="flex items-center gap-2 rounded-full p-0.5 hover:bg-[var(--color-bg-secondary)] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]">
           <Avatar className="size-7">
@@ -79,6 +80,13 @@ export function UserMenu({ user, signOutAction }: UserMenuProps) {
             </p>
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/privacy" target="_blank" className="cursor-pointer">
+            <Shield className="mr-2 h-4 w-4" />
+            Privacy Policy
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <form action={signOutAction}>
           <DropdownMenuItem asChild>
