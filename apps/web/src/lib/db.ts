@@ -698,6 +698,20 @@ export async function toggleBriefSharing(
 /**
  * Create a pending brief placeholder for async processing
  */
+export async function getPendingBriefByVideoId(
+  userId: string,
+  videoId: string
+): Promise<{ id: string; status: string } | null> {
+  const result = await sql<{ id: string; status: string }>`
+    SELECT id, status
+    FROM digests
+    WHERE user_id = ${userId} AND video_id = ${videoId} AND status IN ('queued', 'processing')
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  return result.rows[0] || null;
+}
+
 export async function createPendingBrief(
   userId: string,
   videoId: string

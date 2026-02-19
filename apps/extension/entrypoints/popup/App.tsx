@@ -6,6 +6,8 @@ import {
   getRecentBriefs,
   addRecentBrief,
   addCompletedBrief,
+  retryBrief,
+  removeRecentBrief,
   markAllSeen,
   type RecentBrief,
 } from "@/lib/storage";
@@ -260,19 +262,53 @@ function BriefsList({
 }
 
 function BriefRow({ brief, active }: { brief: RecentBrief; active: boolean }) {
+  const [retrying, setRetrying] = useState(false);
   const activeClass = active ? " brief-row-active" : "";
-  const statusLabel =
-    brief.status === "processing"
-      ? "Processing..."
-      : brief.status === "completed"
-        ? "Ready"
-        : "Failed";
-  const metaClass =
-    brief.status === "completed"
-      ? " completed-meta"
-      : brief.status === "failed"
-        ? " failed-meta"
-        : "";
+
+  async function handleRetry() {
+    setRetrying(true);
+    try {
+      const result = await createBrief(brief.videoUrl);
+      if (result.status === "completed" && result.briefId) {
+        // Cache hit — replace the failed entry with the completed one
+        await removeRecentBrief(brief.jobId);
+        await addCompletedBrief(result.jobId, brief.videoUrl, brief.videoTitle, result.briefId);
+      } else {
+        await retryBrief(brief.jobId, result.jobId);
+        chrome.runtime.sendMessage({ type: "brief-created" });
+      }
+    } catch {
+      // If retry itself fails, leave the failed state as-is
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  if (brief.status === "failed") {
+    return (
+      <div className={`brief-row${activeClass}`}>
+        <div className="brief-status-dot failed" />
+        <div className="brief-info">
+          <div className="brief-title">{brief.videoTitle}</div>
+          <div className="brief-meta failed-meta">
+            {brief.error || "Failed"}
+            {active && <span className="brief-current-label"> · This video</span>}
+          </div>
+        </div>
+        <button
+          className="retry-btn"
+          onClick={handleRetry}
+          disabled={retrying}
+          title="Retry"
+        >
+          {retrying ? <SpinnerIcon /> : <RetryIcon />}
+        </button>
+      </div>
+    );
+  }
+
+  const statusLabel = brief.status === "processing" ? "Processing..." : "Ready";
+  const metaClass = brief.status === "completed" ? " completed-meta" : "";
 
   const meta = (
     <div className={`brief-meta${metaClass}`}>
@@ -339,4 +375,24 @@ function ArrowIcon() {
       <path d="M5 3l4 4-4 4" />
     </svg>
   );
+}
+
+function RetryIcon() {
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M1.5 2.5v3.5h3.5" />
+      <path d="M2.1 8.5a5 5 0 1 0 .7-4l-1.3 1" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return <div className="retry-spinner" />;
 }
