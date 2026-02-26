@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { BriefViewer } from "@/components/brief-viewer";
+import { ShareModeProvider } from "@/components/chapter-grid";
 import { Card, CardContent } from "@/components/ui/card";
 import { getSharedBriefBySlug } from "@/lib/db";
 
@@ -89,6 +90,7 @@ export default async function SharedBriefPage({ params }: PageProps) {
     <main className="flex-1 px-4 py-4">
       <article className="max-w-3xl mx-auto">
         {/* Embedded YouTube Player and Chapters */}
+        <ShareModeProvider>
         <BriefViewer
           videoId={brief.videoId}
           title={brief.title}
@@ -117,6 +119,13 @@ export default async function SharedBriefPage({ params }: PageProps) {
             )}
           </div>
 
+          <a
+            href={`https://youtube.com/watch?v=${brief.videoId}`}
+            className="sr-only"
+          >
+            Watch on YouTube: {brief.title}
+          </a>
+
           {/* The Gist */}
           <section className="mt-6 mb-4">
             <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1.5 pb-1 border-b border-[var(--color-border)]">
@@ -127,6 +136,7 @@ export default async function SharedBriefPage({ params }: PageProps) {
             </p>
           </section>
         </BriefViewer>
+        </ShareModeProvider>
 
         {/* Links & Resources */}
         {(brief.relatedLinks.length > 0 || brief.otherLinks.length > 0) && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { ChevronRight, ChevronsUpDown } from "lucide-react";
 import {
   Accordion,
@@ -11,6 +11,11 @@ import {
 import { parseTimestamp } from "./timestamp";
 import { cn } from "@/lib/utils";
 import type { ContentSection, KeyPoint } from "@/lib/types";
+
+const ShareModeContext = createContext(false);
+export function ShareModeProvider({ children }: { children: React.ReactNode }) {
+  return <ShareModeContext.Provider value={true}>{children}</ShareModeContext.Provider>;
+}
 
 interface ChapterGridProps {
   sections: ContentSection[];
@@ -72,6 +77,7 @@ function TimestampLink({
 }
 
 export function ChapterGrid({ sections, videoId, hasCreatorChapters, onSeek }: ChapterGridProps) {
+  const forceMount = useContext(ShareModeContext);
   const allSectionValues = sections.map((_, index) => `section-${index}`);
   const [openSections, setOpenSections] = useState<string[]>([]);
 
@@ -134,7 +140,10 @@ export function ChapterGrid({ sections, videoId, hasCreatorChapters, onSeek }: C
               <TimestampLink time={section.timestampStart} videoId={videoId} onSeek={onSeek} />
             </AccordionTrigger>
 
-            <AccordionContent className="px-3 py-2">
+            <AccordionContent
+              className="px-3 py-2"
+              forceMount={forceMount || undefined}
+            >
               <ul className="space-y-1 ml-6 text-lg">
                 {isKeyPointArray(section.keyPoints)
                   ? section.keyPoints.map((kp, kpIndex) => (

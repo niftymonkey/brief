@@ -1,6 +1,5 @@
-import Link from "next/link";
-import { Youtube } from "lucide-react";
 import { withAuth, signOut } from "@workos-inc/authkit-nextjs";
+import { HeaderContent } from "@/components/header-content";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 
@@ -18,39 +17,28 @@ export default async function PublicLayout({
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--color-bg-primary)]/80">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-[var(--color-text-primary)] hover:text-[var(--color-accent)] transition-colors"
-          >
-            <Youtube className="w-5 h-5" />
-            <span className="font-semibold">Brief</span>
-          </Link>
-
-          <div className="flex items-center gap-4">
-            {user ? (
-              <UserMenu
-                user={{
-                  email: user.email ?? "",
-                  firstName: user.firstName,
-                  lastName: user.lastName,
-                  profilePictureUrl: user.profilePictureUrl,
-                }}
-                signOutAction={signOutAction}
-              />
-            ) : (
-              <Link
-                href="/auth"
-                prefetch={false}
-                className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                Sign In
-              </Link>
-            )}
-            <ThemeToggle />
-          </div>
-        </div>
+      <header className="sticky top-0 z-50 px-4 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--color-bg-primary)]/80">
+        <HeaderContent>
+          {user ? (
+            <UserMenu
+              user={{
+                email: user.email ?? "",
+                firstName: user.firstName,
+                lastName: user.lastName,
+                profilePictureUrl: user.profilePictureUrl,
+              }}
+              signOutAction={signOutAction}
+            />
+          ) : (
+            <a
+              href="/auth"
+              className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              Sign In
+            </a>
+          )}
+          <ThemeToggle />
+        </HeaderContent>
       </header>
       {children}
     </>

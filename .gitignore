@@ -6,6 +6,7 @@ outputs/
 dist/
 .DS_Store
 .next/
+.playwright-cli/
 .playwright-mcp/
 .vercel
 .env*.local
