@@ -35,7 +35,7 @@ Two surfaces need YouTube transcript retrieval: the existing web app and a new C
 
 ## Public interface
 
-```
+```typescript
 extractVideoId(input: string): string | null         // URL or bare 11-char ID
 fetchTranscript(input: string, opts?: TranscriptOptions): Promise<TranscriptResult>
 fetchMetadata(input: string, opts: MetadataOptions): Promise<MetadataResult>
@@ -46,12 +46,16 @@ fetchMetadata(input: string, opts: MetadataOptions): Promise<MetadataResult>
 
 ### TranscriptResult — discriminated union
 
-```
+```typescript
 type TranscriptResult =
-  | { kind: "ok",          source, lang?, entries }
-  | { kind: "pending",     source, jobId, retryAfterSeconds, message }
-  | { kind: "unavailable", reason, message }
-  | { kind: "transient",   cause, message }
+  | { kind: "ok",          source: SourceName, lang?: string, entries: TranscriptEntry[] }
+  | { kind: "pending",     source: SourceName, jobId: string, retryAfterSeconds: number, message: string }
+  | { kind: "unavailable", reason: UnavailableReason, message: string }
+  | { kind: "transient",   cause: string, message: string }
+
+type SourceName        = "youtube-transcript-plus" | "supadata"
+type UnavailableReason = "no-captions" | "video-removed" | "video-private" | "invalid-id"
+type TranscriptEntry   = { offsetSec: number, durationSec: number, text: string, lang?: string }
 ```
 
 Callers pattern-match `kind`. No string-matching on error messages — that's the failure mode the existing web-app fetcher exhibits and the new package eliminates.
@@ -60,28 +64,69 @@ Callers pattern-match `kind`. No string-matching on error messages — that's th
 
 ### TranscriptOptions
 
-```
-{
-  supadataApiKey?,        // omit to disable Supadata in the cascade
-  signal?,                // standard cancellation
-  sources?,               // override cascade order; default: ["youtube-transcript-plus", "supadata"]
-  retryPolicy?            // overrides the package default
+```typescript
+type TranscriptOptions = {
+  supadataApiKey?: string         // omit to disable Supadata in the cascade
+  signal?: AbortSignal            // standard cancellation
+  sources?: SourceName[]          // override cascade order; default: ["youtube-transcript-plus", "supadata"]
+  retryPolicy?: RetryPolicy       // overrides the package default
 }
 ```
+
+### RetryPolicy
+
+```typescript
+type RetryPolicy = {
+  maxAttempts: number             // total attempts including the first; default 3
+  initialDelayMs: number          // delay before the first retry; default 500
+  backoffMultiplier: number       // multiplier applied per retry; default 2
+}
+```
+
+Applied via `withRetry(source, policy)` — only `transient` outcomes from a source are retried. `ok`, `pending`, and `unavailable` short-circuit. The cascade's default policy is the package-level constant; per-call override via `TranscriptOptions.retryPolicy`.
+
+### MetadataResult and MetadataOptions
+
+```typescript
+type MetadataResult =
+  | { kind: "ok",          metadata: VideoMetadata }
+  | { kind: "unavailable", reason: MetadataUnavailableReason, message: string }
+  | { kind: "transient",   cause: string, message: string }
+
+type MetadataUnavailableReason = "video-not-found" | "invalid-id" | "quota-exceeded" | "api-key-invalid"
+type VideoMetadata = {
+  videoId: string
+  title: string
+  channelTitle: string
+  channelId: string
+  duration: string                // ISO-8601 (e.g., "PT3M33S")
+  publishedAt: string             // ISO-8601
+  description: string
+  pinnedComment?: string
+}
+
+type MetadataOptions = {
+  youtubeApiKey: string           // required — no zero-config path for metadata
+  signal?: AbortSignal
+  retryPolicy?: RetryPolicy
+}
+```
+
+No `pending` branch — metadata fetching has no async-generation path. `MetadataUnavailableReason` is distinct from `UnavailableReason` because the failure space differs (no "no-captions" for metadata; quota exhaustion is metadata-specific).
 
 ## Internal seam — TranscriptSource
 
-```
+```typescript
 interface TranscriptSource {
-  readonly name
-  fetch(videoId, signal?): Promise<SourceOutcome>
+  readonly name: SourceName
+  fetch(videoId: string, signal?: AbortSignal): Promise<SourceOutcome>
 }
 
 type SourceOutcome =
-  | { kind: "ok",          lang?, entries }
-  | { kind: "pending",     jobId, retryAfterSeconds }   // only Supadata
-  | { kind: "unavailable", reason }
-  | { kind: "transient",   cause }
+  | { kind: "ok",          lang?: string, entries: TranscriptEntry[] }
+  | { kind: "pending",     jobId: string, retryAfterSeconds: number }   // only Supadata
+  | { kind: "unavailable", reason: UnavailableReason }
+  | { kind: "transient",   cause: string }
 ```
 
 Capability flags on the interface would over-engineer for a non-problem. `youtube-transcript-plus` simply never returns `pending`; the interface admits it uniformly across providers.
@@ -115,6 +160,10 @@ This is the part of the orchestrator that earns its keep — duplicating it in t
 | Arg parser | `node:util` `parseArgs` (zero deps) |
 | Output discipline | Data on stdout, diagnostics on stderr, no ANSI on stdout, ANSI only on stderr-TTY |
 
+**Source flag mapping:** `auto` uses the default cascade; `local` maps to the `youtube-transcript-plus` source; `supadata` uses Supadata only. The flag values are the user-facing labels; internal code uses the `SourceName` literals (`"youtube-transcript-plus"`, `"supadata"`).
+
+**Timeout:** `--timeout=<ms>` creates an `AbortSignal` internally and passes it through `TranscriptOptions.signal`. Callers using the package directly construct their own `AbortSignal`.
+
 ### Exit codes
 
 | Code | Meaning |
@@ -129,6 +178,20 @@ This is the part of the orchestrator that earns its keep — duplicating it in t
 
 - **No `SUPADATA_API_KEY`:** silently skip Supadata; CLI is fully functional with zero config.
 - **No `YOUTUBE_API_KEY`:** silently skip metadata; header shows just the video ID. Metadata failures never affect exit code.
+
+### CLI internal types
+
+The renderer and exit-code mapper both consume a single combined value built by the entrypoint:
+
+```typescript
+type CombinedResult = {
+  videoIdOrUrl: string                    // for echoing back to caller in either format
+  transcript: TranscriptResult            // the contract (drives exit code)
+  metadata: MetadataResult | null         // best-effort; null when skipped or unconfigured
+}
+```
+
+Exit code is derived solely from `transcript.kind`. `metadata` exists only to enrich the rendered output; its failure never changes the process exit status.
 
 ## JSON output schema
 
