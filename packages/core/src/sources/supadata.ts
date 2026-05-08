@@ -1,5 +1,6 @@
 import { Supadata, SupadataError } from "@supadata/js";
 import { z } from "zod";
+import { decodeHtmlEntities } from "../text";
 import type { SourceOutcome, TranscriptSource } from "./types";
 
 const ChunkSchema = z.object({
@@ -54,7 +55,7 @@ export class SupadataSource implements TranscriptSource {
     }
 
     const entries = parsed.data.content.map((c) => ({
-      text: c.text,
+      text: decodeHtmlEntities(c.text),
       offsetSec: c.offset / 1000,
       durationSec: c.duration / 1000,
       lang: c.lang,

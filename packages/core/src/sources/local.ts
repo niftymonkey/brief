@@ -8,6 +8,7 @@ import {
   YoutubeTranscriptVideoUnavailableError,
 } from "youtube-transcript-plus";
 import { z } from "zod";
+import { decodeHtmlEntities } from "../text";
 import type { SourceOutcome, TranscriptSource } from "./types";
 
 const ResponseSchema = z.array(
@@ -36,7 +37,7 @@ export class LocalSource implements TranscriptSource {
     }
 
     const entries = parsed.data.map((e) => ({
-      text: e.text,
+      text: decodeHtmlEntities(e.text),
       offsetSec: e.offset,
       durationSec: e.duration,
       ...(e.lang ? { lang: e.lang } : {}),

@@ -43,6 +43,30 @@ describe("SupadataSource", () => {
     expect(new SupadataSource("key").name).toBe("supadata");
   });
 
+  it("decodes HTML entities in inline content text", async () => {
+    transcriptMock.mockResolvedValue({
+      content: [
+        {
+          text: "she said &quot;hi&quot;",
+          offset: 0,
+          duration: 1000,
+          lang: "en",
+        },
+        { text: "AT&amp;amp;T", offset: 1000, duration: 500, lang: "en" },
+      ],
+      lang: "en",
+      availableLangs: ["en"],
+    });
+    const result = await new SupadataSource("key").fetch("vid");
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.entries.map((e) => e.text)).toEqual([
+        'she said "hi"',
+        "AT&T",
+      ]);
+    }
+  });
+
   it("converts ms to seconds in inline content", async () => {
     transcriptMock.mockResolvedValue({
       content: [

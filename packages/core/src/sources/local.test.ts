@@ -48,6 +48,21 @@ describe("LocalSource", () => {
     });
   });
 
+  it("decodes HTML entities in entry text (including double-encoded)", async () => {
+    fetchTranscriptMock.mockResolvedValue([
+      { text: "we&amp;#39;re no strangers", offset: 0, duration: 2, lang: "en" },
+      { text: "a &lt; b", offset: 2, duration: 1, lang: "en" },
+    ]);
+    const result = await new LocalSource().fetch("vid");
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.entries.map((e) => e.text)).toEqual([
+        "we're no strangers",
+        "a < b",
+      ]);
+    }
+  });
+
   it("returns ok without lang when entries have no lang", async () => {
     fetchTranscriptMock.mockResolvedValue([
       { text: "hi", offset: 0, duration: 1 },
