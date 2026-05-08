@@ -4,7 +4,9 @@ Design pass for issue [#76](https://github.com/niftymonkey/brief/issues/76) — 
 
 ## Why this design
 
-Two surfaces need YouTube transcript retrieval: the existing web app and a new CLI for unattended use (interactive humans, shell scripts, AI coding agents). Today the web app's fetcher dispatches to one of two upstream sources by env-var presence and discards Supadata's async-generation jobs. The new shared package replaces that with a deterministic cascade, models four distinct outcomes as a discriminated union, and treats the reliability concerns documented in [#75](https://github.com/niftymonkey/brief/issues/75) — retry/backoff, schema validation at the upstream boundary, jobId tracking — as foundational v1 behavior rather than future drop-ins.
+Two surfaces need YouTube transcript retrieval: the existing web app and a new CLI for unattended use (interactive humans, shell scripts, AI coding agents). Today the web app's fetcher dispatches to one of two upstream sources by env-var presence and discards Supadata's async-generation jobs. The new shared package replaces that with a deterministic cascade, models four distinct outcomes as a discriminated union, and treats the reliability concerns documented in [#75](https://github.com/niftymonkey/brief/issues/75) — retry/backoff, runtime Zod schema validation at *both* adapter boundaries, jobId tracking — as foundational v1 behavior rather than future drop-ins.
+
+**Naming note (post-implementation):** during the build pass the package was named `@brief/core` (it owns more than transcripts — also metadata, ID parsing, and the shared serializer) and the binary was named `brief` (single-word convention, matching `npm`/`git`/`gh`). References below to "`packages/transcript`" and "`brief-transcript`" reflect the original architecture sketch; the implementation is `packages/core` and `brief`.
 
 ## Module landscape
 
@@ -150,7 +152,7 @@ This is the part of the orchestrator that earns its keep — duplicating it in t
 
 | Element | Decision |
 |---|---|
-| Binary name | `brief-transcript` |
+| Binary name | `brief` (was `brief-transcript` in the sketch) |
 | Positional | `<url-or-id>` |
 | `--json` | Switch to machine-readable output |
 | `--no-metadata` | Skip YouTube Data API call |
@@ -226,14 +228,14 @@ The package's *external* interface has no port. The TranscriptSource port is pur
 
 ## Test surface
 
-- **`packages/transcript`**: tests cross `fetchTranscript()` with stub TranscriptSources. The cascade rules table is the test matrix. Adapter tests use recorded fixtures or HTTP mocks at the network layer. The Supadata schema validator has its own tests against representative response shapes.
+- **`packages/core`**: tests cross `fetchTranscript()` with stub TranscriptSources. The cascade rules table is the test matrix. Adapter tests use recorded fixtures or module mocks at the SDK layer. **Both** adapters' Zod schema validators have their own tests against representative response shapes (a runtime mismatch maps to `transient` with cause `schema-mismatch`).
 - **`apps/cli`**: Renderer and ExitCodeMapper tested directly with synthesized `CombinedResult` values. Entrypoint tested via integration (spawn the binary, assert on stdout/stderr/exit code). No mocking through the package boundary.
 
 ## Locked decisions
 
 | # | Decision |
 |---|---|
-| 1 | CLI bin name: `brief-transcript` |
+| 1 | CLI bin name: `brief` (originally `brief-transcript`; renamed during implementation for the single-word `npm`/`git`/`gh` convention) |
 | 2 | No Supadata key → silent skip; CLI runs zero-config on local-only |
 | 3 | Metadata: best-effort with key, skip without; never affects exit code |
 | 4 | Arg parser: `node:util` `parseArgs` (no dep) |
@@ -245,4 +247,4 @@ The package's *external* interface has no port. The TranscriptSource port is pur
 
 - **#76** — this design pass; deliverable is the package + CLI.
 - **#75** — narrowed to "the web app's existing local fetcher." Closes by inheritance when the web-app migration ticket lands.
-- **Web-app migration ticket** — drafted as a follow-up to #76. Swaps `apps/web` to consume `packages/transcript`, retires `apps/web/src/lib/transcript.ts`, closes #75.
+- **Web-app migration ticket(s)** — follow-ups to #76. One ticket swaps `apps/web` to consume `packages/core` for `extractVideoId` + `fetchMetadata` and retires `apps/web/src/cli.ts`. A separate ticket (#77) swaps `apps/web/src/lib/transcript.ts` for `fetchTranscript`, which closes #75 by inheritance.

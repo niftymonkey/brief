@@ -8,6 +8,7 @@
     "start": "pnpm --filter @brief/web start",
     "lint": "pnpm --filter @brief/web lint",
     "brief": "pnpm --filter @brief/web brief",
+    "cli": "node apps/cli/dist/main.cjs",
     "migrate": "pnpm --filter @brief/web migrate",
     "backfill-search": "pnpm --filter @brief/web backfill-search",
     "security": "pnpm --filter @brief/web security",
