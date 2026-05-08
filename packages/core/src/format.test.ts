@@ -70,17 +70,39 @@ describe("formatTranscript json format", () => {
     const out = JSON.parse(formatTranscript(okResult, "json"));
     expect(out.status).toBe("ok");
     expect(out.source).toBe("youtube-transcript-plus");
-    expect(out.transcript).toEqual({
-      language: "en",
-      entries: [
-        { offsetSec: 0, durationSec: 2, text: "hello" },
-        { offsetSec: 65, durationSec: 3, text: "world" },
-        { offsetSec: 3725, durationSec: 4, text: "later" },
-      ],
-    });
+    expect(out.transcript.language).toBe("en");
+    expect(out.transcript.entries).toEqual([
+      { offsetSec: 0, durationSec: 2, text: "hello" },
+      { offsetSec: 65, durationSec: 3, text: "world" },
+      { offsetSec: 3725, durationSec: 4, text: "later" },
+    ]);
     expect(out.job).toBeNull();
     expect(out.reason).toBeUndefined();
     expect(out.message).toEqual(expect.any(String));
+  });
+
+  it("includes a joined `text` field at the transcript level for ok results", () => {
+    const out = JSON.parse(formatTranscript(okResult, "json"));
+    expect(out.transcript.text).toBe("hello\nworld\nlater");
+  });
+
+  it("normalizes internal newlines in entry text to spaces in joined `text`", () => {
+    const result: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      lang: "en",
+      entries: [
+        { offsetSec: 0, durationSec: 2, text: "you know the rules\nand so do I" },
+        { offsetSec: 2, durationSec: 2, text: "a full commitment's\nwhat I'm thinking of" },
+      ],
+    };
+    const out = JSON.parse(formatTranscript(result, "json"));
+    expect(out.transcript.text).toBe(
+      "you know the rules and so do I\na full commitment's what I'm thinking of"
+    );
+    expect(out.transcript.entries[0].text).toBe(
+      "you know the rules\nand so do I"
+    );
   });
 
   it("renders pending with job and source, transcript null", () => {

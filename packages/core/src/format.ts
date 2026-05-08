@@ -40,6 +40,7 @@ function renderJson(result: TranscriptResult): string {
   if (result.kind === "ok") {
     base.transcript = {
       language: result.lang ?? null,
+      text: joinEntryText(result.entries),
       entries: result.entries.map((e) => ({
         offsetSec: e.offsetSec,
         durationSec: e.durationSec,
@@ -64,6 +65,12 @@ function defaultMessage(result: TranscriptResult): string {
     case "transient":
       return result.message;
   }
+}
+
+function joinEntryText(
+  entries: { text: string }[]
+): string {
+  return entries.map((e) => e.text.replace(/\s*\n\s*/g, " ")).join("\n");
 }
 
 function formatTimestamp(totalSec: number): string {
