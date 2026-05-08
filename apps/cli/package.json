@@ -1,0 +1,27 @@
+{
+  "name": "@brief/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "brief": "./dist/main.cjs"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@brief/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.26",
+    "tsup": "^8.3.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}
