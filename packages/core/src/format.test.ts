@@ -8,8 +8,8 @@ const okResult: TranscriptResult = {
   lang: "en",
   entries: [
     { offsetSec: 0, durationSec: 2, text: "hello" },
-    { offsetSec: 65, durationSec: 3, text: "world" },
-    { offsetSec: 3725, durationSec: 4, text: "later" },
+    { offsetSec: 2, durationSec: 2, text: "world" },
+    { offsetSec: 4, durationSec: 2, text: "later" },
   ],
 };
 
@@ -34,9 +34,53 @@ const transientResult: TranscriptResult = {
 };
 
 describe("formatTranscript text format", () => {
-  it("renders ok entries as [MM:SS] lines", () => {
-    expect(formatTranscript(okResult, "text")).toBe(
-      "[00:00] hello\n[01:05] world\n[1:02:05] later"
+  it("renders ok as a single space-separated blob of text", () => {
+    expect(formatTranscript(okResult, "text")).toBe("hello world later");
+  });
+
+  it("normalizes internal soft-wrap newlines within entry text to spaces", () => {
+    const result: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      entries: [
+        {
+          offsetSec: 0,
+          durationSec: 2,
+          text: "you know the rules\nand so do I",
+        },
+        { offsetSec: 2, durationSec: 1, text: "single line" },
+      ],
+    };
+    expect(formatTranscript(result, "text")).toBe(
+      "you know the rules and so do I single line"
+    );
+  });
+
+  it("preserves entry text containing punctuation without inserting breaks", () => {
+    const result: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      entries: [
+        { offsetSec: 0, durationSec: 2, text: "first thought." },
+        { offsetSec: 2, durationSec: 2, text: "second thought" },
+      ],
+    };
+    expect(formatTranscript(result, "text")).toBe(
+      "first thought. second thought"
+    );
+  });
+
+  it("ignores wide timestamp gaps (no paragraph break)", () => {
+    const result: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      entries: [
+        { offsetSec: 0, durationSec: 2, text: "topic A wraps up" },
+        { offsetSec: 30, durationSec: 2, text: "new topic begins" },
+      ],
+    };
+    expect(formatTranscript(result, "text")).toBe(
+      "topic A wraps up new topic begins"
     );
   });
 
@@ -73,20 +117,20 @@ describe("formatTranscript json format", () => {
     expect(out.transcript.language).toBe("en");
     expect(out.transcript.entries).toEqual([
       { offsetSec: 0, durationSec: 2, text: "hello" },
-      { offsetSec: 65, durationSec: 3, text: "world" },
-      { offsetSec: 3725, durationSec: 4, text: "later" },
+      { offsetSec: 2, durationSec: 2, text: "world" },
+      { offsetSec: 4, durationSec: 2, text: "later" },
     ]);
     expect(out.job).toBeNull();
     expect(out.reason).toBeUndefined();
     expect(out.message).toEqual(expect.any(String));
   });
 
-  it("includes a joined `text` field at the transcript level for ok results", () => {
+  it("includes a joined `text` field on ok results (single blob, soft-wraps normalized)", () => {
     const out = JSON.parse(formatTranscript(okResult, "json"));
-    expect(out.transcript.text).toBe("hello\nworld\nlater");
+    expect(out.transcript.text).toBe("hello world later");
   });
 
-  it("normalizes internal newlines in entry text to spaces in joined `text`", () => {
+  it("preserves per-entry `text` verbatim while joined `text` normalizes soft-wraps", () => {
     const result: TranscriptResult = {
       kind: "ok",
       source: "youtube-transcript-plus",
@@ -98,7 +142,7 @@ describe("formatTranscript json format", () => {
     };
     const out = JSON.parse(formatTranscript(result, "json"));
     expect(out.transcript.text).toBe(
-      "you know the rules and so do I\na full commitment's what I'm thinking of"
+      "you know the rules and so do I a full commitment's what I'm thinking of"
     );
     expect(out.transcript.entries[0].text).toBe(
       "you know the rules\nand so do I"

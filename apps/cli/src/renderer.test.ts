@@ -12,7 +12,7 @@ const okTranscript: TranscriptResult = {
   lang: "en",
   entries: [
     { offsetSec: 0, durationSec: 2, text: "hello" },
-    { offsetSec: 65, durationSec: 1, text: "world" },
+    { offsetSec: 2, durationSec: 1, text: "world" },
   ],
 };
 
@@ -62,7 +62,7 @@ function combined(
 describe("render — human format", () => {
   it("renders ok with metadata: header on stderr, transcript on stdout", () => {
     const out = render(combined(okTranscript, okMetadata), "human", false);
-    expect(out.stdout).toBe("[00:00] hello\n[01:05] world\n");
+    expect(out.stdout).toBe("hello world\n");
     expect(out.stderr).toContain("Title: Never Gonna Give You Up");
     expect(out.stderr).toContain("Channel: Rick Astley");
     expect(out.stderr).toContain("Duration: PT3M33S");
@@ -71,7 +71,7 @@ describe("render — human format", () => {
 
   it("renders ok without metadata: bare header with just video id and url", () => {
     const out = render(combined(okTranscript, null), "human", false);
-    expect(out.stdout).toBe("[00:00] hello\n[01:05] world\n");
+    expect(out.stdout).toBe("hello world\n");
     expect(out.stderr).toContain("Video ID: dQw4w9WgXcQ");
     expect(out.stderr).not.toContain("Title:");
     expect(out.stderr).not.toContain("Channel:");

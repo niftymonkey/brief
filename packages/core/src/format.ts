@@ -1,4 +1,4 @@
-import type { TranscriptResult } from "./types";
+import type { TranscriptEntry, TranscriptResult } from "./types";
 
 export const SCHEMA_VERSION = "1.0.0";
 
@@ -14,9 +14,7 @@ export function formatTranscript(
 function renderText(result: TranscriptResult): string {
   switch (result.kind) {
     case "ok":
-      return result.entries
-        .map((e) => `[${formatTimestamp(e.offsetSec)}] ${e.text}`)
-        .join("\n");
+      return joinEntryText(result.entries);
     case "pending":
       return `Transcript generation queued (jobId: ${result.jobId}, retryAfter: ${result.retryAfterSeconds}s)`;
     case "unavailable":
@@ -67,20 +65,9 @@ function defaultMessage(result: TranscriptResult): string {
   }
 }
 
-function joinEntryText(
-  entries: { text: string }[]
-): string {
-  return entries.map((e) => e.text.replace(/\s*\n\s*/g, " ")).join("\n");
-}
-
-function formatTimestamp(totalSec: number): string {
-  const total = Math.floor(totalSec);
-  const seconds = total % 60;
-  const minutes = Math.floor(total / 60) % 60;
-  const hours = Math.floor(total / 3600);
-  const ss = String(seconds).padStart(2, "0");
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${ss}`;
-  }
-  return `${String(minutes).padStart(2, "0")}:${ss}`;
+function joinEntryText(entries: TranscriptEntry[]): string {
+  return entries
+    .map((e) => e.text.replace(/\s*\n\s*/g, " ").trim())
+    .filter((t) => t.length > 0)
+    .join(" ");
 }
