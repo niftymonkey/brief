@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
-import { extractVideoId } from "@/lib/parser";
+import { extractVideoId } from "@brief/core";
 import { fetchTranscript } from "@/lib/transcript";
 import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateBrief } from "@/lib/summarize";

@@ -1,6 +1,6 @@
 # Brief
 
-AI-powered summaries from YouTube videos. Available as a CLI tool or web application. BYOK (bring your own API keys).
+AI-powered summaries from YouTube videos. BYOK (bring your own API keys).
 
 ## Features
 
@@ -11,17 +11,7 @@ AI-powered summaries from YouTube videos. Available as a CLI tool or web applica
 
 ## Getting Started
 
-### CLI
-
-Quick command-line tool for generating briefs from any YouTube video. The CLI was the original proof-of-concept for this project and may lag behind the web app in shared functionality.
-
-```bash
-pnpm brief <youtube-url>
-```
-
-[CLI Documentation](docs/CLI.md)
-
-### Web Application
+### Web application
 
 Full-featured web app with user accounts and saved briefs.
 
@@ -31,11 +21,21 @@ pnpm dev
 
 [Web App Documentation](docs/WEBAPP.md)
 
+### `brief` CLI
+
+A standalone command-line tool that fetches a YouTube video's transcript to stdout. Useful for shell scripts and AI coding agents that want to "watch" a video by reading its captions. Different scope from the web app — transcripts only, no AI summary.
+
+```bash
+brief <url-or-id>
+```
+
+[CLI Documentation](docs/CLI.md)
+
 ## Requirements
 
 - Node.js 18+
-- Anthropic API key
-- YouTube Data API v3 key
+- Anthropic API key (web app)
+- YouTube Data API v3 key (web app; optional for the CLI)
 - Videos must have captions enabled
 
 ## License

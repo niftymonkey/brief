@@ -2,7 +2,7 @@
 export * from "./types";
 
 // URL parsing
-export { extractVideoId } from "./parser";
+export { extractVideoId } from "@brief/core";
 
 // URL extraction
 export { extractUrls, combineUrls } from "./url-extractor";
