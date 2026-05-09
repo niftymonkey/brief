@@ -9,9 +9,10 @@ The CLI lives in this repo at `apps/cli`. To install it globally:
 ```bash
 pnpm install
 pnpm --filter @brief/cli build
-cd apps/cli
-pnpm link --global
+pnpm add -g "$(pwd)/apps/cli"
 ```
+
+The third line works on pnpm 10 and 11 alike. (`pnpm link --global` was the older idiom and was removed/changed in pnpm 10; `pnpm add -g <path>` is the supported form going forward.)
 
 Verify:
 
@@ -20,9 +21,22 @@ which brief        # should print a path under pnpm's global bin
 brief --help
 ```
 
-After source changes, run `pnpm --filter @brief/cli build` from the repo root — the global symlink already points at `apps/cli/dist/main.cjs`, so the rebuild lands automatically.
+After source changes, run `pnpm --filter @brief/cli build` from the repo root — the global install symlinks back to `apps/cli`, so the rebuilt `dist/main.cjs` is what `brief` runs on the next invocation. No re-install needed.
 
-To remove later: `cd apps/cli && pnpm unlink --global`.
+To remove later: `pnpm remove -g @brief/cli`.
+
+### One-time prerequisite: pnpm's global bin on PATH
+
+If `which brief` returns nothing after install, pnpm's global bin directory isn't on your `$PATH`. Run `pnpm setup` once and restart your shell — it adds the right exports to your shell config. (Already-configured users can skip this.)
+
+For non-interactive contexts (CI runners, agent shells, subprocesses) where `~/.zshrc` or `~/.bashrc` aren't sourced, export the vars inline before invoking `brief`:
+
+```bash
+export PNPM_HOME="$HOME/Library/pnpm"   # macOS — adjust per your OS
+export PATH="$PNPM_HOME/bin:$PATH"
+```
+
+On Linux, `PNPM_HOME` typically defaults to `$HOME/.local/share/pnpm`.
 
 ## Usage
 
