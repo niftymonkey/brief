@@ -24,11 +24,6 @@ export interface TranscriptEntry {
   lang?: string;
 }
 
-export interface BriefConfig {
-  anthropicApiKey: string;
-  youtubeApiKey: string;
-}
-
 export interface Link {
   url: string;
   title: string;     // Short, concise title for the link

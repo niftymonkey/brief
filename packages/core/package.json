@@ -10,7 +10,9 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "find-pre-candidates": "tsx scripts/find-pre-candidates.ts",
+    "discover-candidates": "tsx scripts/discover-candidates.ts"
   },
   "dependencies": {
     "@googleapis/youtube": "^18.0.0",
@@ -20,6 +22,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.19.26",
+    "dotenv": "^17.3.1",
+    "pickai": "^2.1.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"
   }

@@ -1,6 +1,7 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { DIGEST_MODEL } from "@brief/core";
 import type { TranscriptEntry, VideoMetadata, StructuredBrief, ContentSection, Chapter, KeyPoint } from "./types";
 import { combineUrls } from "./url-extractor";
 import { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts";
@@ -135,7 +136,7 @@ function createBriefSchema(keyPointsMin: number, keyPointsMax: number) {
           z.object({
             text: z.string().describe("The synthesized takeaway or insight"),
             timestamp: z.string().describe("Approximate timestamp when this point is discussed (MM:SS format)"),
-            isTangent: z.boolean().optional().describe("True only for significant (30+ second) digressions from the chapter topic - not brief asides"),
+            isTangent: z.boolean().describe("True only for significant (30+ second) digressions from the chapter topic — not brief asides. Set false for all non-tangent points."),
           })
         ).describe(`${keyPointsMin}-${keyPointsMax} substantive takeaways, plus any significant tangents (tangents are additional, not counted against the ${keyPointsMin}-${keyPointsMax} requirement)`),
       })
@@ -160,11 +161,14 @@ function createBriefSchema(keyPointsMin: number, keyPointsMax: number) {
 }
 
 /**
- * Generates a structured AI-powered brief of a video transcript using Claude
+ * Generates a structured AI-powered brief of a video transcript.
+ *
+ * Model choice is driven by `DIGEST_MODEL` from `@brief/core` and routed
+ * through OpenRouter so the model can change without an SDK swap.
  *
  * @param transcript - Array of transcript entries with timestamps
  * @param metadata - Video metadata including description and pinned comment
- * @param apiKey - Anthropic API key
+ * @param apiKey - OpenRouter API key
  * @param chapters - Optional creator-defined chapters to use as section structure
  * @returns Structured brief with sections and categorized links
  */
@@ -207,8 +211,8 @@ export async function generateBrief(
   const briefSchema = createBriefSchema(2, 4);
 
   try {
-    const anthropic = createAnthropic({ apiKey });
-    const model = anthropic("claude-sonnet-4-5");
+    const openrouter = createOpenRouter({ apiKey });
+    const model = openrouter(DIGEST_MODEL);
 
     const result = await generateText({
       model,
@@ -239,13 +243,13 @@ export async function generateBrief(
   } catch (error: any) {
     if (error.message?.includes("401") || error.message?.includes("authentication")) {
       throw new Error(
-        "Invalid Anthropic API key. Get a key at: https://console.anthropic.com/"
+        "Invalid OpenRouter API key. Get a key at: https://openrouter.ai/keys"
       );
     }
 
     if (error.message?.includes("rate limit")) {
       throw new Error(
-        "Anthropic API rate limit exceeded. Please wait and try again."
+        "OpenRouter rate limit exceeded. Please wait and try again."
       );
     }
 

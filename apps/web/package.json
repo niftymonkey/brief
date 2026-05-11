@@ -26,10 +26,11 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.15",
     "@brief/core": "workspace:*",
     "@brief/shared": "workspace:*",
-    "@ai-sdk/anthropic": "^3.0.15",
     "@googleapis/youtube": "^18.0.0",
+    "@openrouter/ai-sdk-provider": "^2.9.0",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-checkbox": "^1.3.3",
