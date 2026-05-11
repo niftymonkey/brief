@@ -41,9 +41,9 @@ Brief's digest pipeline feeds the LLM only the spoken transcript of a video. For
 
 1. **v1 launches via the CLI only.** Web app stays transcript-only. The egress constraint (see [Constraints](#constraints--boundaries)) makes server-side frame extraction non-functional in production; pushing the pipeline to the user's machine via the CLI is the architectural response.
 2. **Auth gating, not allowlist gating.** `brief generate` requires `brief login` (WorkOS device flow). Anyone signed in can run augmented briefs; quota/abuse are gated by per-account rate limits (v1: per-day cap on `generate` submissions), not by an email allowlist.
-3. **Graceful-degrade failure mode** with `framesStatus` markers. CLI never crashes on a frames failure — it falls back to transcript-only output and surfaces the failure reason in stderr / metrics.
+3. **Graceful-degrade failure mode** with `frames_status` markers. CLI never crashes on a frames failure — it falls back to transcript-only output and surfaces the failure reason in stderr / metrics.
 4. **Single `transcript` JSONB column** on `digests`. Content varies by submission: speech-only when `generate` is invoked without `--with-frames`; augmented (speech + `[VISUAL]` markers) when invoked with the flag.
-5. **Single `framesStatus` enum:** `'included' | 'attempted-failed' | 'not-requested'`. Three values capture intent and outcome together.
+5. **Single `frames_status` enum:** `'included' | 'attempted-failed' | 'not-requested'`. Three values capture intent and outcome together.
 6. **Replace on regenerate.** One brief per `(user, video)`. Submitting a new `generate` for the same video overwrites the previous brief.
 7. **Pickai foundational, landed in #86.** `@brief/core` exports `DIGEST_MODEL`, `CLASSIFY_MODEL`, `VISION_MODEL`. Discover-candidates pipeline is in `packages/core/scripts/`. Locked picks documented in `docs/llm-model-selection.md`.
 8. **Cost cap 100 candidates** per video as v1 default. Capture per-brief metrics in `metrics` JSONB column for data-driven iteration.

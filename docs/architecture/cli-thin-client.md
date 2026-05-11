@@ -135,6 +135,7 @@ export const FramesMetricsSchema = z.object({
   classifierModel: z.string(),
   visionModel: z.string(),
   wallClockMs: z.number(),
+  costSource: z.literal("cli-reported"),   // v1 only; follow-up issue broadens this to z.enum(["cli-reported", "server-issued"])
 });
 
 export const TranscriptSubmissionSchema = z.object({
@@ -191,7 +192,7 @@ Callers pattern-match on `kind`. The `auth-required` branch triggers a `login` p
 
 ### BriefIntake contract (`apps/web`)
 
-```
+```http
 POST /api/brief/intake
 Authorization: Bearer <access-token>
 Content-Type: application/json
@@ -202,6 +203,7 @@ Body: TranscriptSubmission (Zod-validated)
 {
   "schemaVersion": "2.0.0",
   "briefId": "...",
+  "briefUrl": "https://brief.niftymonkey.dev/brief/...",
   "brief": { "summary": "...", "sections": [...], "relatedLinks": [...], "otherLinks": [...] },
   "metadata": { ... }
 }
@@ -333,7 +335,7 @@ The existing CLI emits `SCHEMA_VERSION = "1.0.0"` for transcript-only JSON outpu
 | Surface | v1 behavior | v2 behavior |
 |---|---|---|
 | CLI JSON output | Flat entries: `{ offsetSec, durationSec, text }` | Sum-type entries: `{ kind: "speech", offsetSec, durationSec, text }` |
-| `--json` consumer contract | `entries[i].text` accessible directly | Consumer must check `entries[i].kind === "speech"` before reading `text`; visual entries carry different fields |
+| `--json` consumer contract | `entries[i].text` accessible directly | `text` is on both variants; consumers branch on `kind` only for variant-specific fields (e.g., `durationSec` and `lang` on `speech`, `mode` on `visual`) |
 | Server intake | (does not exist in v1) | Accepts only `schemaVersion: "2.0.0"` initially. On `1.0.0`, return `409` with `serverAccepts: ["2.0.0"]` and a message telling the user to upgrade. |
 
 The CLI does not need to retain v1 output mode. There is no external programmatic consumer of the v1 CLI JSON today; the schema-version field exists precisely so this bump can happen cleanly. Web-app consumers of the existing transcript JSONB column in the database are unaffected — the column already stores a richer shape than the v1 CLI emitted.

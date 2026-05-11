@@ -58,13 +58,13 @@ What the design fixes versus the spike:
 | **`apps/cli/src/handlers/runTranscript.ts`** (new) | The `transcript` subcommand handler. Calls `fetchTranscript` then optionally `extractFrames`. Renders to stdout. |
 | **`apps/cli/src/handlers/runGenerate.ts`** (new) | The `generate` subcommand handler. Same prelude as `runTranscript`, then builds a submission and POSTs via `HostedClient.submit()`. |
 
-The DB columns (`transcript`, `framesStatus`, `metrics`) and migration shipped in #85 (PR #93). The model-selection layer (`packages/core/src/models.ts`) shipped in #86 (PR #92). The CLI auth + submission shape ship in #88. This issue (#87) lands the frames module and its two CLI handler integrations on top of that foundation.
+The DB columns (`transcript`, `frames_status`, `metrics`) and migration shipped in #85 (PR #93). The model-selection layer (`packages/core/src/models.ts`) shipped in #86 (PR #92). The CLI auth + submission shape ship in #88. This issue (#87) lands the frames module and its two CLI handler integrations on top of that foundation.
 
 ### `apps/web` integration points
 
 **None for #87.** The web app's brief route remains transcript-only. There is no "include video frames" checkbox in the URL form; there is no `isFramesAllowed` allowlist; there is no `framesQuotaRemaining` rate-limit gate. All of that scope existed under the prior server-side-orchestration design and is removed by the CLI-runs-locally pivot.
 
-The hosted intake endpoint (`POST /api/brief/intake`, defined by #88) receives augmented transcripts from the CLI without distinguishing them from transcript-only submissions at the routing layer — the discriminator is on the request body's `frames` field. The brief route writes `framesStatus = 'included'` for augmented submissions and `'not-requested'` for plain ones; the existing `framesStatus = 'attempted-failed'` value carries through when the CLI ships a failure result.
+The hosted intake endpoint (`POST /api/brief/intake`, defined by #88) receives augmented transcripts from the CLI without distinguishing them from transcript-only submissions at the routing layer — the discriminator is on the request body's `frames` field. The brief route writes `frames_status = 'included'` for augmented submissions and `'not-requested'` for plain ones; the existing `frames_status = 'attempted-failed'` value carries through when the CLI ships a failure result.
 
 ## Public interface
 
@@ -212,7 +212,7 @@ The **interface is the test surface**: callers and contract tests cross `extract
 
 Currency-agnostic shape per [[currency-agnostic-metrics]] (the decision from #85): the metrics blob stores tokens, model, and latency only. Cost is derived on demand via `estimateCost(model, in, out)` from `@brief/core`. v1 has no dashboard for this data; the value is iteration — "which phase is slow, which dominates cost, where do we tune."
 
-The CLI persists the entire `FramesMetrics` blob into the brief row's `metrics` JSONB unmodified via the submission. There is a known limitation: in v1, the cost values derived from CLI-side LLM calls are *self-reported* — the server cannot independently verify token counts because it didn't make the calls. The submission carries a `cost_source: "cli-reported"` discriminator. The follow-up issue on server-issued ephemeral tokens (planned) flips this to `cost_source: "server-issued"` and makes the values trustable for billing/quota purposes.
+The CLI persists the entire `FramesMetrics` blob into the brief row's `metrics` JSONB unmodified via the submission. There is a known limitation: in v1, the cost values derived from CLI-side LLM calls are *self-reported* — the server cannot independently verify token counts because it didn't make the calls. The `FramesMetrics` blob includes a `costSource: "cli-reported"` field (defined on `FramesMetricsSchema` in `docs/architecture/cli-thin-client.md`). The follow-up issue on server-issued ephemeral tokens (planned) broadens this to `costSource: "server-issued"` and makes the values trustable for billing/quota purposes.
 
 ## Open questions for issue #87's implementation
 
