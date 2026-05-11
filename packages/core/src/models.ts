@@ -60,6 +60,16 @@ export function estimateCost(
   inputTokens: number,
   outputTokens: number,
 ): number {
+  if (
+    !Number.isFinite(inputTokens) ||
+    !Number.isFinite(outputTokens) ||
+    inputTokens < 0 ||
+    outputTokens < 0
+  ) {
+    throw new Error(
+      `Invalid token count: inputTokens and outputTokens must be finite, non-negative numbers (got ${inputTokens}, ${outputTokens}).`,
+    );
+  }
   const price = PRICING[modelId];
   if (!price) {
     throw new Error(

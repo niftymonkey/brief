@@ -90,18 +90,33 @@ interface BenchmarkEntry {
   timeToFirstToken?: number;
 }
 
+async function fetchJsonOrThrow<T>(
+  url: string,
+  init: RequestInit | undefined,
+  label: string,
+): Promise<T> {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(
+      `${label} request failed: ${response.status} ${response.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ""}`,
+    );
+  }
+  return response.json() as Promise<T>;
+}
+
 let benchmarks: BenchmarkEntry[];
 let benchmarkLabel: string;
 
 if (benchmarkSource === "lmarena") {
   console.log("Fetching LMArena benchmark scores...");
-  const response = await fetch(
+  const scoresData = await fetchJsonOrThrow<
+    Record<string, { text: { overall: Record<string, number> } }>
+  >(
     "https://raw.githubusercontent.com/nakasyou/lmarena-history/main/output/scores.json",
+    undefined,
+    "LMArena benchmark",
   );
-  const scoresData = (await response.json()) as Record<
-    string,
-    { text: { overall: Record<string, number> } }
-  >;
   const dates = Object.keys(scoresData).sort();
   const latestScores = scoresData[dates[dates.length - 1]].text.overall;
   benchmarks = Object.entries(latestScores).map(([modelId, score]) => ({
@@ -121,13 +136,13 @@ if (benchmarkSource === "lmarena") {
     process.exit(1);
   }
   console.log("Fetching Artificial Analysis benchmark scores...");
-  const response = await fetch(
+  const aaData = await fetchJsonOrThrow<{
+    data: Array<Record<string, unknown>>;
+  }>(
     "https://artificialanalysis.ai/api/v2/data/llms/models",
     { headers: { "x-api-key": aaKey } },
+    "Artificial Analysis benchmark",
   );
-  const aaData = (await response.json()) as {
-    data: Array<Record<string, unknown>>;
-  };
   benchmarks = aaData.data
     .filter((m) => m.evaluations)
     .map((m) => {

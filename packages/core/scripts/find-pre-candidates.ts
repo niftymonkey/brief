@@ -29,6 +29,7 @@ import { fileURLToPath } from "url";
 import {
   fromModelsDev,
   applyFilter,
+  matchesModel,
   OPENROUTER_PROVIDERS,
   type Model,
   type ModelFilter,
@@ -97,28 +98,36 @@ const visionFilter: ModelFilter = {
 // --- Build pre-candidates ---
 
 // Aggregators republish the same logical model under multiple provider
-// records (e.g. deepseek-v4-pro is reachable as `deepseek/deepseek-v4-pro`,
-// `nvidia/deepseek-ai/deepseek-v4-pro`, `togetherai/deepseek-ai/DeepSeek-V4-Pro`).
-// Same family + same release date = same logical release. Keep one.
+// records (e.g. deepseek-v4-pro is reachable as `deepseek/deepseek-v4-pro`
+// and `togetherai/deepseek-ai/DeepSeek-V4-Pro`). pickai's `matchesModel`
+// normalizes namespace prefixes, date suffixes, dots/hyphens, and case
+// when comparing two IDs — exactly the cross-format equivalence we need.
+// We pair that with `releaseDate` so different generations sharing a family
+// name (e.g. claude-sonnet-4-5 vs claude-sonnet-4-6) don't collapse.
 //
 // Preference within a group:
 //   1. Direct-provider record (id without an aggregator namespace prefix).
 //   2. Cheapest known input price (treats $0 as suspect; falls behind real pricing).
 function dedupeByRelease(models: Model[]): Model[] {
-  const groups = new Map<string, Model[]>();
-  for (const m of models) {
-    const key = `${m.family ?? m.id}|${m.releaseDate ?? ""}`;
-    const arr = groups.get(key) ?? [];
-    arr.push(m);
-    groups.set(key, arr);
-  }
-
   const isDirect = (m: Model) =>
     !m.id.includes("/") || m.id.startsWith(`${m.provider}/`);
   const cost = (m: Model) =>
     m.cost?.input && m.cost.input > 0 ? m.cost.input : Infinity;
 
-  return [...groups.values()].map((group) => {
+  const groups: Model[][] = [];
+  for (const m of models) {
+    const date = m.releaseDate ?? "";
+    const group = groups.find(
+      (g) => (g[0].releaseDate ?? "") === date && matchesModel(g[0].id, m.id),
+    );
+    if (group) {
+      group.push(m);
+    } else {
+      groups.push([m]);
+    }
+  }
+
+  return groups.map((group) => {
     const direct = group.filter(isDirect);
     const pool = direct.length > 0 ? direct : group;
     return pool.sort((a, b) => cost(a) - cost(b))[0];
