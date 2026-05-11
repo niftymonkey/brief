@@ -5,7 +5,7 @@ import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateBrief } from "@/lib/summarize";
 import { extractChapters } from "@/lib/chapters";
 import { isEmailAllowed } from "@/lib/access";
-import { updateBrief, getBriefById } from "@/lib/db";
+import { updateBrief, briefExistsForUser } from "@/lib/db";
 import type { StoredTranscript } from "@/lib/types";
 
 type Step = "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
@@ -53,9 +53,9 @@ export async function POST(
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // Verify brief exists and belongs to user
-        const existingBrief = await getBriefById(id, user.id);
-        if (!existingBrief) {
+        // Verify brief exists and belongs to user (lightweight — skip JSONB fields)
+        const exists = await briefExistsForUser(id, user.id);
+        if (!exists) {
           controller.enqueue(encoder.encode(createEvent("error", "Brief not found")));
           controller.close();
           return;

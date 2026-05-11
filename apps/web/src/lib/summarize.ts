@@ -186,6 +186,7 @@ export async function generateBrief(
   const stubResult: TranscriptResult = {
     kind: "ok",
     source: "youtube-transcript-plus",
+    ...(transcript[0]?.lang ? { lang: transcript[0].lang } : {}),
     entries: transcript.map((e) => ({
       offsetSec: e.offset,
       durationSec: e.duration,

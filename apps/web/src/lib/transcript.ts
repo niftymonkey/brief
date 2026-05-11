@@ -91,6 +91,7 @@ export async function fetchTranscript(
   if (
     msg.includes("credit") ||
     msg.includes("billing") ||
+    msg.includes("quota") ||
     msg.includes("subscription") ||
     msg.includes("limit exceeded")
   ) {

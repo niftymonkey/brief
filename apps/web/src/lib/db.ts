@@ -301,6 +301,25 @@ export async function getBriefById(
 }
 
 /**
+ * Lightweight ownership check — returns true if the given brief id belongs to
+ * the user. Used by routes that only need to authorize an action (e.g.
+ * regenerate); skipping the heavy `transcript` and `metrics` JSONB columns
+ * matters at scale because brief rows can grow to 100KB+ once transcripts
+ * are populated.
+ */
+export async function briefExistsForUser(
+  id: string,
+  userId: string
+): Promise<boolean> {
+  const result = await sql<{ exists: boolean }>`
+    SELECT EXISTS(
+      SELECT 1 FROM digests WHERE id = ${id} AND user_id = ${userId}
+    ) as exists
+  `;
+  return result.rows[0]?.exists ?? false;
+}
+
+/**
  * Get a brief by video ID for a specific user
  */
 export async function getBriefByVideoId(
@@ -454,7 +473,7 @@ export async function copyBriefForUser(
       ${sourceBrief.hasCreatorChapters},
       ${searchText},
       ${sourceBrief.transcript ? JSON.stringify(sourceBrief.transcript) : null},
-      ${sourceBrief.metrics ? JSON.stringify(sourceBrief.metrics) : null},
+      ${null},
       ${sourceBrief.framesStatus}
     )
     RETURNING
