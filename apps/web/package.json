@@ -11,6 +11,7 @@
     "lint": "next lint",
     "migrate": "tsx scripts/migrate.ts",
     "backfill-search": "tsx scripts/backfill-search.ts",
+    "query": "tsx scripts/query.ts",
     "security": "pnpm security:code && pnpm security:secrets",
     "security:code": "docker run --rm -v \"$(pwd):/src\" semgrep/semgrep semgrep scan --config auto",
     "security:secrets": "docker run --rm -v \"$(pwd):/repo\" trufflesecurity/trufflehog:latest git file:///repo --only-verified --fail"
