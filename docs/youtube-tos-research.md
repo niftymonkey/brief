@@ -27,9 +27,9 @@ The honest two-minute picture:
 The current consumer ToS is [dated 15 December 2023](https://www.youtube.com/static?template=terms) and contains the operative restrictions under "Permissions and Restrictions." Verbatim:
 
 > "access, reproduce, download, distribute, transmit, broadcast, display, sell, license, alter, modify or otherwise use any part of the Service or any Content except: (a) as expressly authorized by the Service; or (b) with prior written permission from YouTube..."
-
+>
 > "access the Service using any automated means (such as robots, botnets or scrapers) except (a) in the case of public search engines, in accordance with YouTube's robots.txt file; or (b) with YouTube's prior written permission..."
-
+>
 > "circumvent, disable, fraudulently engage with, or otherwise interfere with any part of the Service (or attempt to do any of these things), including security-related features or features that (a) prevent or restrict the copying or other use of Content or (b) limit the use of the Service or Content..."
 
 Two observations matter to brief's posture:
@@ -80,7 +80,7 @@ The RIAA sent a [DMCA §1201 takedown](https://github.com/github/dmca/blob/maste
 
 GitHub reinstated on 16 November 2020, committed to expert review for future §1201 claims, and established a $1M open source legal defense fund. The RIAA did not pursue further action against the project.
 
-**What this implies for brief:** the tool itself is legally robust. The argument that *using* yt-dlp triggers §1201 liability for the downstream consumer is correspondingly weak — the underlying premise (that yt-dlp circumvents a TPM) has been publicly contested and abandoned. §1201 is not a live exposure for brief.
+**What this implies for brief:** the tool itself is legally robust. The argument that *using* yt-dlp triggers §1201 liability for the downstream consumer is correspondingly weak — the underlying premise (that yt-dlp circumvents a TPM) has been publicly contested and abandoned. Based on the current public record, §1201 appears to be a low-probability exposure for brief — not zero, but well-supported as a tolerable risk by precedent.
 
 What it does **not** establish: that YouTube cannot enforce its ToS contract against a downstream consumer for breach. That's a separate cause of action with separate elements.
 
@@ -160,7 +160,7 @@ Caveat: absence of public enforcement does not equal tolerance — many cease-an
 
 ### 3.3 §1201 anti-circumvention — settled enough
 
-The combined effect of RIAA v. youtube-dl's resolution and the EFF letter (which Google has never publicly contested in any forum) is that yt-dlp's signature-decoding logic is not treated as §1201 circumvention. No subsequent case has tested it. Brief is not exposed to §1201 by using yt-dlp.
+The combined effect of RIAA v. youtube-dl's resolution and the EFF letter (which Google has never publicly contested in any forum) is that yt-dlp's signature-decoding logic is not treated as §1201 circumvention. No subsequent case has tested it. Based on current public precedent, using yt-dlp is unlikely to create primary §1201 exposure for brief.
 
 ---
 
