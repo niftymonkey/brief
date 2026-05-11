@@ -124,13 +124,12 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+        const openrouterApiKey = process.env.OPENROUTER_API_KEY;
         const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 
-        // Log environment check (not values, just presence)
-        console.log(`[BRIEF] Env check: ANTHROPIC_API_KEY=${!!anthropicApiKey}, YOUTUBE_API_KEY=${!!youtubeApiKey}`);
+        console.log(`[BRIEF] Env check: OPENROUTER_API_KEY=${!!openrouterApiKey}, YOUTUBE_API_KEY=${!!youtubeApiKey}`);
 
-        if (!anthropicApiKey || !youtubeApiKey) {
+        if (!openrouterApiKey || !youtubeApiKey) {
           controller.enqueue(encoder.encode(createEvent("error", "API keys not configured")));
           controller.close();
           return;
@@ -155,7 +154,7 @@ export async function POST(request: NextRequest) {
         // Step 5: Generate brief
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
         console.log(`[BRIEF] Starting brief generation`);
-        const brief = await generateBrief(transcript, metadata, anthropicApiKey, chapters);
+        const brief = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
         console.log(`[BRIEF] Brief generated successfully`);
 
         // Step 6: Save or update brief

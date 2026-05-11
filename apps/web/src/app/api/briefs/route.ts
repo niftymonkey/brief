@@ -95,10 +95,10 @@ export async function POST(request: NextRequest) {
     try {
       await updateBriefStatus(jobId, "processing");
 
-      const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+      const openrouterApiKey = process.env.OPENROUTER_API_KEY;
       const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 
-      if (!anthropicApiKey || !youtubeApiKey) {
+      if (!openrouterApiKey || !youtubeApiKey) {
         await updateBriefStatus(jobId, "failed", "API keys not configured");
         return;
       }
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
       const metadata = await fetchVideoMetadata(videoId, youtubeApiKey);
       const chapters = extractChapters(metadata.description, metadata.duration);
       const transcript = await fetchTranscript(videoId);
-      const brief = await generateBrief(transcript, metadata, anthropicApiKey, chapters);
+      const brief = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
       const hasCreatorChapters = chapters !== null && chapters.length > 0;
 
       await completePendingBrief(userId, jobId, metadata, brief, hasCreatorChapters);

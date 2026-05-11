@@ -40,10 +40,10 @@ export async function POST(
     return NextResponse.json({ error: "Brief ID and video ID are required" }, { status: 400 });
   }
 
-  const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+  const openrouterApiKey = process.env.OPENROUTER_API_KEY;
   const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 
-  if (!anthropicApiKey || !youtubeApiKey) {
+  if (!openrouterApiKey || !youtubeApiKey) {
     return NextResponse.json({ error: "API keys not configured" }, { status: 500 });
   }
 
@@ -78,7 +78,7 @@ export async function POST(
 
         // Step 3: Generate brief
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
-        const brief = await generateBrief(transcript, metadata, anthropicApiKey, chapters);
+        const brief = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
         console.log(`[REGENERATE] Brief generated`);
 
         // Step 4: Save
