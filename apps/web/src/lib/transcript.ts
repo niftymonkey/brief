@@ -1,152 +1,104 @@
-import { Supadata, type Transcript } from "@supadata/js";
-import { fetchTranscript as fetchYouTubeTranscript } from "youtube-transcript-plus";
-import type { TranscriptEntry } from "./types";
+import { fetchTranscript as fetchTranscriptCore } from "@brief/core";
+import type { SourceName, TranscriptEntry } from "./types";
 
 /**
- * Convert Supadata transcript to our TranscriptEntry format
+ * Result of fetching a video's transcript. Carries the speech entries (web
+ * shape: offset/duration in seconds), the source that produced them, and the
+ * detected language when known. Persistence layers can reshape entries to
+ * `@brief/core`'s canonical `offsetSec/durationSec` form for storage.
  */
-function convertSupadataTranscript(transcript: Transcript): TranscriptEntry[] {
-  if (typeof transcript.content === "string") {
-    throw new Error("Transcript returned without timestamps - cannot process");
-  }
-  if (!transcript.content) {
-    throw new Error("No transcript content available");
-  }
-  // Supadata returns offset/duration in milliseconds, we need seconds
-  return transcript.content.map((entry) => ({
-    text: entry.text,
-    offset: entry.offset / 1000,
-    duration: entry.duration / 1000,
-    lang: transcript.lang,
-  }));
+export interface FetchedTranscript {
+  entries: TranscriptEntry[];
+  source: SourceName;
+  lang?: string;
 }
 
 /**
- * Fetches transcript using Supadata API (for cloud deployments)
- * Uses mode: 'auto' which falls back to AI generation if native transcript unavailable
- */
-async function fetchWithSupadata(videoId: string): Promise<TranscriptEntry[]> {
-  const supadata = new Supadata({
-    apiKey: process.env.SUPADATA_API_KEY!,
-  });
-
-  // Use the newer transcript() API with mode: 'auto' which may have better success
-  // than the deprecated youtube.transcript() method
-  const result = await supadata.transcript({
-    url: `https://www.youtube.com/watch?v=${videoId}`,
-    mode: "auto",
-  });
-
-  // Handle error returned as data (Supadata SDK quirk - doesn't always throw)
-  if ("error" in result) {
-    const { details, message } = result as { details?: string; message?: string };
-    throw new Error(details || message || "Unknown Supadata error");
-  }
-
-  // Handle async job case - transcript is being generated
-  if ("jobId" in result) {
-    console.log(
-      `[TRANSCRIPT] Transcript generation queued, jobId: ${result.jobId}`
-    );
-    throw new Error(
-      "TRANSCRIPT_GENERATING: This video's transcript is being generated. Please try again in 1-2 minutes."
-    );
-  }
-
-  return convertSupadataTranscript(result);
-}
-
-/**
- * Fetches transcript using youtube-transcript-plus (for local development)
- * This library works without an API key but is blocked by YouTube on cloud platforms
- */
-async function fetchWithYoutubeTranscriptPlus(
-  videoId: string
-): Promise<TranscriptEntry[]> {
-  const rawTranscript = await fetchYouTubeTranscript(videoId);
-
-  // youtube-transcript-plus returns timestamps already in seconds
-  return rawTranscript.map((entry) => ({
-    text: entry.text,
-    offset: entry.offset,
-    duration: entry.duration,
-    lang: entry.lang,
-  }));
-}
-
-/**
- * Fetches the transcript for a YouTube video
+ * Fetches the transcript for a YouTube video via `@brief/core`'s cascade.
  *
- * Uses Supadata API when SUPADATA_API_KEY is set (required for cloud deployments),
- * otherwise falls back to youtube-transcript-plus (works locally without API key)
+ * Source selection preserves the original env-driven exclusivity: when
+ * `SUPADATA_API_KEY` is set, only Supadata is used (cloud deployments);
+ * otherwise only `youtube-transcript-plus` is used (local development).
+ * The core layer provides retry policy + structured outcomes for free.
  *
  * @param videoId - YouTube video ID
- * @returns Array of transcript entries with timestamps
- * @throws Error if captions are disabled or unavailable
+ * @returns Entries, source, and detected language
+ * @throws Error with a user-facing message; the brief API routes surface
+ *         these via `body.error` and the Chrome extension reads them directly,
+ *         so the wording is part of the contract.
  */
 export async function fetchTranscript(
-  videoId: string
-): Promise<TranscriptEntry[]> {
+  videoId: string,
+): Promise<FetchedTranscript> {
   const startTime = Date.now();
-  const useSupadata = !!process.env.SUPADATA_API_KEY;
+  const supadataApiKey = process.env.SUPADATA_API_KEY;
+  const useSupadata = !!supadataApiKey;
 
   console.log(
-    `[TRANSCRIPT] Starting fetch for videoId: ${videoId} using ${useSupadata ? "Supadata API" : "youtube-transcript-plus (local mode)"}`
+    `[TRANSCRIPT] Starting fetch for videoId: ${videoId} using ${useSupadata ? "Supadata API" : "youtube-transcript-plus (local mode)"}`,
   );
 
-  try {
-    const entries = useSupadata
-      ? await fetchWithSupadata(videoId)
-      : await fetchWithYoutubeTranscriptPlus(videoId);
+  const result = await fetchTranscriptCore(videoId, {
+    supadataApiKey,
+    sources: useSupadata ? ["supadata"] : ["youtube-transcript-plus"],
+  });
 
+  if (result.kind === "ok") {
+    const entries: TranscriptEntry[] = result.entries.map((e) => ({
+      text: e.text,
+      offset: e.offsetSec,
+      duration: e.durationSec,
+      lang: e.lang,
+    }));
     console.log(
-      `[TRANSCRIPT] Success in ${Date.now() - startTime}ms, entries: ${entries.length}`
+      `[TRANSCRIPT] Success in ${Date.now() - startTime}ms, entries: ${entries.length}`,
     );
+    return {
+      entries,
+      source: result.source,
+      ...(result.lang ? { lang: result.lang } : {}),
+    };
+  }
 
-    return entries;
-  } catch (error: unknown) {
-    console.error(
-      `[TRANSCRIPT] Failed in ${Date.now() - startTime}ms:`,
-      error
+  console.error(
+    `[TRANSCRIPT] Failed in ${Date.now() - startTime}ms: ${result.kind} — ${result.message}`,
+  );
+
+  if (result.kind === "pending") {
+    throw new Error(
+      "This video's transcript is being generated. Please try again in 1-2 minutes.",
     );
+  }
 
-    const errorMsg =
-      error instanceof Error ? error.message?.toLowerCase() : "";
-
-    // Pass through transcript generation message as-is
-    if (errorMsg.includes("transcript_generating")) {
+  if (result.kind === "unavailable") {
+    if (result.reason === "no-captions") {
       throw new Error(
-        "This video's transcript is being generated. Please try again in 1-2 minutes."
+        "No captions/transcript available for this video. Try a video with auto-generated or manual captions.",
       );
     }
-
-    if (errorMsg.includes("disabled") || errorMsg.includes("not available")) {
-      throw new Error(
-        "No captions/transcript available for this video. Try a video with auto-generated or manual captions."
-      );
-    }
-
-    if (errorMsg.includes("unavailable")) {
+    if (result.reason === "video-removed" || result.reason === "video-private") {
       throw new Error("Video is unavailable or has been removed");
     }
-
-    if (errorMsg.includes("invalid")) {
+    if (result.reason === "invalid-id") {
       throw new Error("Invalid video ID");
     }
-
-    // Supadata credit/billing errors
-    if (
-      errorMsg.includes("credit") ||
-      errorMsg.includes("billing") ||
-      errorMsg.includes("subscription") ||
-      errorMsg.includes("limit exceeded")
-    ) {
-      throw new Error(
-        "Supadata API credits exhausted. Please add credits in your Supadata dashboard."
-      );
-    }
-
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to fetch transcript: ${message}`);
   }
+
+  // Transient (or any other failure). Supadata's credit/billing/quota errors
+  // surface as transient messages; preserve the dedicated user-facing string
+  // for those so operators know what to fix.
+  const msg = result.message.toLowerCase();
+  if (
+    msg.includes("credit") ||
+    msg.includes("billing") ||
+    msg.includes("quota") ||
+    msg.includes("subscription") ||
+    msg.includes("limit exceeded")
+  ) {
+    throw new Error(
+      "Supadata API credits exhausted. Please add credits in your Supadata dashboard.",
+    );
+  }
+
+  throw new Error(`Failed to fetch transcript: ${result.message}`);
 }

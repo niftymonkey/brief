@@ -11,6 +11,7 @@
     "lint": "next lint",
     "migrate": "tsx scripts/migrate.ts",
     "backfill-search": "tsx scripts/backfill-search.ts",
+    "query": "tsx scripts/query.ts",
     "security": "pnpm security:code && pnpm security:secrets",
     "security:code": "docker run --rm -v \"$(pwd):/src\" semgrep/semgrep semgrep scan --config auto",
     "security:secrets": "docker run --rm -v \"$(pwd):/repo\" trufflesecurity/trufflehog:latest git file:///repo --only-verified --fail"
@@ -42,7 +43,6 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
-    "@supadata/js": "^1.3.2",
     "@vercel/postgres": "^0.10.0",
     "@workos-inc/authkit-nextjs": "^2.13.0",
     "ai": "^6.0.39",
@@ -60,7 +60,6 @@
     "react-dom": "19.2.3",
     "react-hotkeys-hook": "^5.2.3",
     "tailwind-merge": "^3.4.0",
-    "youtube-transcript-plus": "^1.1.2",
     "zod": "^4.3.5"
   },
   "devDependencies": {

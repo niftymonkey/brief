@@ -57,6 +57,52 @@ export interface BriefResult {
   outputPath?: string;
 }
 
+/**
+ * Status of the optional video-frames augmentation for a brief.
+ *
+ * - `not-requested` — frames weren't requested for this generation (default).
+ * - `included`      — frames were requested and successfully woven in.
+ * - `attempted-failed` — frames were requested but the pipeline failed; the
+ *                       brief still generated from the transcript alone.
+ *
+ * Only `not-requested` is written by today's code path. The frames feature
+ * (#87) populates the other values when it lands.
+ */
+export type FramesStatus = "not-requested" | "included" | "attempted-failed";
+
+/**
+ * Per-generation telemetry persisted alongside each brief. Token counts and
+ * model are the durable factual data; cost is derived at read time via
+ * `estimateCost(model, in, out)` from `@brief/core` so the row stays currency-
+ * and pricing-snapshot agnostic.
+ */
+export interface BriefMetrics {
+  inputTokens: number;
+  outputTokens: number;
+  model: string;     // e.g. "openai/gpt-5.5" (OpenRouter form)
+  latencyMs: number;
+}
+
+/**
+ * Canonical stored shape for a brief's transcript. Uses `@brief/core`'s entry
+ * field names (`offsetSec` / `durationSec`) so downstream LLM consumers can
+ * read the JSONB and pass it straight into `formatTranscript()` from core.
+ */
+export interface StoredTranscriptEntry {
+  text: string;
+  offsetSec: number;
+  durationSec: number;
+  lang?: string;
+}
+
+export type SourceName = "youtube-transcript-plus" | "supadata";
+
+export interface StoredTranscript {
+  entries: StoredTranscriptEntry[];
+  source: SourceName;
+  lang?: string;
+}
+
 // Tag types
 export interface Tag {
   id: string;
@@ -84,6 +130,9 @@ export interface DbBrief {
   hasCreatorChapters: boolean | null;
   status: string;
   errorMessage: string | null;
+  transcript: StoredTranscript | null;
+  metrics: BriefMetrics | null;
+  framesStatus: FramesStatus;
   createdAt: Date;
   updatedAt: Date;
   tags?: Tag[];

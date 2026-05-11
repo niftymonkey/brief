@@ -1,19 +1,19 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { DIGEST_MODEL } from "@brief/core";
-import type { TranscriptEntry, VideoMetadata, StructuredBrief, ContentSection, Chapter, KeyPoint } from "./types";
+import { DIGEST_MODEL, formatTranscript } from "@brief/core";
+import type { TranscriptResult } from "@brief/core";
+import type {
+  BriefMetrics,
+  Chapter,
+  ContentSection,
+  KeyPoint,
+  StructuredBrief,
+  TranscriptEntry,
+  VideoMetadata,
+} from "./types";
 import { combineUrls } from "./url-extractor";
 import { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts";
-
-/**
- * Formats a timestamp in seconds to MM:SS format
- */
-function formatTimestamp(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes}:${secs.toString().padStart(2, "0")}`;
-}
 
 /**
  * Parses a timestamp string (MM:SS or H:MM:SS) to seconds
@@ -177,14 +177,24 @@ export async function generateBrief(
   metadata: VideoMetadata,
   apiKey: string,
   chapters?: Chapter[] | null
-): Promise<StructuredBrief> {
-  // Format transcript with timestamps
-  const formattedTranscript = transcript
-    .map((entry) => {
-      const timestamp = formatTimestamp(entry.offset);
-      return `[${timestamp}] ${entry.text}`;
-    })
-    .join("\n");
+): Promise<{ brief: StructuredBrief; metrics: BriefMetrics }> {
+  // Format transcript with `[M:SS] line` anchors via @brief/core's canonical
+  // formatter. We wrap the in-memory web-shape entries in a TranscriptResult
+  // stub because formatTranscript operates on results, not bare entries — the
+  // source field is meaningless here (we already have the entries) but the
+  // type requires it.
+  const stubResult: TranscriptResult = {
+    kind: "ok",
+    source: "youtube-transcript-plus",
+    ...(transcript[0]?.lang ? { lang: transcript[0].lang } : {}),
+    entries: transcript.map((e) => ({
+      offsetSec: e.offset,
+      durationSec: e.duration,
+      text: e.text,
+      ...(e.lang ? { lang: e.lang } : {}),
+    })),
+  };
+  const formattedTranscript = formatTranscript(stubResult, "timestamped");
 
   // Extract all URLs from description and pinned comment
   const allUrls = combineUrls(metadata.description, metadata.pinnedComment);
@@ -214,12 +224,14 @@ export async function generateBrief(
     const openrouter = createOpenRouter({ apiKey });
     const model = openrouter(DIGEST_MODEL);
 
+    const startedAt = Date.now();
     const result = await generateText({
       model,
       output: Output.object({ schema: briefSchema }),
       system: systemPrompt,
       prompt: userPrompt,
     });
+    const latencyMs = Date.now() - startedAt;
 
     const brief = result.output as StructuredBrief;
 
@@ -236,10 +248,19 @@ export async function generateBrief(
     const processedSections = mergeTangentOnlyChapters(dedupedSections, !!hasChapters);
 
     // Sort sections and key points chronologically
-    return sortBriefChronologically({
+    const finalBrief = sortBriefChronologically({
       ...brief,
       sections: processedSections,
     });
+
+    const metrics: BriefMetrics = {
+      inputTokens: result.usage.inputTokens ?? 0,
+      outputTokens: result.usage.outputTokens ?? 0,
+      model: DIGEST_MODEL,
+      latencyMs,
+    };
+
+    return { brief: finalBrief, metrics };
   } catch (error: any) {
     if (error.message?.includes("401") || error.message?.includes("authentication")) {
       throw new Error(

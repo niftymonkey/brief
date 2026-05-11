@@ -13,7 +13,7 @@ import {
   findGlobalBriefByVideoId,
   copyBriefForUser,
 } from "@/lib/db";
-import type { DbBrief } from "@/lib/types";
+import type { DbBrief, StoredTranscript } from "@/lib/types";
 
 type Step = "cached" | "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
 
@@ -148,14 +148,25 @@ export async function POST(request: NextRequest) {
         // Step 4: Fetch transcript
         controller.enqueue(encoder.encode(createEvent("transcript", "Extracting transcript...")));
         console.log(`[BRIEF] Starting transcript fetch for videoId: ${videoId}`);
-        const transcript = await fetchTranscript(videoId);
+        const { entries: transcript, source: transcriptSource, lang: transcriptLang } = await fetchTranscript(videoId);
         console.log(`[BRIEF] Transcript fetched successfully: ${transcript.length} entries`);
 
         // Step 5: Generate brief
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
         console.log(`[BRIEF] Starting brief generation`);
-        const brief = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
+        const { brief, metrics } = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
         console.log(`[BRIEF] Brief generated successfully`);
+
+        const storedTranscript: StoredTranscript = {
+          entries: transcript.map((e) => ({
+            text: e.text,
+            offsetSec: e.offset,
+            durationSec: e.duration,
+            ...(e.lang ? { lang: e.lang } : {}),
+          })),
+          source: transcriptSource,
+          ...(transcriptLang ? { lang: transcriptLang } : {}),
+        };
 
         // Step 6: Save or update brief
         controller.enqueue(encoder.encode(createEvent("saving", "Saving brief...")));
@@ -164,11 +175,11 @@ export async function POST(request: NextRequest) {
         let savedBrief: DbBrief;
         if (userBrief) {
           // Update stale brief
-          savedBrief = await updateBrief(userId, userBrief.id, metadata, brief, hasCreatorChapters);
+          savedBrief = await updateBrief(userId, userBrief.id, metadata, brief, hasCreatorChapters, storedTranscript, metrics);
           console.log(`[BRIEF] Updated existing brief`);
         } else {
           // Save new brief
-          savedBrief = await saveBrief(userId, metadata, brief, hasCreatorChapters);
+          savedBrief = await saveBrief(userId, metadata, brief, hasCreatorChapters, storedTranscript, metrics);
           console.log(`[BRIEF] Saved new brief`);
         }
 

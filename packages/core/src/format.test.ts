@@ -33,9 +33,9 @@ const transientResult: TranscriptResult = {
   message: "Network error talking to upstream",
 };
 
-describe("formatTranscript text format", () => {
+describe("formatTranscript prose format", () => {
   it("renders ok as a single space-separated blob of text", () => {
-    expect(formatTranscript(okResult, "text")).toBe("hello world later");
+    expect(formatTranscript(okResult, "prose")).toBe("hello world later");
   });
 
   it("normalizes internal soft-wrap newlines within entry text to spaces", () => {
@@ -51,7 +51,7 @@ describe("formatTranscript text format", () => {
         { offsetSec: 2, durationSec: 1, text: "single line" },
       ],
     };
-    expect(formatTranscript(result, "text")).toBe(
+    expect(formatTranscript(result, "prose")).toBe(
       "you know the rules and so do I single line"
     );
   });
@@ -65,7 +65,7 @@ describe("formatTranscript text format", () => {
         { offsetSec: 2, durationSec: 2, text: "second thought" },
       ],
     };
-    expect(formatTranscript(result, "text")).toBe(
+    expect(formatTranscript(result, "prose")).toBe(
       "first thought. second thought"
     );
   });
@@ -79,26 +79,74 @@ describe("formatTranscript text format", () => {
         { offsetSec: 30, durationSec: 2, text: "new topic begins" },
       ],
     };
-    expect(formatTranscript(result, "text")).toBe(
+    expect(formatTranscript(result, "prose")).toBe(
       "topic A wraps up new topic begins"
     );
   });
 
   it("renders pending as a single informative line", () => {
-    expect(formatTranscript(pendingResult, "text")).toBe(
+    expect(formatTranscript(pendingResult, "prose")).toBe(
       "Transcript generation queued (jobId: job-123, retryAfter: 90s)"
     );
   });
 
   it("renders unavailable as a single line with the reason", () => {
-    expect(formatTranscript(unavailableResult, "text")).toBe(
+    expect(formatTranscript(unavailableResult, "prose")).toBe(
       "Unavailable (no-captions): No captions available"
     );
   });
 
   it("renders transient as a single line with the cause", () => {
-    expect(formatTranscript(transientResult, "text")).toBe(
+    expect(formatTranscript(transientResult, "prose")).toBe(
       "Transient failure (ECONNRESET): Network error talking to upstream"
+    );
+  });
+});
+
+describe("formatTranscript timestamped format", () => {
+  it("renders ok as M:SS-prefixed lines, one per entry", () => {
+    expect(formatTranscript(okResult, "timestamped")).toBe(
+      "[0:00] hello\n[0:02] world\n[0:04] later"
+    );
+  });
+
+  it("zero-pads seconds but not minutes", () => {
+    const result: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      entries: [
+        { offsetSec: 9, durationSec: 1, text: "nine seconds in" },
+        { offsetSec: 65, durationSec: 1, text: "past a minute" },
+        { offsetSec: 3725, durationSec: 1, text: "past an hour" },
+      ],
+    };
+    expect(formatTranscript(result, "timestamped")).toBe(
+      "[0:09] nine seconds in\n[1:05] past a minute\n[62:05] past an hour"
+    );
+  });
+
+  it("preserves entry text verbatim including internal newlines", () => {
+    const result: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      entries: [
+        { offsetSec: 0, durationSec: 2, text: "first line\nsecond line" },
+      ],
+    };
+    expect(formatTranscript(result, "timestamped")).toBe(
+      "[0:00] first line\nsecond line"
+    );
+  });
+
+  it("falls back to prose rendering for non-ok results", () => {
+    expect(formatTranscript(pendingResult, "timestamped")).toBe(
+      formatTranscript(pendingResult, "prose")
+    );
+    expect(formatTranscript(unavailableResult, "timestamped")).toBe(
+      formatTranscript(unavailableResult, "prose")
+    );
+    expect(formatTranscript(transientResult, "timestamped")).toBe(
+      formatTranscript(transientResult, "prose")
     );
   });
 });
