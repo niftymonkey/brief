@@ -1,5 +1,17 @@
 import { fetchTranscript as fetchTranscriptCore } from "@brief/core";
-import type { TranscriptEntry } from "./types";
+import type { SourceName, TranscriptEntry } from "./types";
+
+/**
+ * Result of fetching a video's transcript. Carries the speech entries (web
+ * shape: offset/duration in seconds), the source that produced them, and the
+ * detected language when known. Persistence layers can reshape entries to
+ * `@brief/core`'s canonical `offsetSec/durationSec` form for storage.
+ */
+export interface FetchedTranscript {
+  entries: TranscriptEntry[];
+  source: SourceName;
+  lang?: string;
+}
 
 /**
  * Fetches the transcript for a YouTube video via `@brief/core`'s cascade.
@@ -10,14 +22,14 @@ import type { TranscriptEntry } from "./types";
  * The core layer provides retry policy + structured outcomes for free.
  *
  * @param videoId - YouTube video ID
- * @returns Array of transcript entries with timestamps in seconds
+ * @returns Entries, source, and detected language
  * @throws Error with a user-facing message; the brief API routes surface
  *         these via `body.error` and the Chrome extension reads them directly,
  *         so the wording is part of the contract.
  */
 export async function fetchTranscript(
   videoId: string,
-): Promise<TranscriptEntry[]> {
+): Promise<FetchedTranscript> {
   const startTime = Date.now();
   const supadataApiKey = process.env.SUPADATA_API_KEY;
   const useSupadata = !!supadataApiKey;
@@ -41,7 +53,11 @@ export async function fetchTranscript(
     console.log(
       `[TRANSCRIPT] Success in ${Date.now() - startTime}ms, entries: ${entries.length}`,
     );
-    return entries;
+    return {
+      entries,
+      source: result.source,
+      ...(result.lang ? { lang: result.lang } : {}),
+    };
   }
 
   console.error(

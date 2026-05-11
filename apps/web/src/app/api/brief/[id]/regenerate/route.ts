@@ -6,6 +6,7 @@ import { generateBrief } from "@/lib/summarize";
 import { extractChapters } from "@/lib/chapters";
 import { isEmailAllowed } from "@/lib/access";
 import { updateBrief, getBriefById } from "@/lib/db";
+import type { StoredTranscript } from "@/lib/types";
 
 type Step = "metadata" | "transcript" | "analyzing" | "saving" | "complete" | "error";
 
@@ -73,18 +74,29 @@ export async function POST(
 
         // Step 2: Fetch transcript
         controller.enqueue(encoder.encode(createEvent("transcript", "Extracting transcript...")));
-        const transcript = await fetchTranscript(videoId);
+        const { entries: transcript, source: transcriptSource, lang: transcriptLang } = await fetchTranscript(videoId);
         console.log(`[REGENERATE] Transcript fetched: ${transcript.length} entries`);
 
         // Step 3: Generate brief
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
-        const brief = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
+        const { brief, metrics } = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
         console.log(`[REGENERATE] Brief generated`);
+
+        const storedTranscript: StoredTranscript = {
+          entries: transcript.map((e) => ({
+            text: e.text,
+            offsetSec: e.offset,
+            durationSec: e.duration,
+            ...(e.lang ? { lang: e.lang } : {}),
+          })),
+          source: transcriptSource,
+          ...(transcriptLang ? { lang: transcriptLang } : {}),
+        };
 
         // Step 4: Save
         controller.enqueue(encoder.encode(createEvent("saving", "Saving brief...")));
         const hasCreatorChapters = chapters !== null && chapters.length > 0;
-        await updateBrief(user.id, id, metadata, brief, hasCreatorChapters);
+        await updateBrief(user.id, id, metadata, brief, hasCreatorChapters, storedTranscript, metrics);
         console.log(`[REGENERATE] Brief updated in database, hasCreatorChapters: ${hasCreatorChapters}`);
 
         // Complete

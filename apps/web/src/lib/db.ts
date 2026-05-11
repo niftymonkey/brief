@@ -1,11 +1,13 @@
 import { sql } from "@vercel/postgres";
 import type {
-  DbBrief,
+  BriefMetrics,
   BriefSummary,
-  VideoMetadata,
-  StructuredBrief,
+  DbBrief,
   Link,
+  StoredTranscript,
+  StructuredBrief,
   Tag,
+  VideoMetadata,
 } from "./types";
 
 /**
@@ -74,7 +76,9 @@ export async function saveBrief(
   userId: string,
   metadata: VideoMetadata,
   brief: StructuredBrief,
-  hasCreatorChapters: boolean
+  hasCreatorChapters: boolean,
+  transcript: StoredTranscript | null,
+  metrics: BriefMetrics | null
 ): Promise<DbBrief> {
   const startTime = Date.now();
   console.log(`[DB] saveBrief called, userId: ${userId}, videoId: ${metadata.videoId}`);
@@ -99,7 +103,9 @@ export async function saveBrief(
       related_links,
       other_links,
       has_creator_chapters,
-      search_text
+      search_text,
+      transcript,
+      metrics
     ) VALUES (
       ${userId},
       ${metadata.videoId},
@@ -114,7 +120,9 @@ export async function saveBrief(
       ${JSON.stringify(brief.relatedLinks)},
       ${JSON.stringify(brief.otherLinks)},
       ${hasCreatorChapters},
-      ${searchText}
+      ${searchText},
+      ${transcript ? JSON.stringify(transcript) : null},
+      ${metrics ? JSON.stringify(metrics) : null}
     )
     RETURNING
       id,
@@ -135,6 +143,9 @@ export async function saveBrief(
       has_creator_chapters as "hasCreatorChapters",
       status,
       error_message as "errorMessage",
+      transcript,
+      metrics,
+      frames_status as "framesStatus",
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -155,7 +166,9 @@ export async function updateBrief(
   briefId: string,
   metadata: VideoMetadata,
   brief: StructuredBrief,
-  hasCreatorChapters: boolean
+  hasCreatorChapters: boolean,
+  transcript: StoredTranscript | null,
+  metrics: BriefMetrics | null
 ): Promise<DbBrief> {
   const channelSlug = createSlug(metadata.channelTitle);
   const thumbnailUrl = getThumbnailUrl(metadata.videoId);
@@ -175,6 +188,8 @@ export async function updateBrief(
       other_links = ${JSON.stringify(brief.otherLinks)},
       has_creator_chapters = ${hasCreatorChapters},
       search_text = ${searchText},
+      transcript = ${transcript ? JSON.stringify(transcript) : null},
+      metrics = ${metrics ? JSON.stringify(metrics) : null},
       updated_at = NOW()
     WHERE id = ${briefId} AND user_id = ${userId}
     RETURNING
@@ -196,6 +211,9 @@ export async function updateBrief(
       has_creator_chapters as "hasCreatorChapters",
       status,
       error_message as "errorMessage",
+      transcript,
+      metrics,
+      frames_status as "framesStatus",
       created_at as "createdAt",
       updated_at as "updatedAt"
   `;
@@ -233,6 +251,9 @@ export async function getBriefById(
         has_creator_chapters as "hasCreatorChapters",
         status,
         error_message as "errorMessage",
+        transcript,
+        metrics,
+        frames_status as "framesStatus",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -260,6 +281,9 @@ export async function getBriefById(
         has_creator_chapters as "hasCreatorChapters",
         status,
         error_message as "errorMessage",
+        transcript,
+        metrics,
+        frames_status as "framesStatus",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -307,6 +331,9 @@ export async function getBriefByVideoId(
         has_creator_chapters as "hasCreatorChapters",
         status,
         error_message as "errorMessage",
+        transcript,
+        metrics,
+        frames_status as "framesStatus",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -354,6 +381,9 @@ export async function findGlobalBriefByVideoId(
         has_creator_chapters as "hasCreatorChapters",
         status,
         error_message as "errorMessage",
+        transcript,
+        metrics,
+        frames_status as "framesStatus",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -404,7 +434,10 @@ export async function copyBriefForUser(
       related_links,
       other_links,
       has_creator_chapters,
-      search_text
+      search_text,
+      transcript,
+      metrics,
+      frames_status
     ) VALUES (
       ${userId},
       ${sourceBrief.videoId},
@@ -419,7 +452,10 @@ export async function copyBriefForUser(
       ${JSON.stringify(sourceBrief.relatedLinks)},
       ${JSON.stringify(sourceBrief.otherLinks)},
       ${sourceBrief.hasCreatorChapters},
-      ${searchText}
+      ${searchText},
+      ${sourceBrief.transcript ? JSON.stringify(sourceBrief.transcript) : null},
+      ${sourceBrief.metrics ? JSON.stringify(sourceBrief.metrics) : null},
+      ${sourceBrief.framesStatus}
     )
     RETURNING
       id,
@@ -440,6 +476,9 @@ export async function copyBriefForUser(
       has_creator_chapters as "hasCreatorChapters",
       status,
       error_message as "errorMessage",
+      transcript,
+      metrics,
+      frames_status as "framesStatus",
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -627,6 +666,9 @@ export async function getSharedBriefBySlug(
       has_creator_chapters as "hasCreatorChapters",
       status,
       error_message as "errorMessage",
+      transcript,
+      metrics,
+      frames_status as "framesStatus",
       created_at as "createdAt",
       updated_at as "updatedAt"
     FROM digests
@@ -776,7 +818,9 @@ export async function completePendingBrief(
   briefId: string,
   metadata: VideoMetadata,
   brief: StructuredBrief,
-  hasCreatorChapters: boolean
+  hasCreatorChapters: boolean,
+  transcript: StoredTranscript | null,
+  metrics: BriefMetrics | null
 ): Promise<void> {
   const channelSlug = createSlug(metadata.channelTitle);
   const thumbnailUrl = getThumbnailUrl(metadata.videoId);
@@ -796,6 +840,8 @@ export async function completePendingBrief(
       other_links = ${JSON.stringify(brief.otherLinks)},
       has_creator_chapters = ${hasCreatorChapters},
       search_text = ${searchText},
+      transcript = ${transcript ? JSON.stringify(transcript) : null},
+      metrics = ${metrics ? JSON.stringify(metrics) : null},
       status = 'completed',
       error_message = NULL,
       updated_at = NOW()

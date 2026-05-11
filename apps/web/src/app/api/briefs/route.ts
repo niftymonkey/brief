@@ -16,6 +16,7 @@ import {
   updateBriefStatus,
   completePendingBrief,
 } from "@/lib/db";
+import type { StoredTranscript } from "@/lib/types";
 
 export const maxDuration = 120;
 
@@ -105,11 +106,22 @@ export async function POST(request: NextRequest) {
 
       const metadata = await fetchVideoMetadata(videoId, youtubeApiKey);
       const chapters = extractChapters(metadata.description, metadata.duration);
-      const transcript = await fetchTranscript(videoId);
-      const brief = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
+      const { entries: transcript, source: transcriptSource, lang: transcriptLang } = await fetchTranscript(videoId);
+      const { brief, metrics } = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
       const hasCreatorChapters = chapters !== null && chapters.length > 0;
 
-      await completePendingBrief(userId, jobId, metadata, brief, hasCreatorChapters);
+      const storedTranscript: StoredTranscript = {
+        entries: transcript.map((e) => ({
+          text: e.text,
+          offsetSec: e.offset,
+          durationSec: e.duration,
+          ...(e.lang ? { lang: e.lang } : {}),
+        })),
+        source: transcriptSource,
+        ...(transcriptLang ? { lang: transcriptLang } : {}),
+      };
+
+      await completePendingBrief(userId, jobId, metadata, brief, hasCreatorChapters, storedTranscript, metrics);
       console.log(`[BRIEFS] Async brief completed: ${jobId}`);
     } catch (error) {
       console.error(`[BRIEFS] Async brief failed: ${jobId}`, error);

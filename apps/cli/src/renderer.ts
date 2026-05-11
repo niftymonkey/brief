@@ -35,10 +35,10 @@ function renderHuman(combined: CombinedResult, isTTY: boolean): Rendered {
 
   let stdout = "";
   if (transcript.kind === "ok") {
-    stdout = formatTranscript(transcript, "text") + "\n";
+    stdout = formatTranscript(transcript, "prose") + "\n";
   } else {
     stderrLines.push("");
-    stderrLines.push(formatTranscript(transcript, "text"));
+    stderrLines.push(formatTranscript(transcript, "prose"));
   }
 
   return { stdout, stderr: stderrLines.join("\n") + "\n" };
