@@ -36,7 +36,7 @@ Options:
 
 Environment:
   BRIEF_API_URL                            Hosted brief service URL (default: ${DEFAULT_API_BASE})
-  WORKOS_CLIENT_ID                         WorkOS client ID (required for login)
+  WORKOS_CLIENT_ID                         WorkOS client ID override (CLI fetches the value from the server by default)
 
 Exit codes:
   0  Success

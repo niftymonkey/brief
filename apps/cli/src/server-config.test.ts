@@ -60,6 +60,14 @@ describe("fetchServerConfig", () => {
     expect(transport.calls[0]?.url).toBe(`${BASE}/api/cli/config`);
   });
 
+  it("strips multiple trailing slashes on baseUrl", async () => {
+    const transport = createStubTransport([
+      { status: 200, body: { workosClientId: "client_test_abc" } },
+    ]);
+    await fetchServerConfig({ baseUrl: `${BASE}///`, transport });
+    expect(transport.calls[0]?.url).toBe(`${BASE}/api/cli/config`);
+  });
+
   it("returns transient on network failure", async () => {
     const transport = createStubTransport([{ throw: new Error("ENOTFOUND") }]);
     const result = await fetchServerConfig({ baseUrl: BASE, transport });

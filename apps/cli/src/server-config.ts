@@ -17,7 +17,7 @@ export async function fetchServerConfig(
   opts: FetchServerConfigOptions,
 ): Promise<ServerConfigResult> {
   const transport = opts.transport ?? defaultTransport;
-  const base = opts.baseUrl.replace(/\/$/, "");
+  const base = opts.baseUrl.replace(/\/+$/, "");
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let res: Response;
