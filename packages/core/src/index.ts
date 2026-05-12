@@ -23,3 +23,22 @@ export type {
   UnavailableReason,
   VideoMetadata,
 } from "./types";
+export {
+  BriefBodySchema,
+  ContentSectionSchema,
+  FramesMetricsSchema,
+  IntakeResponseSchema,
+  KeyPointSchema,
+  LinkSchema,
+  SchemaMismatchResponseSchema,
+  TranscriptEntrySchema,
+  TranscriptSubmissionSchema,
+  VideoMetadataSchema,
+  WhoamiResponseSchema,
+} from "./submission";
+export type {
+  BriefBody,
+  IntakeResponse,
+  TranscriptSubmission,
+  WhoamiResponse,
+} from "./submission";

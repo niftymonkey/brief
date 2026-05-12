@@ -6,6 +6,11 @@ export type UnavailableReason =
   | "video-private"
   | "invalid-id";
 
+// Legacy flat shape — predates the CLI→server submission's discriminated-union
+// `TranscriptEntrySchema` (kind: "speech" | "visual") in `./submission`. The
+// unification across consumers (format.ts, fetcher.ts, sources/*, web's
+// transcript path) lands alongside #87's visual-entry producer, since that's
+// when a sum-type carries weight downstream.
 export type TranscriptEntry = {
   offsetSec: number;
   durationSec: number;
