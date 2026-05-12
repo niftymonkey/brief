@@ -198,7 +198,7 @@ async function dispatchTranscript(argv: string[], bareShortcut: boolean): Promis
   }
   if (parsed.values.help) {
     process.stdout.write(`${USAGE}\n`);
-    return EXIT_ARG_ERROR;
+    return 0;
   }
   const common = buildCommonOpts(parsed);
   if ("error" in common) {
@@ -228,7 +228,7 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   }
   if (parsed.values.help) {
     process.stdout.write(`${USAGE}\n`);
-    return EXIT_ARG_ERROR;
+    return 0;
   }
   const common = buildCommonOpts(parsed);
   if ("error" in common) {

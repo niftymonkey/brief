@@ -10,6 +10,7 @@ import {
   EXIT_ARG_ERROR,
   EXIT_AUTH_REQUIRED,
   EXIT_OK,
+  EXIT_PENDING,
   EXIT_SCHEMA_MISMATCH,
   EXIT_TRANSIENT,
   EXIT_UNAVAILABLE,
@@ -96,7 +97,7 @@ export async function runGenerate(
     return {
       stdout: "",
       stderr: `Transcript is being generated (jobId ${transcript.jobId}). Try again in ${transcript.retryAfterSeconds}s.\n`,
-      exitCode: EXIT_TRANSIENT,
+      exitCode: EXIT_PENDING,
     };
   }
 

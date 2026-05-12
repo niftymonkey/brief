@@ -51,13 +51,29 @@ export interface HostedClientOptions {
   baseUrl: string;
   credentials: CredentialStore;
   transport?: Transport;
+  /** Per-request timeout for fetch calls. Defaults to 60s to accommodate server-side LLM generation. */
+  requestTimeoutMs?: number;
 }
 
 const DEFAULT_RATE_LIMIT_RETRY_SEC = 60;
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
+function parseRetryAfter(value: string | null): number {
+  if (!value) return DEFAULT_RATE_LIMIT_RETRY_SEC;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds;
+  const dateMs = Date.parse(value);
+  if (!Number.isNaN(dateMs)) {
+    const diffSec = Math.ceil((dateMs - Date.now()) / 1000);
+    if (diffSec > 0) return diffSec;
+  }
+  return DEFAULT_RATE_LIMIT_RETRY_SEC;
+}
 
 export function createHostedClient(opts: HostedClientOptions): HostedClient {
   const transport = opts.transport ?? defaultTransport;
   const base = opts.baseUrl.replace(/\/$/, "");
+  const requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
   async function authorized(
     path: string,
@@ -68,7 +84,11 @@ export function createHostedClient(opts: HostedClientOptions): HostedClient {
     const headers = new Headers(init.headers ?? {});
     headers.set("authorization", `Bearer ${tokens.accessToken}`);
     try {
-      const res = await transport.fetch(`${base}${path}`, { ...init, headers });
+      const res = await transport.fetch(`${base}${path}`, {
+        ...init,
+        headers,
+        signal: init.signal ?? AbortSignal.timeout(requestTimeoutMs),
+      });
       return { kind: "response", res };
     } catch (err) {
       return { kind: "throw", err };
@@ -115,11 +135,9 @@ export function createHostedClient(opts: HostedClientOptions): HostedClient {
         };
       }
       if (res.status === 429) {
-        const retryAfter = res.headers.get("retry-after");
-        const seconds = retryAfter ? Number(retryAfter) : NaN;
         return {
           kind: "rate-limited",
-          retryAfterSeconds: Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_RATE_LIMIT_RETRY_SEC,
+          retryAfterSeconds: parseRetryAfter(res.headers.get("retry-after")),
         };
       }
       if (res.status >= 500) {

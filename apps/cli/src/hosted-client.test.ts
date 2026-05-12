@@ -176,6 +176,32 @@ describe("HostedClient.submit", () => {
     }
   });
 
+  it("parses Retry-After as an HTTP-date when not a numeric seconds value", async () => {
+    const futureDate = new Date(Date.now() + 200 * 1000);
+    await setup([
+      { status: 429, headers: { "retry-after": futureDate.toUTCString() }, body: {} },
+    ]);
+    const result = await client.submit(validSubmission);
+    expect(result.kind).toBe("rate-limited");
+    if (result.kind === "rate-limited") {
+      // ~200s ahead, give a ±5s window for execution timing.
+      expect(result.retryAfterSeconds).toBeGreaterThan(190);
+      expect(result.retryAfterSeconds).toBeLessThan(210);
+    }
+  });
+
+  it("falls back to the default when Retry-After is a past HTTP-date", async () => {
+    const pastDate = new Date(Date.now() - 60 * 1000);
+    await setup([
+      { status: 429, headers: { "retry-after": pastDate.toUTCString() }, body: {} },
+    ]);
+    const result = await client.submit(validSubmission);
+    expect(result.kind).toBe("rate-limited");
+    if (result.kind === "rate-limited") {
+      expect(result.retryAfterSeconds).toBeGreaterThan(0);
+    }
+  });
+
   it("returns transient on 503", async () => {
     await setup([{ status: 503, body: { error: "upstream-llm-down" } }]);
     const result = await client.submit(validSubmission);

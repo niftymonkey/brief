@@ -55,4 +55,18 @@ describe("runLogout", () => {
 
     expect(result.exitCode).toBe(0);
   });
+
+  it("still clears local credentials when hostedClient.logout throws", async () => {
+    const credentials = createInMemoryStore();
+    await credentials.write(sampleTokens);
+    const hostedClient: HostedClient = {
+      submit: vi.fn(),
+      whoami: vi.fn(),
+      logout: vi.fn().mockRejectedValue(new Error("unexpected")),
+    };
+    const result = await runLogout({ hostedClient, credentials });
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toMatch(/unexpect|note/i);
+    expect(await credentials.read()).toBeNull();
+  });
 });

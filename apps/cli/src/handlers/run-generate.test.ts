@@ -179,6 +179,21 @@ describe("runGenerate", () => {
     ]);
   });
 
+  it("returns exit code 2 when transcript is in async-generation pending state", async () => {
+    const deps = makeDeps({
+      fetchTranscript: vi.fn().mockResolvedValue({
+        kind: "pending",
+        source: "supadata",
+        jobId: "job_01",
+        retryAfterSeconds: 30,
+        message: "Async generation queued",
+      } satisfies TranscriptResult),
+    });
+    const result = await runGenerate(deps, baseOptions);
+    expect(result.exitCode).toBe(2);
+    expect(deps.hostedClient.submit).not.toHaveBeenCalled();
+  });
+
   it("returns exit code 4 when transcript fetch is transient (server never called)", async () => {
     const deps = makeDeps({
       fetchTranscript: vi.fn().mockResolvedValue({

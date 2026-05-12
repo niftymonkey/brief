@@ -14,11 +14,30 @@ export interface RunLoginDeps {
 }
 
 export async function runLogin(deps: RunLoginDeps): Promise<HandlerResult> {
-  const result = await deps.authFlow.login();
+  let result: Awaited<ReturnType<typeof deps.authFlow.login>>;
+  try {
+    result = await deps.authFlow.login();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      stdout: "",
+      stderr: `Login failed unexpectedly: ${message}\n`,
+      exitCode: EXIT_TRANSIENT,
+    };
+  }
 
   switch (result.kind) {
     case "ok":
-      await deps.credentials.write(result.tokens);
+      try {
+        await deps.credentials.write(result.tokens);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          stdout: "",
+          stderr: `Login succeeded but credentials could not be persisted: ${message}\n`,
+          exitCode: EXIT_TRANSIENT,
+        };
+      }
       return {
         stdout: `Signed in as ${result.tokens.email}\n`,
         stderr: "",

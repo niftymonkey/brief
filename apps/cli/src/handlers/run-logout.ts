@@ -1,6 +1,6 @@
 import type { HostedClient } from "../hosted-client";
 import type { CredentialStore } from "../credentials";
-import { EXIT_OK } from "../exit-codes";
+import { EXIT_OK, EXIT_TRANSIENT } from "../exit-codes";
 import type { HandlerResult } from "./run-login";
 
 export interface RunLogoutDeps {
@@ -9,20 +9,31 @@ export interface RunLogoutDeps {
 }
 
 export async function runLogout(deps: RunLogoutDeps): Promise<HandlerResult> {
-  const result = await deps.hostedClient.logout();
-  await deps.credentials.clear();
+  let serverNote = "";
+  try {
+    const result = await deps.hostedClient.logout();
+    if (result.kind === "transient") {
+      serverNote = `(Note: server revoke failed: ${result.message}. Local credentials cleared regardless.)\n`;
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    serverNote = `(Note: server revoke threw: ${message}. Local credentials cleared regardless.)\n`;
+  }
 
-  if (result.kind === "transient") {
+  try {
+    await deps.credentials.clear();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     return {
-      stdout: "Signed out locally.\n",
-      stderr: `(Note: server revoke failed: ${result.message}. Local credentials cleared regardless.)\n`,
-      exitCode: EXIT_OK,
+      stdout: "",
+      stderr: `Failed to clear local credentials: ${message}\n`,
+      exitCode: EXIT_TRANSIENT,
     };
   }
 
   return {
-    stdout: "Signed out.\n",
-    stderr: "",
+    stdout: serverNote ? "Signed out locally.\n" : "Signed out.\n",
+    stderr: serverNote,
     exitCode: EXIT_OK,
   };
 }

@@ -74,4 +74,15 @@ describe("runWhoami", () => {
     expect(result.exitCode).toBe(4);
     expect(result.stderr).toMatch(/server|unreachable/i);
   });
+
+  it("returns exit code 4 when hostedClient.whoami throws unexpectedly", async () => {
+    const hostedClient: HostedClient = {
+      submit: vi.fn(),
+      whoami: vi.fn().mockRejectedValue(new Error("ECONNRESET")),
+      logout: vi.fn(),
+    };
+    const result = await runWhoami({ hostedClient }, { json: false });
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr).toMatch(/ECONNRESET|server/i);
+  });
 });

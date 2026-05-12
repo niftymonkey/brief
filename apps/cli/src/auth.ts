@@ -28,6 +28,7 @@ const PollErrorSchema = z.object({
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 const DEFAULT_EXPIRES_IN_SEC = 5 * 60;
 const DEFAULT_WORKOS_BASE = "https://api.workos.com";
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
 export interface DeviceCodeInfo {
   userCode: string;
@@ -51,6 +52,7 @@ export interface AuthFlowOptions {
   transport?: Transport;
   onCode?: (info: DeviceCodeInfo) => void;
   sleep?: (ms: number) => Promise<void>;
+  requestTimeoutMs?: number;
 }
 
 export function createAuthFlow(opts: AuthFlowOptions): AuthFlow {
@@ -58,6 +60,7 @@ export function createAuthFlow(opts: AuthFlowOptions): AuthFlow {
   const base = (opts.workosBaseUrl ?? DEFAULT_WORKOS_BASE).replace(/\/$/, "");
   const sleep =
     opts.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
+  const requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
   function transientErr(cause: unknown, message: string): AuthFlowResult {
     const causeStr = cause instanceof Error ? cause.message : String(cause);
@@ -79,6 +82,7 @@ export function createAuthFlow(opts: AuthFlowOptions): AuthFlow {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client_id: opts.clientId }),
+        signal: AbortSignal.timeout(requestTimeoutMs),
       });
     } catch (err) {
       return { kind: "throw" as const, err };
@@ -106,6 +110,7 @@ export function createAuthFlow(opts: AuthFlowOptions): AuthFlow {
           client_id: opts.clientId,
           device_code: deviceCode,
         }),
+        signal: AbortSignal.timeout(requestTimeoutMs),
       });
     } catch (err) {
       return { kind: "throw" as const, err };

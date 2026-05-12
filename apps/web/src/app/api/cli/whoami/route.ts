@@ -20,11 +20,12 @@ export async function GET(req: NextRequest) {
   try {
     const userInfo = await lookupWorkosUserEmail(verified.userId);
     if (!userInfo) {
+      console.error(`[whoami] user not found in WorkOS: ${verified.userId}`);
       return NextResponse.json({ error: "user-not-found" }, { status: 503 });
     }
     return NextResponse.json({ userId: verified.userId, email: userInfo.email });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "transient", message }, { status: 503 });
+    console.error(`[whoami] lookup failed for ${verified.userId}:`, err);
+    return NextResponse.json({ error: "transient" }, { status: 503 });
   }
 }

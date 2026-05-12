@@ -14,7 +14,17 @@ export async function runWhoami(
   deps: RunWhoamiDeps,
   opts: RunWhoamiOptions,
 ): Promise<HandlerResult> {
-  const result = await deps.hostedClient.whoami();
+  let result: Awaited<ReturnType<typeof deps.hostedClient.whoami>>;
+  try {
+    result = await deps.hostedClient.whoami();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      stdout: "",
+      stderr: `Server unreachable: ${message}\n`,
+      exitCode: EXIT_TRANSIENT,
+    };
+  }
 
   switch (result.kind) {
     case "ok":

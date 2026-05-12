@@ -120,6 +120,22 @@ describe("createFilesystemStore", () => {
     expect(await store.read()).toBeNull();
   });
 
+  it("returns null when the credentials file has the wrong shape", async () => {
+    await writeFile(storePath, JSON.stringify({ accessToken: "abc" }), { mode: 0o600 });
+    const store = createFilesystemStore(storePath);
+    expect(await store.read()).toBeNull();
+  });
+
+  it("returns null when fields have wrong types", async () => {
+    await writeFile(
+      storePath,
+      JSON.stringify({ ...sampleTokens, expiresAt: "not-a-number" }),
+      { mode: 0o600 },
+    );
+    const store = createFilesystemStore(storePath);
+    expect(await store.read()).toBeNull();
+  });
+
   it("write is atomic: a crash mid-write does not leave a corrupted credentials file", async () => {
     const store = createFilesystemStore(storePath);
     await store.write(sampleTokens);

@@ -14,7 +14,23 @@ function unauthorized(reason: string) {
   );
 }
 
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required env var: ${name}`);
+  return value;
+}
+
 export async function POST(req: NextRequest) {
+  let llmApiKey: string;
+  let youtubeApiKey: string;
+  try {
+    llmApiKey = requireEnv("OPENROUTER_API_KEY");
+    youtubeApiKey = requireEnv("YOUTUBE_API_KEY");
+  } catch (err) {
+    console.error("[intake] env-misconfig:", err);
+    return NextResponse.json({ error: "server-misconfigured" }, { status: 500 });
+  }
+
   const token = extractBearer(req.headers.get("authorization"));
   if (!token) return unauthorized("missing-auth");
 
@@ -34,8 +50,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const llmApiKey = process.env.OPENROUTER_API_KEY ?? "";
-  const youtubeApiKey = process.env.YOUTUBE_API_KEY ?? "";
   const origin = req.nextUrl.origin;
 
   const deps: IntakeDeps = {
@@ -53,10 +67,12 @@ export async function POST(req: NextRequest) {
   const result = await handleIntake(parsed.data, { userId: verified.userId }, deps);
 
   if (result.kind === "transient") {
-    return NextResponse.json(
-      { error: "transient", cause: result.cause, message: result.message },
-      { status: 503 },
+    console.error(
+      `[intake] transient failure for user ${verified.userId}:`,
+      result.cause,
+      result.message,
     );
+    return NextResponse.json({ error: "transient" }, { status: 503 });
   }
   return NextResponse.json(result.response);
 }

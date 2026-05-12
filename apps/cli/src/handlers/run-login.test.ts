@@ -64,4 +64,24 @@ describe("runLogin", () => {
     await runLogin({ authFlow, credentials });
     expect(await credentials.read()).toBeNull();
   });
+
+  it("returns exit code 4 when authFlow.login throws unexpectedly", async () => {
+    const credentials = createInMemoryStore();
+    const authFlow: AuthFlow = {
+      login: vi.fn().mockRejectedValue(new Error("unexpected")),
+    };
+    const result = await runLogin({ authFlow, credentials });
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr).toMatch(/unexpect/i);
+    expect(await credentials.read()).toBeNull();
+  });
+
+  it("returns exit code 4 when credentials.write throws after a successful login", async () => {
+    const credentials = createInMemoryStore();
+    credentials.write = vi.fn().mockRejectedValue(new Error("disk full"));
+    const authFlow = stubAuthFlow({ kind: "ok", tokens: sampleTokens });
+    const result = await runLogin({ authFlow, credentials });
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr).toMatch(/disk full/i);
+  });
 });
