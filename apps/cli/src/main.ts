@@ -27,11 +27,14 @@ Subcommands:
 Options:
   --json                                   Emit machine-readable JSON
   --no-metadata                            (transcript) Skip video-metadata fetch in the header
-  --with-frames                            (transcript, generate) Augment output with on-screen content captured from video frames.
-                                           For \`transcript --with-frames\`, prints the augmented transcript (with [VISUAL] markers) to stdout
-                                           — pipe-friendly. For \`generate --with-frames\`, ships the augmented transcript to the server so
-                                           the brief picks up on-screen content. Requires yt-dlp + ffmpeg on PATH and OPENROUTER_API_KEY
-                                           (or --openrouter-key). Adds 1–3 min runtime per video on first run; cached locally for re-runs.
+  --with-frames                            (transcript, generate) Capture on-screen content from video frames and weave it
+                                           into the transcript at the right timestamps. \`transcript --with-frames\` writes the
+                                           augmented transcript to stdout (pipe-friendly). \`generate --with-frames\` ships it
+                                           to the server so the brief picks up on-screen detail like code, slides, dashboards,
+                                           and prompt templates. Requires yt-dlp + ffmpeg on PATH and OPENROUTER_API_KEY (or
+                                           --openrouter-key). First run ~1–3 min per video; subsequent runs on the same video
+                                           reuse the cached download + frames. Cost lands on your own OpenRouter key:
+                                           roughly \$0.10–\$0.30 per ~15-min video at current rates.
   --source=<auto|local|supadata>           Override the transcript cascade
   --timeout=<ms>                           Overall request budget
   --supadata-key=<key>                     Override SUPADATA_API_KEY env var
