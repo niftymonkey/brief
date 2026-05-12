@@ -486,6 +486,30 @@ describe("HostedClient refresh-on-401", () => {
     expect(transport.calls).toHaveLength(1);
   });
 
+  it("propagates transient errors from the retried send after a successful refresh", async () => {
+    const credentials = createInMemoryStore();
+    await credentials.write(sampleTokens);
+    // First call returns 401-expired. Refresh succeeds and writes fresh
+    // tokens. The retry hits a transport throw — that must surface as
+    // transient (not auth-required), since the user IS authenticated.
+    const transport = createStubTransport([
+      { status: 401, body: { error: "expired" } },
+      { throw: new Error("ECONNRESET") },
+    ]);
+    const refreshTokens = async () => ({ kind: "ok" as const, tokens: freshTokens });
+    const client = createHostedClient({
+      baseUrl: BASE_URL,
+      credentials,
+      transport,
+      refreshTokens,
+    });
+
+    const result = await client.submit(validSubmission);
+    expect(result.kind).toBe("transient");
+    expect(await credentials.read()).toEqual(freshTokens);
+    expect(transport.calls).toHaveLength(2);
+  });
+
   it("falls through to auth-required when credentials.write throws after refresh", async () => {
     const credentials = createInMemoryStore();
     await credentials.write(sampleTokens);

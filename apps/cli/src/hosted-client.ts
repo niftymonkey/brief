@@ -147,22 +147,27 @@ export function createHostedClient(opts: HostedClientOptions): HostedClient {
       // request once. We gate on the explicit server signal — not the
       // fallback — so ambiguous 401 bodies don't trigger spurious refreshes.
       //
-      // Any exception thrown by the refresh path (refresh callback,
-      // credentials.write, or the retry fetch) is swallowed so the original
-      // 401 falls through as `auth-required` instead of being converted into
-      // a transient failure.
+      // Exceptions from the refresh callback or `credentials.write` are
+      // swallowed so the original 401 surfaces as `auth-required`. The retry
+      // `send`, however, runs after fresh tokens are already persisted: a
+      // throw from it is a genuine transport failure, not an auth problem,
+      // and must escape to the outer catch so callers see `transient`.
       if (res.status === 401 && opts.refreshTokens) {
         const outcome = await authRequiredOutcomeFromResponse(res);
         if (outcome.serverSaidExpired) {
+          let retryAccessToken: string | null = null;
           try {
             const refreshed = await opts.refreshTokens(tokens.refreshToken);
             if (refreshed.kind === "ok") {
               await opts.credentials.write(refreshed.tokens);
-              res = await send(path, init, refreshed.tokens.accessToken);
+              retryAccessToken = refreshed.tokens.accessToken;
             }
           } catch {
             // Preserve the original 401 so the caller treats this as
             // auth-required, not transient.
+          }
+          if (retryAccessToken !== null) {
+            res = await send(path, init, retryAccessToken);
           }
         }
       }
