@@ -62,3 +62,51 @@ export const TranscriptSubmissionSchema = z.object({
 });
 
 export type TranscriptSubmission = z.infer<typeof TranscriptSubmissionSchema>;
+
+export const LinkSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  description: z.string(),
+});
+
+export const KeyPointSchema = z.object({
+  text: z.string(),
+  timestamp: z.string(),
+  isTangent: z.boolean().optional(),
+});
+
+export const ContentSectionSchema = z.object({
+  title: z.string(),
+  timestampStart: z.string(),
+  timestampEnd: z.string(),
+  keyPoints: z.array(z.union([KeyPointSchema, z.string()])),
+});
+
+export const BriefBodySchema = z.object({
+  summary: z.string(),
+  sections: z.array(ContentSectionSchema),
+  relatedLinks: z.array(LinkSchema),
+  otherLinks: z.array(LinkSchema),
+});
+
+export const IntakeResponseSchema = z.object({
+  schemaVersion: z.literal(SCHEMA_VERSION),
+  briefId: z.string(),
+  briefUrl: z.string(),
+  brief: BriefBodySchema,
+  metadata: VideoMetadataSchema,
+});
+
+export const WhoamiResponseSchema = z.object({
+  email: z.string(),
+  userId: z.string(),
+});
+
+export const SchemaMismatchResponseSchema = z.object({
+  error: z.literal("schema-mismatch"),
+  serverAccepts: z.array(z.string()),
+});
+
+export type BriefBody = z.infer<typeof BriefBodySchema>;
+export type IntakeResponse = z.infer<typeof IntakeResponseSchema>;
+export type WhoamiResponse = z.infer<typeof WhoamiResponseSchema>;
