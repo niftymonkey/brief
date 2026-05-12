@@ -4,13 +4,16 @@ import { createInMemoryStore } from "../credentials";
 import { runLogin } from "./run-login";
 
 function stubAuthFlow(result: AuthFlowResult): AuthFlow {
-  return { login: vi.fn().mockResolvedValue(result) };
+  return {
+    login: vi.fn().mockResolvedValue(result),
+    refresh: vi.fn(),
+  };
 }
 
 const sampleTokens = {
   accessToken: "access-abc",
   refreshToken: "refresh-xyz",
-  expiresAt: Date.now() + 3_600_000,
+  expiresAt: Math.floor(Date.now() / 1000) + 3600, // seconds since epoch
   userId: "user_01",
   email: "user@example.com",
 };
@@ -69,6 +72,7 @@ describe("runLogin", () => {
     const credentials = createInMemoryStore();
     const authFlow: AuthFlow = {
       login: vi.fn().mockRejectedValue(new Error("unexpected")),
+      refresh: vi.fn(),
     };
     const result = await runLogin({ authFlow, credentials });
     expect(result.exitCode).toBe(4);

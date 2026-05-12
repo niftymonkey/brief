@@ -26,6 +26,7 @@ const PollErrorSchema = z.object({
 });
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+const REFRESH_GRANT_TYPE = "refresh_token";
 const DEFAULT_EXPIRES_IN_SEC = 5 * 60;
 const DEFAULT_WORKOS_BASE = "https://api.workos.com";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
@@ -42,8 +43,20 @@ export type AuthFlowResult =
   | { kind: "denied"; message: string }
   | { kind: "transient"; cause: string; message: string };
 
+/**
+ * Outcome of redeeming a refresh token for fresh access/refresh tokens. The
+ * `expired` case means the refresh token itself is dead (revoked, expired,
+ * or otherwise rejected) — the caller must prompt for a full re-login.
+ * `transient` is recoverable on a future call.
+ */
+export type RefreshResult =
+  | { kind: "ok"; tokens: Tokens }
+  | { kind: "expired"; message: string }
+  | { kind: "transient"; cause: string; message: string };
+
 export interface AuthFlow {
   login(): Promise<AuthFlowResult>;
+  refresh(refreshToken: string): Promise<RefreshResult>;
 }
 
 export interface AuthFlowOptions {
@@ -184,7 +197,7 @@ export function createAuthFlow(opts: AuthFlowOptions): AuthFlow {
             tokens: {
               accessToken: t.access_token,
               refreshToken: t.refresh_token,
-              expiresAt: Date.now() + expiresInSec * 1000,
+              expiresAt: Math.floor(Date.now() / 1000) + expiresInSec,
               userId: t.user.id,
               email: t.user.email,
             },
@@ -207,6 +220,62 @@ export function createAuthFlow(opts: AuthFlowOptions): AuthFlow {
       }
 
       return { kind: "expired", message: "Device code expired before authorization" };
+    },
+
+    async refresh(refreshToken) {
+      let res: Response;
+      try {
+        res = await transport.fetch(`${base}/user_management/authenticate`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            grant_type: REFRESH_GRANT_TYPE,
+            client_id: opts.clientId,
+            refresh_token: refreshToken,
+          }),
+          signal: AbortSignal.timeout(requestTimeoutMs),
+        });
+      } catch (err) {
+        const cause = err instanceof Error ? err.message : String(err);
+        return { kind: "transient", cause, message: "Could not reach WorkOS to refresh tokens" };
+      }
+      const body = await safeJson(res);
+      if (res.ok) {
+        const parsed = TokenResponseSchema.safeParse(body);
+        if (!parsed.success) {
+          return {
+            kind: "transient",
+            cause: "malformed-response",
+            message: "WorkOS returned an unrecognized refresh response",
+          };
+        }
+        const t = parsed.data;
+        const expiresInSec = t.expires_in ?? DEFAULT_EXPIRES_IN_SEC;
+        return {
+          kind: "ok",
+          tokens: {
+            accessToken: t.access_token,
+            refreshToken: t.refresh_token,
+            expiresAt: Math.floor(Date.now() / 1000) + expiresInSec,
+            userId: t.user.id,
+            email: t.user.email,
+          },
+        };
+      }
+      if (res.status >= 500) {
+        return {
+          kind: "transient",
+          cause: `http-${res.status}`,
+          message: `WorkOS returned ${res.status} during refresh`,
+        };
+      }
+      // 4xx — treat as a dead refresh token. WorkOS uses `invalid_grant` for
+      // revoked/expired refresh tokens; we don't differentiate here because the
+      // caller's response is the same in every 4xx case: prompt the user to
+      // re-login.
+      const errParsed = PollErrorSchema.safeParse(body);
+      const reason = errParsed.success ? errParsed.data.error : `http-${res.status}`;
+      return { kind: "expired", message: `Refresh token rejected: ${reason}` };
     },
   };
 }

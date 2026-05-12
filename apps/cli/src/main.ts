@@ -1,9 +1,9 @@
 import { parseArgs } from "node:util";
 import { fetchMetadata, fetchTranscript, type SourceName } from "@brief/core";
-import { createAuthFlow } from "./auth";
+import { createAuthFlow, type AuthFlow } from "./auth";
 import { createFilesystemStore } from "./credentials";
 import { EXIT_ARG_ERROR, EXIT_TRANSIENT } from "./exit-codes";
-import { createHostedClient } from "./hosted-client";
+import { createHostedClient, type RefreshTokensFn } from "./hosted-client";
 import { runGenerate } from "./handlers/run-generate";
 import { runLogin } from "./handlers/run-login";
 import { runLogout } from "./handlers/run-logout";
@@ -95,6 +95,34 @@ function getApiBase(): string {
   return process.env.BRIEF_API_URL ?? DEFAULT_API_BASE;
 }
 
+/**
+ * Builds a refresh-token redeemer that lazily resolves the WorkOS client ID
+ * the first time a refresh is actually needed. Most CLI calls succeed without
+ * touching this path, so the env-or-server-config lookup is deferred until a
+ * 401-expired triggers it.
+ */
+function makeRefreshTokens(): RefreshTokensFn {
+  let cachedFlow: AuthFlow | null = null;
+  return async (refreshToken: string) => {
+    if (!cachedFlow) {
+      let clientId = process.env.WORKOS_CLIENT_ID;
+      if (!clientId) {
+        const config = await fetchServerConfig({ baseUrl: getApiBase() });
+        if (config.kind !== "ok") {
+          return {
+            kind: "transient",
+            cause: config.message,
+            message: `Could not resolve WorkOS client ID for token refresh: ${config.message}`,
+          };
+        }
+        clientId = config.config.workosClientId;
+      }
+      cachedFlow = createAuthFlow({ clientId });
+    }
+    return cachedFlow.refresh(refreshToken);
+  };
+}
+
 interface ParsedCommon {
   input: string;
   json: boolean;
@@ -173,7 +201,11 @@ async function dispatchLogin(): Promise<number> {
 
 async function dispatchLogout(): Promise<number> {
   const credentials = createFilesystemStore();
-  const hostedClient = createHostedClient({ baseUrl: getApiBase(), credentials });
+  const hostedClient = createHostedClient({
+    baseUrl: getApiBase(),
+    credentials,
+    refreshTokens: makeRefreshTokens(),
+  });
   return writeResult(await runLogout({ hostedClient, credentials }));
 }
 
@@ -187,7 +219,11 @@ async function dispatchWhoami(argv: string[]): Promise<number> {
     return EXIT_ARG_ERROR;
   }
   const credentials = createFilesystemStore();
-  const hostedClient = createHostedClient({ baseUrl: getApiBase(), credentials });
+  const hostedClient = createHostedClient({
+    baseUrl: getApiBase(),
+    credentials,
+    refreshTokens: makeRefreshTokens(),
+  });
   return writeResult(await runWhoami({ hostedClient }, { json }));
 }
 
@@ -240,7 +276,11 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   }
 
   const credentials = createFilesystemStore();
-  const hostedClient = createHostedClient({ baseUrl: getApiBase(), credentials });
+  const hostedClient = createHostedClient({
+    baseUrl: getApiBase(),
+    credentials,
+    refreshTokens: makeRefreshTokens(),
+  });
 
   const generateOpts: Parameters<typeof runGenerate>[1] = {
     input: common.input,

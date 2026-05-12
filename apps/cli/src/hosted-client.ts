@@ -7,7 +7,19 @@ import {
   type VideoMetadata,
   type WhoamiResponse,
 } from "@brief/core";
-import type { CredentialStore } from "./credentials";
+import type { CredentialStore, Tokens } from "./credentials";
+
+/**
+ * Outcome of asking the auth provider to redeem a refresh token. Matches
+ * `RefreshResult` from `./auth` — duplicated here so the hosted client doesn't
+ * pull in WorkOS-specific code.
+ */
+export type RefreshTokensResult =
+  | { kind: "ok"; tokens: Tokens }
+  | { kind: "expired"; message: string }
+  | { kind: "transient"; cause: string; message: string };
+
+export type RefreshTokensFn = (refreshToken: string) => Promise<RefreshTokensResult>;
 
 export interface Transport {
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
@@ -19,17 +31,33 @@ export const defaultTransport: Transport = {
 
 export type AuthRequiredReason = "missing" | "expired" | "invalid" | "revoked";
 
-async function authRequiredReasonFromResponse(res: Response): Promise<AuthRequiredReason> {
+/**
+ * Server 401 bodies carry an `error` string the verifier emits explicitly. We
+ * fall back to `expired` for ambiguous/unparseable bodies because that's the
+ * least-disruptive thing to tell the caller. Reactive refresh, however, MUST
+ * gate on `serverSaidExpired` (an explicit `error: "expired"`) — otherwise a
+ * malformed body would cause spurious refresh-token redemption attempts.
+ */
+interface AuthRequiredOutcome {
+  reason: AuthRequiredReason;
+  serverSaidExpired: boolean;
+}
+
+async function authRequiredOutcomeFromResponse(res: Response): Promise<AuthRequiredOutcome> {
   try {
     const body = (await res.clone().json()) as { error?: string };
-    if (body.error === "expired") return "expired";
-    if (body.error === "invalid") return "invalid";
-    if (body.error === "malformed") return "invalid";
-    if (body.error === "revoked") return "revoked";
+    if (body.error === "expired") return { reason: "expired", serverSaidExpired: true };
+    if (body.error === "invalid") return { reason: "invalid", serverSaidExpired: false };
+    if (body.error === "malformed") return { reason: "invalid", serverSaidExpired: false };
+    if (body.error === "revoked") return { reason: "revoked", serverSaidExpired: false };
   } catch {
     // fall through to default
   }
-  return "expired";
+  return { reason: "expired", serverSaidExpired: false };
+}
+
+async function authRequiredReasonFromResponse(res: Response): Promise<AuthRequiredReason> {
+  return (await authRequiredOutcomeFromResponse(res)).reason;
 }
 
 export type BriefResult =
@@ -66,6 +94,13 @@ export interface HostedClientOptions {
   transport?: Transport;
   /** Per-request timeout for fetch calls. Defaults to 60s to accommodate server-side LLM generation. */
   requestTimeoutMs?: number;
+  /**
+   * Optional refresh-token redeemer. When supplied, a 401 with reason `expired`
+   * triggers exactly one refresh + retry. If refresh itself returns `expired`
+   * or `transient`, or no callback is supplied, the original 401 surfaces as
+   * `auth-required` to the caller.
+   */
+  refreshTokens?: RefreshTokensFn;
 }
 
 const DEFAULT_RATE_LIMIT_RETRY_SEC = 60;
@@ -88,20 +123,55 @@ export function createHostedClient(opts: HostedClientOptions): HostedClient {
   const base = opts.baseUrl.replace(/\/$/, "");
   const requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
+  async function send(path: string, init: RequestInit, accessToken: string): Promise<Response> {
+    const headers = new Headers(init.headers ?? {});
+    headers.set("authorization", `Bearer ${accessToken}`);
+    return transport.fetch(`${base}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal ?? AbortSignal.timeout(requestTimeoutMs),
+    });
+  }
+
   async function authorized(
     path: string,
     init: RequestInit,
   ): Promise<{ kind: "no-creds" } | { kind: "response"; res: Response } | { kind: "throw"; err: unknown }> {
     const tokens = await opts.credentials.read();
     if (!tokens) return { kind: "no-creds" };
-    const headers = new Headers(init.headers ?? {});
-    headers.set("authorization", `Bearer ${tokens.accessToken}`);
     try {
-      const res = await transport.fetch(`${base}${path}`, {
-        ...init,
-        headers,
-        signal: init.signal ?? AbortSignal.timeout(requestTimeoutMs),
-      });
+      let res = await send(path, init, tokens.accessToken);
+
+      // Reactive refresh: on a 401 the server explicitly tagged `expired`,
+      // redeem the refresh token, persist the new tokens, and retry the
+      // request once. We gate on the explicit server signal — not the
+      // fallback — so ambiguous 401 bodies don't trigger spurious refreshes.
+      //
+      // Exceptions from the refresh callback or `credentials.write` are
+      // swallowed so the original 401 surfaces as `auth-required`. The retry
+      // `send`, however, runs after fresh tokens are already persisted: a
+      // throw from it is a genuine transport failure, not an auth problem,
+      // and must escape to the outer catch so callers see `transient`.
+      if (res.status === 401 && opts.refreshTokens) {
+        const outcome = await authRequiredOutcomeFromResponse(res);
+        if (outcome.serverSaidExpired) {
+          let retryAccessToken: string | null = null;
+          try {
+            const refreshed = await opts.refreshTokens(tokens.refreshToken);
+            if (refreshed.kind === "ok") {
+              await opts.credentials.write(refreshed.tokens);
+              retryAccessToken = refreshed.tokens.accessToken;
+            }
+          } catch {
+            // Preserve the original 401 so the caller treats this as
+            // auth-required, not transient.
+          }
+          if (retryAccessToken !== null) {
+            res = await send(path, init, retryAccessToken);
+          }
+        }
+      }
+
       return { kind: "response", res };
     } catch (err) {
       return { kind: "throw", err };

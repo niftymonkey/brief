@@ -12,7 +12,7 @@ import {
 const sampleTokens: Tokens = {
   accessToken: "access-abc",
   refreshToken: "refresh-xyz",
-  expiresAt: 1_700_000_000_000,
+  expiresAt: 1_700_000_000, // seconds since epoch (2023-11)
   userId: "user_01H7ZZZ",
   email: "user@example.com",
 };
@@ -130,6 +130,18 @@ describe("createFilesystemStore", () => {
     await writeFile(
       storePath,
       JSON.stringify({ ...sampleTokens, expiresAt: "not-a-number" }),
+      { mode: 0o600 },
+    );
+    const store = createFilesystemStore(storePath);
+    expect(await store.read()).toBeNull();
+  });
+
+  it("invalidates legacy credentials whose expiresAt was written in milliseconds", async () => {
+    // 1.7e12 = ms in 2023; interpreted as seconds it's year 55,830. The threshold
+    // catches anything clearly out of range so the user is prompted to re-login.
+    await writeFile(
+      storePath,
+      JSON.stringify({ ...sampleTokens, expiresAt: 1_700_000_000_000 }),
       { mode: 0o600 },
     );
     const store = createFilesystemStore(storePath);
