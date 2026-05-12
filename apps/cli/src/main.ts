@@ -27,14 +27,16 @@ Subcommands:
 Options:
   --json                                   Emit machine-readable JSON
   --no-metadata                            (transcript) Skip video-metadata fetch in the header
-  --with-frames                            (generate) Augment the brief with on-screen content captured from video frames.
-                                           Requires yt-dlp + ffmpeg on PATH and OPENROUTER_API_KEY (or --openrouter-key).
-                                           Adds 1–3 min runtime per video.
+  --with-frames                            (transcript, generate) Augment output with on-screen content captured from video frames.
+                                           For \`transcript --with-frames\`, prints the augmented transcript (with [VISUAL] markers) to stdout
+                                           — pipe-friendly. For \`generate --with-frames\`, ships the augmented transcript to the server so
+                                           the brief picks up on-screen content. Requires yt-dlp + ffmpeg on PATH and OPENROUTER_API_KEY
+                                           (or --openrouter-key). Adds 1–3 min runtime per video on first run; cached locally for re-runs.
   --source=<auto|local|supadata>           Override the transcript cascade
   --timeout=<ms>                           Overall request budget
   --supadata-key=<key>                     Override SUPADATA_API_KEY env var
   --youtube-key=<key>                      (transcript) Override YOUTUBE_API_KEY env var
-  --openrouter-key=<key>                   (generate --with-frames) Override OPENROUTER_API_KEY env var
+  --openrouter-key=<key>                   (with --with-frames) Override OPENROUTER_API_KEY env var
   --help                                   Show this help
 
 Environment:
