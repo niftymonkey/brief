@@ -6,7 +6,7 @@ import { runLogout } from "./run-logout";
 const sampleTokens: Tokens = {
   accessToken: "access-abc",
   refreshToken: "refresh-xyz",
-  expiresAt: Date.now() + 3_600_000,
+  expiresAt: Math.floor(Date.now() / 1000) + 3600,
   userId: "user_01",
   email: "user@example.com",
 };

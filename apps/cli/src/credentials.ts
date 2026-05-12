@@ -3,6 +3,13 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
+/**
+ * Persisted credentials. `expiresAt` is **seconds since the Unix epoch**, on the
+ * same axis as the JWT `exp` claim. Earlier builds wrote milliseconds here; that
+ * was wrong, and `createFilesystemStore` invalidates any cred whose `expiresAt`
+ * is clearly out-of-range (interpreted as seconds it would be centuries in the
+ * future) so the user is prompted to re-login cleanly.
+ */
 export const TokensSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
@@ -10,6 +17,10 @@ export const TokensSchema = z.object({
   userId: z.string(),
   email: z.string(),
 });
+
+// Seconds-since-epoch values written this century are <~ 4.1e9. Anything past
+// 1e10 must have been written with the legacy ms-based formula; treat as invalid.
+const LEGACY_MS_EXPIRES_THRESHOLD = 1e10;
 
 export type Tokens = z.infer<typeof TokensSchema>;
 
@@ -43,7 +54,9 @@ export function createFilesystemStore(path: string = DEFAULT_PATH): CredentialSt
         const content = await readFile(path, "utf-8");
         const raw = JSON.parse(content);
         const parsed = TokensSchema.safeParse(raw);
-        return parsed.success ? parsed.data : null;
+        if (!parsed.success) return null;
+        if (parsed.data.expiresAt > LEGACY_MS_EXPIRES_THRESHOLD) return null;
+        return parsed.data;
       } catch {
         return null;
       }

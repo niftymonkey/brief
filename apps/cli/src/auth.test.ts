@@ -76,7 +76,9 @@ describe("AuthFlow.login", () => {
       expect(result.tokens.refreshToken).toBe("refresh_yyy");
       expect(result.tokens.userId).toBe("user_01H");
       expect(result.tokens.email).toBe("user@example.com");
-      expect(result.tokens.expiresAt).toBeGreaterThan(Date.now());
+      // expiresAt is seconds since epoch, on the same axis as JWT exp.
+      expect(result.tokens.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1000));
+      expect(result.tokens.expiresAt).toBeLessThan(1e10);
     }
   });
 
@@ -265,6 +267,98 @@ describe("AuthFlow.login", () => {
       sleep: sleepNoop,
     });
     const result = await flow.login();
+    expect(result.kind).toBe("transient");
+  });
+});
+
+describe("AuthFlow.refresh", () => {
+  it("returns fresh tokens on a successful redemption", async () => {
+    const transport = createStubTransport([{ status: 200, body: { ...sampleTokens, expires_in: 300 } }]);
+    const flow = createAuthFlow({
+      clientId: CLIENT_ID,
+      workosBaseUrl: WORKOS_URL,
+      transport,
+    });
+    const result = await flow.refresh("refresh-old");
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.tokens.accessToken).toBe("access_xxx");
+      expect(result.tokens.refreshToken).toBe("refresh_yyy");
+      // expiresAt is seconds since epoch, on the same axis as JWT exp.
+      expect(result.tokens.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1000));
+      expect(result.tokens.expiresAt).toBeLessThan(1e10);
+    }
+  });
+
+  it("POSTs to /user_management/authenticate with grant_type=refresh_token", async () => {
+    const transport = createStubTransport([{ status: 200, body: sampleTokens }]);
+    const flow = createAuthFlow({
+      clientId: CLIENT_ID,
+      workosBaseUrl: WORKOS_URL,
+      transport,
+    });
+    await flow.refresh("refresh-old");
+    expect(transport.calls).toHaveLength(1);
+    const call = transport.calls[0];
+    expect(call.url).toBe(`${WORKOS_URL}/user_management/authenticate`);
+    expect(call.init?.method).toBe("POST");
+    const body = JSON.parse(String(call.init?.body));
+    expect(body).toEqual({
+      grant_type: "refresh_token",
+      client_id: CLIENT_ID,
+      refresh_token: "refresh-old",
+    });
+  });
+
+  it("returns kind=expired when WorkOS rejects the refresh token with a 4xx", async () => {
+    const transport = createStubTransport([
+      { status: 400, body: { error: "invalid_grant" } },
+    ]);
+    const flow = createAuthFlow({
+      clientId: CLIENT_ID,
+      workosBaseUrl: WORKOS_URL,
+      transport,
+    });
+    const result = await flow.refresh("refresh-dead");
+    expect(result.kind).toBe("expired");
+    if (result.kind === "expired") {
+      expect(result.message).toMatch(/invalid_grant/);
+    }
+  });
+
+  it("returns kind=transient on 5xx so the caller can retry later", async () => {
+    const transport = createStubTransport([{ status: 503, body: {} }]);
+    const flow = createAuthFlow({
+      clientId: CLIENT_ID,
+      workosBaseUrl: WORKOS_URL,
+      transport,
+    });
+    const result = await flow.refresh("refresh-x");
+    expect(result.kind).toBe("transient");
+  });
+
+  it("returns kind=transient when the transport itself throws", async () => {
+    const transport = createStubTransport([{ throw: new Error("ECONNREFUSED") }]);
+    const flow = createAuthFlow({
+      clientId: CLIENT_ID,
+      workosBaseUrl: WORKOS_URL,
+      transport,
+    });
+    const result = await flow.refresh("refresh-x");
+    expect(result.kind).toBe("transient");
+    if (result.kind === "transient") {
+      expect(result.cause).toMatch(/ECONNREFUSED/);
+    }
+  });
+
+  it("returns kind=transient on a malformed 200 body so a stale refresh isn't treated as terminal", async () => {
+    const transport = createStubTransport([{ status: 200, body: { unrelated: true } }]);
+    const flow = createAuthFlow({
+      clientId: CLIENT_ID,
+      workosBaseUrl: WORKOS_URL,
+      transport,
+    });
+    const result = await flow.refresh("refresh-x");
     expect(result.kind).toBe("transient");
   });
 });

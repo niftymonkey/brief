@@ -7,7 +7,19 @@ import {
   type VideoMetadata,
   type WhoamiResponse,
 } from "@brief/core";
-import type { CredentialStore } from "./credentials";
+import type { CredentialStore, Tokens } from "./credentials";
+
+/**
+ * Outcome of asking the auth provider to redeem a refresh token. Matches
+ * `RefreshResult` from `./auth` — duplicated here so the hosted client doesn't
+ * pull in WorkOS-specific code.
+ */
+export type RefreshTokensResult =
+  | { kind: "ok"; tokens: Tokens }
+  | { kind: "expired"; message: string }
+  | { kind: "transient"; cause: string; message: string };
+
+export type RefreshTokensFn = (refreshToken: string) => Promise<RefreshTokensResult>;
 
 export interface Transport {
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
@@ -66,6 +78,13 @@ export interface HostedClientOptions {
   transport?: Transport;
   /** Per-request timeout for fetch calls. Defaults to 60s to accommodate server-side LLM generation. */
   requestTimeoutMs?: number;
+  /**
+   * Optional refresh-token redeemer. When supplied, a 401 with reason `expired`
+   * triggers exactly one refresh + retry. If refresh itself returns `expired`
+   * or `transient`, or no callback is supplied, the original 401 surfaces as
+   * `auth-required` to the caller.
+   */
+  refreshTokens?: RefreshTokensFn;
 }
 
 const DEFAULT_RATE_LIMIT_RETRY_SEC = 60;
@@ -88,20 +107,39 @@ export function createHostedClient(opts: HostedClientOptions): HostedClient {
   const base = opts.baseUrl.replace(/\/$/, "");
   const requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
+  async function send(path: string, init: RequestInit, accessToken: string): Promise<Response> {
+    const headers = new Headers(init.headers ?? {});
+    headers.set("authorization", `Bearer ${accessToken}`);
+    return transport.fetch(`${base}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal ?? AbortSignal.timeout(requestTimeoutMs),
+    });
+  }
+
   async function authorized(
     path: string,
     init: RequestInit,
   ): Promise<{ kind: "no-creds" } | { kind: "response"; res: Response } | { kind: "throw"; err: unknown }> {
     const tokens = await opts.credentials.read();
     if (!tokens) return { kind: "no-creds" };
-    const headers = new Headers(init.headers ?? {});
-    headers.set("authorization", `Bearer ${tokens.accessToken}`);
     try {
-      const res = await transport.fetch(`${base}${path}`, {
-        ...init,
-        headers,
-        signal: init.signal ?? AbortSignal.timeout(requestTimeoutMs),
-      });
+      let res = await send(path, init, tokens.accessToken);
+
+      // Reactive refresh: on a 401 caused by an expired access token, redeem
+      // the refresh token, persist the new tokens, and retry the request once.
+      // Any failure of the refresh path falls through with the original 401.
+      if (res.status === 401 && opts.refreshTokens) {
+        const reason = await authRequiredReasonFromResponse(res);
+        if (reason === "expired") {
+          const refreshed = await opts.refreshTokens(tokens.refreshToken);
+          if (refreshed.kind === "ok") {
+            await opts.credentials.write(refreshed.tokens);
+            res = await send(path, init, refreshed.tokens.accessToken);
+          }
+        }
+      }
+
       return { kind: "response", res };
     } catch (err) {
       return { kind: "throw", err };
