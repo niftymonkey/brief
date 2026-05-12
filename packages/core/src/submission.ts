@@ -36,11 +36,17 @@ export const FramesMetricsSchema = z.object({
   classifierYes: z.number(),
   classifierNo: z.number(),
   visionCalls: z.number(),
+  visionVerbatim: z.number(),
+  visionSummary: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
   classifierModel: z.string(),
   visionModel: z.string(),
   wallClockMs: z.number(),
+  // String keys (intentionally not enum-constrained at the wire boundary) so
+  // a Phase 5+ producer can add new phases without breaking older consumers.
+  // The TypeScript shape is constrained to FramesPhase keys via the producer.
+  phasesMs: z.record(z.string(), z.number()),
   costSource: z.literal("cli-reported"),
 });
 

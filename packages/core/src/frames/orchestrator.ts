@@ -48,13 +48,29 @@ export async function runFramesPipeline(
     classifierYes: 0,
     classifierNo: 0,
     visionCalls: 0,
+    visionVerbatim: 0,
+    visionSummary: 0,
     inputTokens: 0,
     outputTokens: 0,
     classifierModel: adapters.vision.classifierModel,
     visionModel: adapters.vision.visionModel,
     wallClockMs: 0,
+    phasesMs: {},
     costSource: "cli-reported",
   };
+
+  // Stopwatch for per-phase wall-clock attribution. The same span guard is used
+  // in both the happy path and failure paths so a crashed phase still gets its
+  // partial duration recorded in `phasesMs`.
+  async function timePhase<T>(phase: FramesPhase, fn: () => Promise<T>): Promise<T> {
+    const phaseStart = Date.now();
+    try {
+      return await fn();
+    } finally {
+      const prior = metrics.phasesMs[phase] ?? 0;
+      metrics.phasesMs[phase] = prior + (Date.now() - phaseStart);
+    }
+  }
 
   const finalize = (
     failure: { reason: FramesFailReason; phase: FramesPhase; message: string } | null,
@@ -99,7 +115,9 @@ export async function runFramesPipeline(
   mkdirSync(framesDir, { recursive: true });
 
   // ---------- phase: download ----------
-  const downloadResult = await adapters.download.download(opts.videoId, opts.workDir);
+  const downloadResult = await timePhase("download", () =>
+    adapters.download.download(opts.videoId, opts.workDir),
+  );
   if (downloadResult.kind === "failed") {
     return finalize({
       reason: downloadResult.reason,
@@ -116,7 +134,9 @@ export async function runFramesPipeline(
   // ---------- phase: scene-detection ----------
   let scenes: number[];
   try {
-    scenes = await adapters.ffmpeg.detectScenes(downloadResult.videoPath, SCENE_THRESHOLD);
+    scenes = await timePhase("scene-detection", () =>
+      adapters.ffmpeg.detectScenes(downloadResult.videoPath, SCENE_THRESHOLD),
+    );
   } catch (err) {
     return finalize({
       reason: "ffmpeg-failed",
@@ -126,12 +146,15 @@ export async function runFramesPipeline(
   }
 
   // ---------- phase: selection ----------
-  const { candidates, candidatesGenerated } = selectCandidates({
-    scenes,
-    chapters: opts.chapters ?? [],
-    transcript: opts.transcript,
-    durationSec: downloadResult.durationSec,
+  const selection = await timePhase("selection", async () => {
+    return selectCandidates({
+      scenes,
+      chapters: opts.chapters ?? [],
+      transcript: opts.transcript,
+      durationSec: downloadResult.durationSec,
+    });
   });
+  const { candidates, candidatesGenerated } = selection;
   metrics.candidatesGenerated = candidatesGenerated;
   metrics.candidatesAfterDedup = candidates.length;
 
@@ -149,7 +172,9 @@ export async function runFramesPipeline(
 
   // ---------- phase: extraction ----------
   try {
-    await extractAllFrames(candidates, downloadResult.videoPath, framesDir, adapters.ffmpeg);
+    await timePhase("extraction", () =>
+      extractAllFrames(candidates, downloadResult.videoPath, framesDir, adapters.ffmpeg),
+    );
   } catch (err) {
     return finalize({
       reason: "ffmpeg-failed",
@@ -160,15 +185,17 @@ export async function runFramesPipeline(
 
   // ---------- phase: classify ----------
   try {
-    await runWithConcurrency(candidates, CLASSIFIER_CONCURRENCY, async (c) => {
-      if (opts.signal?.aborted || !c.frame) return;
-      const result = await adapters.vision.classify(resolve(framesDir, c.frame), opts.signal);
-      c.classification = { verdict: result.verdict };
-      if (result.verdict === "yes") metrics.classifierYes++;
-      else metrics.classifierNo++;
-      metrics.inputTokens += result.inputTokens;
-      metrics.outputTokens += result.outputTokens;
-    });
+    await timePhase("classify", () =>
+      runWithConcurrency(candidates, CLASSIFIER_CONCURRENCY, async (c) => {
+        if (opts.signal?.aborted || !c.frame) return;
+        const result = await adapters.vision.classify(resolve(framesDir, c.frame), opts.signal);
+        c.classification = { verdict: result.verdict };
+        if (result.verdict === "yes") metrics.classifierYes++;
+        else metrics.classifierNo++;
+        metrics.inputTokens += result.inputTokens;
+        metrics.outputTokens += result.outputTokens;
+      }),
+    );
   } catch (err) {
     return finalize({
       reason: "vision-failed",
@@ -184,18 +211,22 @@ export async function runFramesPipeline(
   // ---------- phase: vision ----------
   const yesFrames = candidates.filter((c) => c.classification?.verdict === "yes");
   try {
-    await runWithConcurrency(yesFrames, VISION_CONCURRENCY, async (c) => {
-      if (opts.signal?.aborted || !c.frame) return;
-      const result = await adapters.vision.describe(resolve(framesDir, c.frame), opts.signal);
-      c.vision = {
-        description: result.description,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-      };
-      metrics.visionCalls++;
-      metrics.inputTokens += result.inputTokens;
-      metrics.outputTokens += result.outputTokens;
-    });
+    await timePhase("vision", () =>
+      runWithConcurrency(yesFrames, VISION_CONCURRENCY, async (c) => {
+        if (opts.signal?.aborted || !c.frame) return;
+        const result = await adapters.vision.describe(resolve(framesDir, c.frame), opts.signal);
+        c.vision = {
+          description: result.description,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+        };
+        metrics.visionCalls++;
+        if (result.mode === "verbatim") metrics.visionVerbatim++;
+        else metrics.visionSummary++;
+        metrics.inputTokens += result.inputTokens;
+        metrics.outputTokens += result.outputTokens;
+      }),
+    );
   } catch (err) {
     return finalize({
       reason: "vision-failed",
@@ -205,7 +236,7 @@ export async function runFramesPipeline(
   }
 
   // ---------- phase: weave ----------
-  const woven = weave(opts.transcript, candidates);
+  const woven = await timePhase("weave", async () => weave(opts.transcript, candidates));
   return finalize(null, woven);
 }
 

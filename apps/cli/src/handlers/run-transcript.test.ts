@@ -153,11 +153,14 @@ describe("runTranscript with --with-frames", () => {
     classifierYes: 10,
     classifierNo: 20,
     visionCalls: 10,
+    visionVerbatim: 3,
+    visionSummary: 7,
     inputTokens: 1000,
     outputTokens: 500,
     classifierModel: "openai/gpt-5.4-nano",
     visionModel: "openai/gpt-5.5",
     wallClockMs: 12345,
+    phasesMs: {},
     costSource: "cli-reported" as const,
   };
 

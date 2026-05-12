@@ -53,11 +53,14 @@ const sampleMetrics = {
   classifierYes: 15,
   classifierNo: 35,
   visionCalls: 15,
+  visionVerbatim: 5,
+  visionSummary: 10,
   inputTokens: 27000,
   outputTokens: 4000,
   classifierModel: "openai/gpt-5.4-nano",
   visionModel: "openai/gpt-5.5",
   wallClockMs: 250000,
+  phasesMs: { download: 30000, "scene-detection": 5000, vision: 200000 },
   costSource: "cli-reported" as const,
 };
 

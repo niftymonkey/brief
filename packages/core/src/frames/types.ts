@@ -53,10 +53,17 @@ export interface FramesMetrics {
   classifierYes: number;
   classifierNo: number;
   visionCalls: number;
+  /** Vision results that came back as VERBATIM mode (code, prompts, configs reproduced word-for-word). */
+  visionVerbatim: number;
+  /** Vision results that came back as SUMMARY mode (slides, diagrams, paragraph descriptions). */
+  visionSummary: number;
   inputTokens: number;
   outputTokens: number;
   classifierModel: string;
   visionModel: string;
+  /** Total wall-clock duration of the run, including failures. */
   wallClockMs: number;
+  /** Per-phase wall-clock breakdown so cost/latency hotspots are visible without re-running. */
+  phasesMs: Partial<Record<FramesPhase, number>>;
   costSource: "cli-reported";
 }

@@ -62,7 +62,20 @@ export async function POST(req: NextRequest) {
         ...(augmentedTranscript ? { augmentedTranscript } : {}),
       }),
     saveSubmission: async ({ userId, metadata, brief, briefMetrics, frames }) => {
-      const dbBrief = await saveBrief(userId, metadata, brief, false, null, briefMetrics, frames.kind);
+      // When frames are included or attempted-failed, the CLI ships the
+      // FramesMetrics blob in the submission. Persist it verbatim so iteration
+      // on cue/weave/prompt heuristics has token + per-phase telemetry to read.
+      const framesMetrics = frames.kind === "not-requested" ? null : frames.metrics;
+      const dbBrief = await saveBrief(
+        userId,
+        metadata,
+        brief,
+        false,
+        null,
+        briefMetrics,
+        frames.kind,
+        framesMetrics,
+      );
       return { briefId: dbBrief.id };
     },
     llmApiKey,

@@ -64,11 +64,33 @@ export interface BriefResult {
  * - `included`      — frames were requested and successfully woven in.
  * - `attempted-failed` — frames were requested but the pipeline failed; the
  *                       brief still generated from the transcript alone.
- *
- * Only `not-requested` is written by today's code path. The frames feature
- * (#87) populates the other values when it lands.
  */
 export type FramesStatus = "not-requested" | "included" | "attempted-failed";
+
+/**
+ * Per-run telemetry from the CLI-side video-frames pipeline. The CLI is the
+ * authoritative producer (it owns the LLM calls); the server persists this
+ * blob verbatim for iteration. `costSource: "cli-reported"` records that
+ * token counts came from the CLI's own SDK responses, not a server-issued
+ * billing channel (a future tightening tracked by #94).
+ */
+export interface FramesMetrics {
+  videoDurationSec: number;
+  candidatesGenerated: number;
+  candidatesAfterDedup: number;
+  classifierYes: number;
+  classifierNo: number;
+  visionCalls: number;
+  visionVerbatim: number;
+  visionSummary: number;
+  inputTokens: number;
+  outputTokens: number;
+  classifierModel: string;
+  visionModel: string;
+  wallClockMs: number;
+  phasesMs: Record<string, number>;
+  costSource: "cli-reported";
+}
 
 /**
  * Per-generation telemetry persisted alongside each brief. Token counts and
@@ -133,6 +155,7 @@ export interface DbBrief {
   transcript: StoredTranscript | null;
   metrics: BriefMetrics | null;
   framesStatus: FramesStatus;
+  framesMetrics: FramesMetrics | null;
   createdAt: Date;
   updatedAt: Date;
   tags?: Tag[];

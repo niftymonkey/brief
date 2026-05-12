@@ -11,8 +11,17 @@ export interface ClassifyResult {
   outputTokens: number;
 }
 
+export type VisionMode = "verbatim" | "summary";
+
 export interface VisionDescribeResult {
   description: string;
+  /**
+   * Which mode the model chose for this frame. Parsed from a leading
+   * `<mode>verbatim</mode>` / `<mode>summary</mode>` marker that the prompt
+   * instructs the model to emit. Falls back to "summary" if the marker is
+   * missing or malformed — keeps the pipeline robust to occasional drift.
+   */
+  mode: VisionMode;
   inputTokens: number;
   outputTokens: number;
 }
@@ -52,12 +61,34 @@ In summary mode: write a single concise paragraph under 200 words. Quote specifi
 
 If both apply (e.g., a slide that contains a code block as its central content), prefer VERBATIM for the central content and add one short sentence of context.
 
-Don't pad with "this frame shows" or "the screen displays" filler. Lead with the content.`;
+Don't pad with "this frame shows" or "the screen displays" filler. Lead with the content.
+
+Begin your response with exactly one of these mode markers on the first line:
+\`<mode>verbatim</mode>\`
+\`<mode>summary</mode>\`
+Then continue with the content as described above. The marker is for downstream processing; do not reference it in your prose.`;
 
 // 16 is the floor enforced by some OpenRouter-routed providers (e.g. Azure-hosted GPT-5 nano).
 // Anthropic-direct accepts 5; routing through OpenRouter forces us to the higher minimum.
 const CLASSIFIER_MAX_OUTPUT_TOKENS = 16;
 const VISION_MAX_OUTPUT_TOKENS = 2000;
+
+const MODE_MARKER_RE = /^\s*<mode>(verbatim|summary)<\/mode>\s*/i;
+
+/**
+ * Extracts the mode marker the vision prompt instructs the model to emit on
+ * the first line. Returns the parsed mode and the description with the marker
+ * stripped. If the marker is missing/malformed (model drift), defaults to
+ * "summary" and leaves the description text alone — verbatim content is
+ * easier to detect by structure later if we ever need to backfill.
+ */
+export function parseModeMarker(rawText: string): { mode: VisionMode; description: string } {
+  const m = rawText.match(MODE_MARKER_RE);
+  if (!m) return { mode: "summary", description: rawText.trim() };
+  const mode = m[1].toLowerCase() as VisionMode;
+  const description = rawText.slice(m[0].length).trim();
+  return { mode, description };
+}
 
 export interface OpenRouterVisionClientOptions {
   apiKey: string;
@@ -117,8 +148,10 @@ export function createOpenRouterVisionClient(opts: OpenRouterVisionClientOptions
         ],
         ...(signal ? { abortSignal: signal } : {}),
       });
+      const parsed = parseModeMarker(result.text);
       return {
-        description: result.text.trim(),
+        description: parsed.description,
+        mode: parsed.mode,
         inputTokens: result.usage.inputTokens ?? 0,
         outputTokens: result.usage.outputTokens ?? 0,
       };
