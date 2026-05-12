@@ -40,11 +40,17 @@ export async function lookupWorkosUserEmail(userId: string): Promise<WorkosUserL
   if (!apiKey) {
     throw new Error("WORKOS_API_KEY env var is required for CLI user lookup");
   }
-  const res = await fetch(`${WORKOS_API_BASE}/user_management/users/${userId}`, {
-    headers: { authorization: `Bearer ${apiKey}` },
-    signal: AbortSignal.timeout(USER_LOOKUP_TIMEOUT_MS),
-  });
-  if (!res.ok) return null;
+  const res = await fetch(
+    `${WORKOS_API_BASE}/user_management/users/${encodeURIComponent(userId)}`,
+    {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(USER_LOOKUP_TIMEOUT_MS),
+    },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`WorkOS user lookup failed with status ${res.status}`);
+  }
   const body = (await res.json()) as { email?: string };
   if (!body.email) return null;
   return { email: body.email };
