@@ -47,7 +47,6 @@ export const FramesMetricsSchema = z.object({
 export const TranscriptSubmissionSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   videoId: z.string(),
-  metadata: VideoMetadataSchema,
   transcript: z.array(TranscriptEntrySchema),
   frames: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("not-requested") }),

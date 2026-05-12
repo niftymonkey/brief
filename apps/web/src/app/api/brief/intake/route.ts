@@ -3,6 +3,7 @@ import { TranscriptSubmissionSchema } from "@brief/core";
 import { extractBearer } from "@/lib/cli-auth";
 import { createWorkosTokenVerifier } from "@/lib/cli-auth-workos";
 import { handleIntake, type IntakeDeps } from "@/lib/cli-intake";
+import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateBrief } from "@/lib/summarize";
 import { saveBrief } from "@/lib/db";
 
@@ -33,17 +34,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY ?? "";
+  const llmApiKey = process.env.OPENROUTER_API_KEY ?? "";
+  const youtubeApiKey = process.env.YOUTUBE_API_KEY ?? "";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://brief.niftymonkey.dev";
 
   const deps: IntakeDeps = {
+    fetchVideoMetadata: (videoId) => fetchVideoMetadata(videoId, youtubeApiKey),
     generateBrief: (transcript, metadata, key) => generateBrief(transcript, metadata, key),
-    // TODO(chunk-7/8): persist frames discriminator + frames_status. v1 writes 'not-requested' default.
+    // TODO(chunk-8): persist frames discriminator + frames_status. v1 writes 'not-requested' default via saveBrief.
     saveSubmission: async ({ userId, metadata, brief, briefMetrics }) => {
       const dbBrief = await saveBrief(userId, metadata, brief, false, null, briefMetrics);
       return { briefId: dbBrief.id };
     },
-    llmApiKey: apiKey,
+    llmApiKey,
     buildBriefUrl: (briefId) => `${appUrl}/brief/${briefId}`,
   };
 

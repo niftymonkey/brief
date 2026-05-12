@@ -28,6 +28,7 @@ export interface SaveSubmissionArgs {
 }
 
 export interface IntakeDeps {
+  fetchVideoMetadata(videoId: string): Promise<VideoMetadata>;
   generateBrief(
     transcript: WebTranscriptEntry[],
     metadata: VideoMetadata,
@@ -62,11 +63,19 @@ export async function handleIntake(
   ctx: IntakeContext,
   deps: IntakeDeps,
 ): Promise<IntakeResult> {
+  let metadata: VideoMetadata;
+  try {
+    metadata = await deps.fetchVideoMetadata(submission.videoId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { kind: "transient", cause: message, message: `Failed to fetch metadata: ${message}` };
+  }
+
   const flatTranscript = toFlatSpeechEntries(submission.transcript);
 
   let briefResult: { brief: StructuredBrief; metrics: BriefMetrics };
   try {
-    briefResult = await deps.generateBrief(flatTranscript, submission.metadata, deps.llmApiKey);
+    briefResult = await deps.generateBrief(flatTranscript, metadata, deps.llmApiKey);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { kind: "transient", cause: message, message: `Failed to generate brief: ${message}` };
@@ -77,7 +86,7 @@ export async function handleIntake(
     saved = await deps.saveSubmission({
       userId: ctx.userId,
       videoId: submission.videoId,
-      metadata: submission.metadata,
+      metadata,
       transcript: submission.transcript,
       brief: briefResult.brief,
       briefMetrics: briefResult.metrics,
@@ -95,7 +104,7 @@ export async function handleIntake(
       briefId: saved.briefId,
       briefUrl: deps.buildBriefUrl(saved.briefId),
       brief: briefResult.brief,
-      metadata: submission.metadata,
+      metadata,
     },
   };
 }

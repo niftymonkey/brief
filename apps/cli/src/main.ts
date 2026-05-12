@@ -1,19 +1,14 @@
 import { parseArgs } from "node:util";
-import {
-  fetchMetadata,
-  fetchTranscript,
-  type MetadataResult,
-  type SourceName,
-  type TranscriptResult,
-} from "@brief/core";
+import { fetchMetadata, fetchTranscript, type SourceName } from "@brief/core";
 import { createAuthFlow } from "./auth";
 import { createFilesystemStore } from "./credentials";
-import { EXIT_ARG_ERROR, mapExitCode } from "./exit-codes";
+import { EXIT_ARG_ERROR } from "./exit-codes";
 import { createHostedClient } from "./hosted-client";
+import { runGenerate } from "./handlers/run-generate";
 import { runLogin } from "./handlers/run-login";
 import { runLogout } from "./handlers/run-logout";
+import { runTranscript } from "./handlers/run-transcript";
 import { runWhoami } from "./handlers/run-whoami";
-import { render, type CombinedResult } from "./renderer";
 
 const DEFAULT_API_BASE = "https://brief.niftymonkey.dev";
 
@@ -25,15 +20,17 @@ Subcommands:
   login                                    Sign in via WorkOS device flow
   logout                                   Sign out (clears local credentials)
   whoami [--json]                          Show the signed-in account
-  <url-or-id> [options]                    Fetch a YouTube transcript (legacy positional form)
+  transcript <url-or-id> [options]         Fetch a YouTube transcript locally
+  generate <url-or-id> [options]           Generate a brief on brief.niftymonkey.dev (requires login)
 
-Options (transcript flow):
+Options:
   --json                                   Emit machine-readable JSON
-  --no-metadata                            Skip YouTube Data API metadata fetch
-  --source=<auto|local|supadata>           Override the cascade. Default: auto.
-  --timeout=<ms>                           Overall request budget in ms
+  --no-metadata                            (transcript) Skip video-metadata fetch in the header
+  --with-frames                            (placeholder; frames pipeline lands in #87)
+  --source=<auto|local|supadata>           Override the transcript cascade
+  --timeout=<ms>                           Overall request budget
   --supadata-key=<key>                     Override SUPADATA_API_KEY env var
-  --youtube-key=<key>                      Override YOUTUBE_API_KEY env var
+  --youtube-key=<key>                      (transcript) Override YOUTUBE_API_KEY env var
   --help                                   Show this help
 
 Environment:
@@ -49,10 +46,11 @@ Exit codes:
   5  Authentication required (run \`brief login\`)
   6  CLI / server schema mismatch (upgrade brief)`;
 
-type ParsedTranscript = {
+type ParsedFlags = {
   values: {
     json?: boolean;
     "no-metadata"?: boolean;
+    "with-frames"?: boolean;
     source?: string;
     timeout?: string;
     "supadata-key"?: string;
@@ -62,13 +60,14 @@ type ParsedTranscript = {
   positionals: string[];
 };
 
-function parseTranscriptArgs(argv: string[]): ParsedTranscript {
+function parseFlags(argv: string[]): ParsedFlags {
   return parseArgs({
     args: argv,
     allowPositionals: true,
     options: {
       json: { type: "boolean" },
       "no-metadata": { type: "boolean" },
+      "with-frames": { type: "boolean" },
       source: { type: "string" },
       timeout: { type: "string" },
       "supadata-key": { type: "string" },
@@ -93,6 +92,59 @@ function writeResult(result: { stdout: string; stderr: string; exitCode: number 
 
 function getApiBase(): string {
   return process.env.BRIEF_API_URL ?? DEFAULT_API_BASE;
+}
+
+interface ParsedCommon {
+  input: string;
+  json: boolean;
+  noMetadata: boolean;
+  withFrames: boolean;
+  sources?: SourceName[];
+  signal?: AbortSignal;
+  supadataKey?: string;
+  youtubeKey?: string;
+}
+
+function buildCommonOpts(parsed: ParsedFlags): ParsedCommon | { error: string } {
+  const positional = parsed.positionals[0];
+  if (!positional) return { error: `Missing positional argument <url-or-id>\n\n${USAGE}\n` };
+
+  let sources: SourceName[] | undefined;
+  try {
+    sources = mapSource(parsed.values.source);
+  } catch (err) {
+    return { error: `${err instanceof Error ? err.message : String(err)}\n` };
+  }
+
+  let signal: AbortSignal | undefined;
+  if (parsed.values.timeout) {
+    const ms = Number(parsed.values.timeout);
+    if (!Number.isFinite(ms) || ms <= 0) {
+      return { error: "--timeout must be a positive number of ms\n" };
+    }
+    signal = AbortSignal.timeout(ms);
+  }
+
+  const supadataKey = parsed.values["supadata-key"] ?? process.env.SUPADATA_API_KEY;
+  const youtubeKey = parsed.values["youtube-key"] ?? process.env.YOUTUBE_API_KEY;
+
+  if (parsed.values.source === "supadata" && !supadataKey) {
+    return {
+      error: "--source=supadata requires SUPADATA_API_KEY or --supadata-key\n",
+    };
+  }
+
+  const opts: ParsedCommon = {
+    input: positional,
+    json: !!parsed.values.json,
+    noMetadata: !!parsed.values["no-metadata"],
+    withFrames: !!parsed.values["with-frames"],
+  };
+  if (sources) opts.sources = sources;
+  if (signal) opts.signal = signal;
+  if (supadataKey) opts.supadataKey = supadataKey;
+  if (youtubeKey) opts.youtubeKey = youtubeKey;
+  return opts;
 }
 
 async function dispatchLogin(): Promise<number> {
@@ -125,10 +177,7 @@ async function dispatchLogout(): Promise<number> {
 async function dispatchWhoami(argv: string[]): Promise<number> {
   let json = false;
   try {
-    const parsed = parseArgs({
-      args: argv,
-      options: { json: { type: "boolean" } },
-    });
+    const parsed = parseArgs({ args: argv, options: { json: { type: "boolean" } } });
     json = !!parsed.values.json;
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
@@ -139,84 +188,69 @@ async function dispatchWhoami(argv: string[]): Promise<number> {
   return writeResult(await runWhoami({ hostedClient }, { json }));
 }
 
-async function dispatchLegacyTranscript(argv: string[]): Promise<number> {
-  let parsed: ParsedTranscript;
+async function dispatchTranscript(argv: string[], bareShortcut: boolean): Promise<number> {
+  let parsed: ParsedFlags;
   try {
-    parsed = parseTranscriptArgs(argv);
+    parsed = parseFlags(argv);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`${msg}\n\n${USAGE}\n`);
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n\n${USAGE}\n`);
     return EXIT_ARG_ERROR;
   }
-
   if (parsed.values.help) {
     process.stdout.write(`${USAGE}\n`);
     return EXIT_ARG_ERROR;
   }
-
-  const positional = parsed.positionals[0];
-  if (!positional) {
-    process.stderr.write(`Missing positional argument <url-or-id>\n\n${USAGE}\n`);
+  const common = buildCommonOpts(parsed);
+  if ("error" in common) {
+    process.stderr.write(common.error);
     return EXIT_ARG_ERROR;
   }
 
-  let sources: SourceName[] | undefined;
+  return writeResult(
+    await runTranscript(
+      { fetchTranscript, fetchMetadata },
+      {
+        ...common,
+        ...(bareShortcut ? { bareShortcut: true } : {}),
+        ttyStderr: !!process.stderr.isTTY,
+      },
+    ),
+  );
+}
+
+async function dispatchGenerate(argv: string[]): Promise<number> {
+  let parsed: ParsedFlags;
   try {
-    sources = mapSource(parsed.values.source);
+    parsed = parseFlags(argv);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`${msg}\n`);
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n\n${USAGE}\n`);
+    return EXIT_ARG_ERROR;
+  }
+  if (parsed.values.help) {
+    process.stdout.write(`${USAGE}\n`);
+    return EXIT_ARG_ERROR;
+  }
+  const common = buildCommonOpts(parsed);
+  if ("error" in common) {
+    process.stderr.write(common.error);
     return EXIT_ARG_ERROR;
   }
 
-  const supadataKey = parsed.values["supadata-key"] ?? process.env.SUPADATA_API_KEY;
-  const youtubeKey = parsed.values["youtube-key"] ?? process.env.YOUTUBE_API_KEY;
+  const credentials = createFilesystemStore();
+  const hostedClient = createHostedClient({ baseUrl: getApiBase(), credentials });
 
-  if (parsed.values.source === "supadata" && !supadataKey) {
-    process.stderr.write(
-      `--source=supadata requires SUPADATA_API_KEY or --supadata-key\n`,
-    );
-    return EXIT_ARG_ERROR;
-  }
-
-  let signal: AbortSignal | undefined;
-  if (parsed.values.timeout) {
-    const ms = Number(parsed.values.timeout);
-    if (!Number.isFinite(ms) || ms <= 0) {
-      process.stderr.write(`--timeout must be a positive number of ms\n`);
-      return EXIT_ARG_ERROR;
-    }
-    signal = AbortSignal.timeout(ms);
-  }
-
-  const wantMetadata = !parsed.values["no-metadata"] && !!youtubeKey;
-
-  const transcriptPromise: Promise<TranscriptResult> = fetchTranscript(positional, {
-    ...(supadataKey ? { supadataApiKey: supadataKey } : {}),
-    ...(sources ? { sources } : {}),
-    ...(signal ? { signal } : {}),
-  });
-  const metadataPromise: Promise<MetadataResult | null> = wantMetadata
-    ? fetchMetadata(positional, {
-        youtubeApiKey: youtubeKey!,
-        ...(signal ? { signal } : {}),
-      })
-    : Promise.resolve(null);
-
-  const [transcript, metadata] = await Promise.all([transcriptPromise, metadataPromise]);
-
-  const combined: CombinedResult = {
-    videoIdOrUrl: positional,
-    transcript,
-    metadata,
+  const generateOpts: Parameters<typeof runGenerate>[1] = {
+    input: common.input,
+    json: common.json,
+    withFrames: common.withFrames,
   };
+  if (common.sources) generateOpts.sources = common.sources;
+  if (common.signal) generateOpts.signal = common.signal;
+  if (common.supadataKey) generateOpts.supadataKey = common.supadataKey;
 
-  const format = parsed.values.json ? "json" : "human";
-  const out = render(combined, format, !!process.stderr.isTTY);
-  if (out.stdout) process.stdout.write(out.stdout);
-  if (out.stderr) process.stderr.write(out.stderr);
-
-  return mapExitCode(transcript);
+  return writeResult(
+    await runGenerate({ fetchTranscript, hostedClient }, generateOpts),
+  );
 }
 
 async function main(): Promise<number> {
@@ -230,8 +264,12 @@ async function main(): Promise<number> {
       return dispatchLogout();
     case "whoami":
       return dispatchWhoami(argv.slice(1));
+    case "transcript":
+      return dispatchTranscript(argv.slice(1), false);
+    case "generate":
+      return dispatchGenerate(argv.slice(1));
     default:
-      return dispatchLegacyTranscript(argv);
+      return dispatchTranscript(argv, true);
   }
 }
 

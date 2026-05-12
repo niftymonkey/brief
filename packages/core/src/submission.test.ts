@@ -166,7 +166,6 @@ describe("TranscriptSubmissionSchema", () => {
   const validTranscriptOnly = {
     schemaVersion: "2.0.0",
     videoId: "abc123XYZAB",
-    metadata: validMetadata,
     transcript: [validSpeech],
     frames: { kind: "not-requested" },
   };
@@ -234,7 +233,6 @@ describe("TranscriptSubmissionSchema", () => {
     const submission: TranscriptSubmission = {
       schemaVersion: "2.0.0",
       videoId: "abc",
-      metadata: validMetadata,
       transcript: [{ kind: "speech", offsetSec: 0, durationSec: 1, text: "x" }],
       frames: { kind: "not-requested" },
     };

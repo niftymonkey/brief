@@ -6,6 +6,8 @@ import {
   type IntakeDeps,
 } from "./cli-intake";
 
+// Shared base fixtures: extend with `...spread` overrides per-test.
+
 const sampleMetadata = {
   videoId: "abc123XYZAB",
   title: "Test video",
@@ -44,40 +46,33 @@ const sampleBriefMetrics = {
   latencyMs: 1234,
 };
 
-const transcriptOnlySubmission: TranscriptSubmission = {
+const sampleMetrics = {
+  videoDurationSec: 210,
+  candidatesGenerated: 80,
+  candidatesAfterDedup: 50,
+  classifierYes: 15,
+  classifierNo: 35,
+  visionCalls: 15,
+  inputTokens: 27000,
+  outputTokens: 4000,
+  classifierModel: "openai/gpt-5.4-nano",
+  visionModel: "openai/gpt-5.5",
+  wallClockMs: 250000,
+  costSource: "cli-reported" as const,
+};
+
+const baseSubmission: TranscriptSubmission = {
   schemaVersion: "2.0.0",
   videoId: "abc123XYZAB",
-  metadata: sampleMetadata,
   transcript: [sampleSpeech],
   frames: { kind: "not-requested" },
 };
 
-const augmentedSubmission: TranscriptSubmission = {
-  schemaVersion: "2.0.0",
-  videoId: "abc123XYZAB",
-  metadata: sampleMetadata,
-  transcript: [sampleSpeech, sampleVisual],
-  frames: {
-    kind: "included",
-    metrics: {
-      videoDurationSec: 210,
-      candidatesGenerated: 80,
-      candidatesAfterDedup: 50,
-      classifierYes: 15,
-      classifierNo: 35,
-      visionCalls: 15,
-      inputTokens: 27000,
-      outputTokens: 4000,
-      classifierModel: "openai/gpt-5.4-nano",
-      visionModel: "openai/gpt-5.5",
-      wallClockMs: 250000,
-      costSource: "cli-reported",
-    },
-  },
-};
+const baseCtx = { userId: "user_01" };
 
 function makeDeps(overrides: Partial<IntakeDeps> = {}): IntakeDeps {
   return {
+    fetchVideoMetadata: vi.fn().mockResolvedValue(sampleMetadata),
     generateBrief: vi.fn().mockResolvedValue({
       brief: sampleBrief,
       metrics: sampleBriefMetrics,
@@ -91,8 +86,7 @@ function makeDeps(overrides: Partial<IntakeDeps> = {}): IntakeDeps {
 
 describe("toFlatSpeechEntries", () => {
   it("converts speech entries to the legacy flat shape", () => {
-    const result = toFlatSpeechEntries([sampleSpeech]);
-    expect(result).toEqual([
+    expect(toFlatSpeechEntries([sampleSpeech])).toEqual([
       { text: "Hello world", offset: 0, duration: 5.2 },
     ]);
   });
@@ -104,21 +98,19 @@ describe("toFlatSpeechEntries", () => {
   });
 
   it("preserves lang on speech entries when present", () => {
-    const withLang = { ...sampleSpeech, lang: "en" };
-    const result = toFlatSpeechEntries([withLang]);
+    const result = toFlatSpeechEntries([{ ...sampleSpeech, lang: "en" }]);
     expect(result[0]?.lang).toBe("en");
   });
 
   it("omits lang on entries that don't have it", () => {
-    const result = toFlatSpeechEntries([sampleSpeech]);
-    expect(result[0]).not.toHaveProperty("lang");
+    expect(toFlatSpeechEntries([sampleSpeech])[0]).not.toHaveProperty("lang");
   });
 });
 
 describe("handleIntake", () => {
   it("returns ok with briefUrl + brief on a speech-only submission", async () => {
     const deps = makeDeps();
-    const result = await handleIntake(transcriptOnlySubmission, { userId: "user_01" }, deps);
+    const result = await handleIntake(baseSubmission, baseCtx, deps);
 
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") {
@@ -130,9 +122,19 @@ describe("handleIntake", () => {
     }
   });
 
+  it("fetches metadata server-side from videoId", async () => {
+    const deps = makeDeps();
+    await handleIntake(baseSubmission, baseCtx, deps);
+    expect(deps.fetchVideoMetadata).toHaveBeenCalledWith("abc123XYZAB");
+  });
+
   it("calls generateBrief with speech-only entries in the legacy web shape", async () => {
     const deps = makeDeps();
-    await handleIntake(augmentedSubmission, { userId: "user_01" }, deps);
+    await handleIntake(
+      { ...baseSubmission, transcript: [sampleSpeech, sampleVisual] },
+      baseCtx,
+      deps,
+    );
 
     expect(deps.generateBrief).toHaveBeenCalledTimes(1);
     const [transcript, metadata, apiKey] = vi.mocked(deps.generateBrief).mock.calls[0];
@@ -143,7 +145,11 @@ describe("handleIntake", () => {
 
   it("persists the row with sum-type entries (preserves visual)", async () => {
     const deps = makeDeps();
-    await handleIntake(augmentedSubmission, { userId: "user_01" }, deps);
+    await handleIntake(
+      { ...baseSubmission, transcript: [sampleSpeech, sampleVisual] },
+      baseCtx,
+      deps,
+    );
 
     expect(deps.saveSubmission).toHaveBeenCalledTimes(1);
     const [args] = vi.mocked(deps.saveSubmission).mock.calls[0];
@@ -157,43 +163,57 @@ describe("handleIntake", () => {
 
   it("passes frames discriminator + metrics to saveSubmission", async () => {
     const deps = makeDeps();
-    await handleIntake(augmentedSubmission, { userId: "user_01" }, deps);
+    const augmentedFrames = {
+      kind: "included" as const,
+      metrics: sampleMetrics,
+    };
+    await handleIntake(
+      { ...baseSubmission, frames: augmentedFrames },
+      baseCtx,
+      deps,
+    );
     const [args] = vi.mocked(deps.saveSubmission).mock.calls[0];
-    expect(args.frames).toEqual(augmentedSubmission.frames);
+    expect(args.frames).toEqual(augmentedFrames);
   });
 
   it("persists brief generation metrics from generateBrief", async () => {
     const deps = makeDeps();
-    await handleIntake(transcriptOnlySubmission, { userId: "user_01" }, deps);
+    await handleIntake(baseSubmission, baseCtx, deps);
     const [args] = vi.mocked(deps.saveSubmission).mock.calls[0];
     expect(args.briefMetrics).toEqual(sampleBriefMetrics);
     expect(args.brief).toEqual(sampleBrief);
+  });
+
+  it("returns transient when fetchVideoMetadata throws", async () => {
+    const deps = makeDeps({
+      fetchVideoMetadata: vi.fn().mockRejectedValue(new Error("Video not found")),
+    });
+    const result = await handleIntake(baseSubmission, baseCtx, deps);
+    expect(result.kind).toBe("transient");
+    if (result.kind === "transient") {
+      expect(result.cause).toMatch(/Video not found/);
+    }
+    expect(deps.generateBrief).not.toHaveBeenCalled();
+    expect(deps.saveSubmission).not.toHaveBeenCalled();
   });
 
   it("returns transient when generateBrief throws", async () => {
     const deps = makeDeps({
       generateBrief: vi.fn().mockRejectedValue(new Error("LLM down")),
     });
-    const result = await handleIntake(transcriptOnlySubmission, { userId: "user_01" }, deps);
+    const result = await handleIntake(baseSubmission, baseCtx, deps);
     expect(result.kind).toBe("transient");
     if (result.kind === "transient") {
       expect(result.cause).toMatch(/LLM down/);
     }
+    expect(deps.saveSubmission).not.toHaveBeenCalled();
   });
 
   it("returns transient when saveSubmission throws", async () => {
     const deps = makeDeps({
       saveSubmission: vi.fn().mockRejectedValue(new Error("DB unavailable")),
     });
-    const result = await handleIntake(transcriptOnlySubmission, { userId: "user_01" }, deps);
+    const result = await handleIntake(baseSubmission, baseCtx, deps);
     expect(result.kind).toBe("transient");
-  });
-
-  it("does not call saveSubmission when generateBrief fails", async () => {
-    const deps = makeDeps({
-      generateBrief: vi.fn().mockRejectedValue(new Error("LLM down")),
-    });
-    await handleIntake(transcriptOnlySubmission, { userId: "user_01" }, deps);
-    expect(deps.saveSubmission).not.toHaveBeenCalled();
   });
 });
