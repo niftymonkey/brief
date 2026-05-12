@@ -1,9 +1,10 @@
 import { parseArgs } from "node:util";
-import { fetchMetadata, fetchTranscript, type SourceName } from "@brief/core";
+import { askVideo, extractFrames, fetchMetadata, fetchTranscript, type SourceName } from "@brief/core";
 import { createAuthFlow, type AuthFlow } from "./auth";
 import { createFilesystemStore } from "./credentials";
 import { EXIT_ARG_ERROR, EXIT_TRANSIENT } from "./exit-codes";
 import { createHostedClient, type RefreshTokensFn } from "./hosted-client";
+import { runAsk } from "./handlers/run-ask";
 import { runGenerate } from "./handlers/run-generate";
 import { runLogin } from "./handlers/run-login";
 import { runLogout } from "./handlers/run-logout";
@@ -23,6 +24,9 @@ Subcommands:
   whoami [--json]                          Show the signed-in account
   transcript <url-or-id> [options]         Fetch a YouTube transcript locally
   generate <url-or-id> [options]           Generate a brief on brief.niftymonkey.dev (requires login)
+  ask <url-or-id> "<question>"             Ask a question about a video. Builds the augmented transcript locally
+                                           (cache-aware) and asks via OpenRouter. No server contact. Or pipe a
+                                           transcript on stdin and omit the url:  cat t.txt | brief ask "..."
 
 Options:
   --json                                   Emit machine-readable JSON
@@ -318,6 +322,77 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   );
 }
 
+async function readStdinToString(): Promise<string> {
+  if (process.stdin.isTTY) return "";
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf-8");
+}
+
+async function dispatchAsk(argv: string[]): Promise<number> {
+  // `ask` has its own argv shape: question is mandatory, url-or-id is optional
+  // when stdin is piped. To stay flexible: any positional that parses as a
+  // YouTube id/url is treated as the input; everything else is the question.
+  let parsed: ParsedFlags;
+  try {
+    parsed = parseFlags(argv);
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n\n${USAGE}\n`);
+    return EXIT_ARG_ERROR;
+  }
+  if (parsed.values.help) {
+    process.stdout.write(`${USAGE}\n`);
+    return 0;
+  }
+
+  const positionals = parsed.positionals;
+  if (positionals.length === 0) {
+    process.stderr.write("Missing question. Usage: brief ask <url-or-id> \"<question>\"\n");
+    return EXIT_ARG_ERROR;
+  }
+
+  // Decide which positional is the URL and which is the question. If two
+  // positionals, the first is the url and the second is the question. If one
+  // positional, treat it as the question (stdin mode); if stdin is a TTY the
+  // handler will surface the right error.
+  const input = positionals.length >= 2 ? positionals[0] : undefined;
+  const question = positionals.length >= 2 ? positionals.slice(1).join(" ") : positionals[0];
+
+  const openRouterKey = parsed.values["openrouter-key"] ?? process.env.OPENROUTER_API_KEY;
+  const supadataKey = parsed.values["supadata-key"] ?? process.env.SUPADATA_API_KEY;
+
+  let signal: AbortSignal | undefined;
+  if (parsed.values.timeout) {
+    const ms = Number(parsed.values.timeout);
+    if (!Number.isFinite(ms) || ms <= 0) {
+      process.stderr.write("--timeout must be a positive number of ms\n");
+      return EXIT_ARG_ERROR;
+    }
+    signal = AbortSignal.timeout(ms);
+  }
+
+  const askOpts: Parameters<typeof runAsk>[1] = { question };
+  if (input) askOpts.input = input;
+  if (openRouterKey) askOpts.openRouterKey = openRouterKey;
+  if (supadataKey) askOpts.supadataKey = supadataKey;
+  if (signal) askOpts.signal = signal;
+
+  return writeResult(
+    await runAsk(
+      {
+        fetchTranscript,
+        extractFrames,
+        askVideo,
+        readStdin: readStdinToString,
+        progress: (line) => process.stderr.write(`${line}\n`),
+      },
+      askOpts,
+    ),
+  );
+}
+
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   const subcommand = argv[0];
@@ -333,6 +408,8 @@ async function main(): Promise<number> {
       return dispatchTranscript(argv.slice(1), false);
     case "generate":
       return dispatchGenerate(argv.slice(1));
+    case "ask":
+      return dispatchAsk(argv.slice(1));
     default:
       return dispatchTranscript(argv, true);
   }

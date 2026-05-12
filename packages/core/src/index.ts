@@ -19,6 +19,13 @@ export type {
   FramesPhase,
   FramesResult,
 } from "./frames";
+export { askVideo, ASK_SYSTEM_PROMPT } from "./ask";
+export type {
+  AskVideoOptions,
+  AskVideoMetrics,
+  AskVideoFailReason,
+  AskVideoResult,
+} from "./ask";
 export type {
   MetadataOptions,
   MetadataResult,

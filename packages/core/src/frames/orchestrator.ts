@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DownloadAdapter } from "./download";
 import { extractAllFrames, type FfmpegAdapter } from "./ffmpeg";
@@ -17,6 +17,11 @@ const DEFAULT_MAX_CANDIDATES = 100;
 const SCENE_THRESHOLD = 0.2;
 const CLASSIFIER_CONCURRENCY = 5;
 const VISION_CONCURRENCY = 4;
+
+/** Filename of the augmented transcript cache, written on a successful run. */
+const AUGMENTED_CACHE_FILE = "augmented.txt";
+/** Filename of the FramesMetrics blob, written alongside augmented.txt. */
+const METRICS_CACHE_FILE = "metrics.json";
 
 export interface FramesAdapters {
   download: DownloadAdapter;
@@ -113,6 +118,33 @@ export async function runFramesPipeline(
   mkdirSync(opts.workDir, { recursive: true });
   const framesDir = resolve(opts.workDir, "frames");
   mkdirSync(framesDir, { recursive: true });
+
+  // ---------- cache hit short-circuit ----------
+  // If a prior successful run wrote both augmented.txt and metrics.json into
+  // this workDir, return them verbatim and skip every phase. Lets `brief ask`
+  // feel near-instant on re-runs against the same videoId, and lets repeated
+  // `generate --with-frames` runs ship accurate previously-recorded metrics
+  // without re-spending classifier/vision tokens. Cache invalidation today is
+  // manual: delete the workDir (or its augmented.txt) to force a fresh run.
+  const augmentedPath = resolve(opts.workDir, AUGMENTED_CACHE_FILE);
+  const metricsPath = resolve(opts.workDir, METRICS_CACHE_FILE);
+  if (existsSync(augmentedPath) && existsSync(metricsPath)) {
+    try {
+      const cachedTranscript = readFileSync(augmentedPath, "utf-8");
+      const cachedMetrics = JSON.parse(readFileSync(metricsPath, "utf-8")) as FramesMetrics;
+      // Refresh the wall-clock so a downstream consumer can tell this run was
+      // cheap (a near-zero ms total signals "served from cache"). Per-phase
+      // numbers stay at their original values from the producing run.
+      const cacheRefreshedMetrics: FramesMetrics = {
+        ...cachedMetrics,
+        wallClockMs: Date.now() - startedAt,
+      };
+      return { kind: "included", transcript: cachedTranscript, metrics: cacheRefreshedMetrics };
+    } catch {
+      // Cache files exist but are unreadable/malformed — fall through to a
+      // fresh run rather than crashing. The fresh run will overwrite them.
+    }
+  }
 
   // ---------- phase: download ----------
   const downloadResult = await timePhase("download", () =>
@@ -237,6 +269,20 @@ export async function runFramesPipeline(
 
   // ---------- phase: weave ----------
   const woven = await timePhase("weave", async () => weave(opts.transcript, candidates));
+
+  // Persist the augmented transcript + metrics into the per-videoId workDir so
+  // future runs (ask, another generate, another transcript --with-frames on
+  // the same video) return from the cache short-circuit at the top of this
+  // function. Best-effort: a write failure here doesn't fail the run — the
+  // caller still gets the freshly-built result.
+  try {
+    const finalMetrics: FramesMetrics = { ...metrics, wallClockMs: Date.now() - startedAt };
+    writeFileSync(resolve(opts.workDir, AUGMENTED_CACHE_FILE), woven);
+    writeFileSync(resolve(opts.workDir, METRICS_CACHE_FILE), JSON.stringify(finalMetrics, null, 2));
+  } catch {
+    // Swallow — caching is a perf optimization, not a correctness requirement.
+  }
+
   return finalize(null, woven);
 }
 
