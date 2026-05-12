@@ -29,6 +29,7 @@ export interface RunGenerateDeps {
     },
   ) => Promise<TranscriptResult>;
   hostedClient: HostedClient;
+  progress: (line: string) => void;
 }
 
 export interface RunGenerateOptions {
@@ -75,6 +76,7 @@ export async function runGenerate(
   if (opts.sources) transcriptOpts.sources = opts.sources;
   if (opts.signal) transcriptOpts.signal = opts.signal;
 
+  deps.progress("Fetching transcript...");
   const transcript = await deps.fetchTranscript(opts.input, transcriptOpts);
   if (transcript.kind === "unavailable") {
     return {
@@ -110,6 +112,7 @@ export async function runGenerate(
     ? "Note: `--with-frames` accepted but not yet wired (frames pipeline lands in #87). Submitting transcript-only.\n"
     : "";
 
+  deps.progress("Generating brief on the server... (typically 5–15s)");
   const result = await deps.hostedClient.submit(submission);
 
   switch (result.kind) {

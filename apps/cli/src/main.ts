@@ -249,7 +249,14 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   if (common.supadataKey) generateOpts.supadataKey = common.supadataKey;
 
   return writeResult(
-    await runGenerate({ fetchTranscript, hostedClient }, generateOpts),
+    await runGenerate(
+      {
+        fetchTranscript,
+        hostedClient,
+        progress: (line) => process.stderr.write(`${line}\n`),
+      },
+      generateOpts,
+    ),
   );
 }
 

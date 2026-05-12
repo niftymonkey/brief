@@ -54,6 +54,7 @@ function makeDeps(overrides: Partial<RunGenerateDeps> = {}): RunGenerateDeps {
   return {
     fetchTranscript: vi.fn().mockResolvedValue(okTranscript),
     hostedClient: stubHostedClient(briefOk),
+    progress: vi.fn(),
     ...overrides,
   };
 }
@@ -165,6 +166,17 @@ describe("runGenerate", () => {
     const result = await runGenerate(deps, baseOptions);
     expect(result.exitCode).toBe(3);
     expect(deps.hostedClient.submit).not.toHaveBeenCalled();
+  });
+
+  it("emits progress lines for transcript-fetch and server-submit phases", async () => {
+    const progress = vi.fn();
+    const deps = makeDeps({ progress });
+    await runGenerate(deps, baseOptions);
+    const calls = progress.mock.calls.map(([line]) => line as string);
+    expect(calls).toEqual([
+      expect.stringMatching(/fetch.*transcript/i),
+      expect.stringMatching(/generat.*brief/i),
+    ]);
   });
 
   it("returns exit code 4 when transcript fetch is transient (server never called)", async () => {
