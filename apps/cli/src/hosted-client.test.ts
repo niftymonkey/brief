@@ -440,4 +440,76 @@ describe("HostedClient refresh-on-401", () => {
     expect(result.kind).toBe("ok");
     expect(transport.calls).toHaveLength(2);
   });
+
+  it("does not attempt refresh on a 401 whose body is ambiguous (no explicit error: expired)", async () => {
+    const credentials = createInMemoryStore();
+    await credentials.write(sampleTokens);
+    // Legacy/unparseable bodies still surface as auth-required:expired to the
+    // caller, but must NOT trigger refresh-token redemption.
+    const transport = createStubTransport([{ status: 401, body: { error: "token-expired" } }]);
+    const refreshTokens = vi.fn();
+    const client = createHostedClient({
+      baseUrl: BASE_URL,
+      credentials,
+      transport,
+      refreshTokens,
+    });
+
+    const result = await client.submit(validSubmission);
+    expect(result.kind).toBe("auth-required");
+    if (result.kind === "auth-required") {
+      expect(result.reason).toBe("expired");
+    }
+    expect(refreshTokens).not.toHaveBeenCalled();
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it("falls through to auth-required when the refresh callback throws", async () => {
+    const credentials = createInMemoryStore();
+    await credentials.write(sampleTokens);
+    const transport = createStubTransport([{ status: 401, body: { error: "expired" } }]);
+    const refreshTokens = async () => {
+      throw new Error("boom");
+    };
+    const client = createHostedClient({
+      baseUrl: BASE_URL,
+      credentials,
+      transport,
+      refreshTokens,
+    });
+
+    const result = await client.submit(validSubmission);
+    expect(result.kind).toBe("auth-required");
+    if (result.kind === "auth-required") {
+      expect(result.reason).toBe("expired");
+    }
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it("falls through to auth-required when credentials.write throws after refresh", async () => {
+    const credentials = createInMemoryStore();
+    await credentials.write(sampleTokens);
+    const throwingCredentials: CredentialStore = {
+      read: credentials.read.bind(credentials),
+      write: async () => {
+        throw new Error("disk full");
+      },
+      clear: credentials.clear.bind(credentials),
+    };
+    const transport = createStubTransport([{ status: 401, body: { error: "expired" } }]);
+    const refreshTokens = async () => ({ kind: "ok" as const, tokens: freshTokens });
+    const client = createHostedClient({
+      baseUrl: BASE_URL,
+      credentials: throwingCredentials,
+      transport,
+      refreshTokens,
+    });
+
+    const result = await client.submit(validSubmission);
+    expect(result.kind).toBe("auth-required");
+    if (result.kind === "auth-required") {
+      expect(result.reason).toBe("expired");
+    }
+    expect(transport.calls).toHaveLength(1);
+  });
 });
