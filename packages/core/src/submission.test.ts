@@ -39,17 +39,20 @@ const validMetrics = {
   classifierYes: 15,
   classifierNo: 35,
   visionCalls: 15,
+  visionVerbatim: 5,
+  visionSummary: 10,
   inputTokens: 27000,
   outputTokens: 4000,
   classifierModel: "openai/gpt-5.4-nano",
   visionModel: "openai/gpt-5.5",
   wallClockMs: 250000,
+  phasesMs: { download: 30000, "scene-detection": 5000, vision: 200000 },
   costSource: "cli-reported",
 };
 
 describe("SCHEMA_VERSION", () => {
   it("is the v2 literal", () => {
-    expect(SCHEMA_VERSION).toBe("2.0.0");
+    expect(SCHEMA_VERSION).toBe("2.1.0");
   });
 });
 
@@ -164,7 +167,7 @@ describe("FramesMetricsSchema", () => {
 
 describe("TranscriptSubmissionSchema", () => {
   const validTranscriptOnly = {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     videoId: "abc123XYZAB",
     transcript: [validSpeech],
     frames: { kind: "not-requested" },
@@ -179,9 +182,21 @@ describe("TranscriptSubmissionSchema", () => {
     const result = TranscriptSubmissionSchema.safeParse({
       ...validTranscriptOnly,
       transcript: [validSpeech, validVisual],
-      frames: { kind: "included", metrics: validMetrics },
+      frames: {
+        kind: "included",
+        transcript: "[0:00] [VISUAL] Pricing table",
+        metrics: validMetrics,
+      },
     });
     expect(result.success).toBe(true);
+  });
+
+  it("rejects frames.kind=included without a transcript string", () => {
+    const result = TranscriptSubmissionSchema.safeParse({
+      ...validTranscriptOnly,
+      frames: { kind: "included", metrics: validMetrics },
+    });
+    expect(result.success).toBe(false);
   });
 
   it("accepts a submission with frames.kind attempted-failed", () => {
@@ -231,11 +246,11 @@ describe("TranscriptSubmissionSchema", () => {
 
   it("inferred type matches expected discriminated-union shape", () => {
     const submission: TranscriptSubmission = {
-      schemaVersion: "2.0.0",
+      schemaVersion: "2.1.0",
       videoId: "abc",
       transcript: [{ kind: "speech", offsetSec: 0, durationSec: 1, text: "x" }],
       frames: { kind: "not-requested" },
     };
-    expect(submission.schemaVersion).toBe("2.0.0");
+    expect(submission.schemaVersion).toBe("2.1.0");
   });
 });

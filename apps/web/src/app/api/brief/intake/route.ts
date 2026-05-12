@@ -54,10 +54,28 @@ export async function POST(req: NextRequest) {
 
   const deps: IntakeDeps = {
     fetchVideoMetadata: (videoId) => fetchVideoMetadata(videoId, youtubeApiKey),
-    generateBrief: (transcript, metadata, key) => generateBrief(transcript, metadata, key),
-    // TODO(chunk-8): persist frames discriminator + frames_status. v1 writes 'not-requested' default via saveBrief.
-    saveSubmission: async ({ userId, metadata, brief, briefMetrics }) => {
-      const dbBrief = await saveBrief(userId, metadata, brief, false, null, briefMetrics);
+    generateBrief: ({ transcript, metadata, apiKey, augmentedTranscript }) =>
+      generateBrief({
+        transcript,
+        metadata,
+        apiKey,
+        ...(augmentedTranscript ? { augmentedTranscript } : {}),
+      }),
+    saveSubmission: async ({ userId, metadata, brief, briefMetrics, frames }) => {
+      // When frames are included or attempted-failed, the CLI ships the
+      // FramesMetrics blob in the submission. Persist it verbatim so iteration
+      // on cue/weave/prompt heuristics has token + per-phase telemetry to read.
+      const framesMetrics = frames.kind === "not-requested" ? null : frames.metrics;
+      const dbBrief = await saveBrief(
+        userId,
+        metadata,
+        brief,
+        false,
+        null,
+        briefMetrics,
+        frames.kind,
+        framesMetrics,
+      );
       return { briefId: dbBrief.id };
     },
     llmApiKey,

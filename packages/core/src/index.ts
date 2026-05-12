@@ -10,6 +10,22 @@ export {
   VISION_MODEL,
   estimateCost,
 } from "./models";
+export { extractFrames } from "./frames";
+export type {
+  Chapter as FramesChapter,
+  FramesFailReason,
+  FramesMetrics,
+  FramesOptions,
+  FramesPhase,
+  FramesResult,
+} from "./frames";
+export { askVideo, ASK_SYSTEM_PROMPT } from "./ask";
+export type {
+  AskVideoOptions,
+  AskVideoMetrics,
+  AskVideoFailReason,
+  AskVideoResult,
+} from "./ask";
 export type {
   MetadataOptions,
   MetadataResult,
@@ -31,6 +47,7 @@ export {
   IntakeResponseSchema,
   KeyPointSchema,
   LinkSchema,
+  SCHEMA_VERSION as SUBMISSION_SCHEMA_VERSION,
   SchemaMismatchResponseSchema,
   TranscriptEntrySchema,
   TranscriptSubmissionSchema,

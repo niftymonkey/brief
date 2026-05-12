@@ -79,7 +79,12 @@ export async function POST(
 
         // Step 3: Generate brief
         controller.enqueue(encoder.encode(createEvent("analyzing", "Analyzing content...")));
-        const { brief, metrics } = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
+        const { brief, metrics } = await generateBrief({
+          transcript,
+          metadata,
+          apiKey: openrouterApiKey,
+          chapters,
+        });
         console.log(`[REGENERATE] Brief generated`);
 
         const storedTranscript: StoredTranscript = {

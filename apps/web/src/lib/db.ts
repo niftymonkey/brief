@@ -3,6 +3,8 @@ import type {
   BriefMetrics,
   BriefSummary,
   DbBrief,
+  FramesMetrics,
+  FramesStatus,
   Link,
   StoredTranscript,
   StructuredBrief,
@@ -78,7 +80,9 @@ export async function saveBrief(
   brief: StructuredBrief,
   hasCreatorChapters: boolean,
   transcript: StoredTranscript | null,
-  metrics: BriefMetrics | null
+  metrics: BriefMetrics | null,
+  framesStatus: FramesStatus = "not-requested",
+  framesMetrics: FramesMetrics | null = null
 ): Promise<DbBrief> {
   const startTime = Date.now();
   console.log(`[DB] saveBrief called, userId: ${userId}, videoId: ${metadata.videoId}`);
@@ -105,7 +109,9 @@ export async function saveBrief(
       has_creator_chapters,
       search_text,
       transcript,
-      metrics
+      metrics,
+      frames_status,
+      frames_metrics
     ) VALUES (
       ${userId},
       ${metadata.videoId},
@@ -122,7 +128,9 @@ export async function saveBrief(
       ${hasCreatorChapters},
       ${searchText},
       ${transcript ? JSON.stringify(transcript) : null},
-      ${metrics ? JSON.stringify(metrics) : null}
+      ${metrics ? JSON.stringify(metrics) : null},
+      ${framesStatus},
+      ${framesMetrics ? JSON.stringify(framesMetrics) : null}
     )
     RETURNING
       id,
@@ -146,6 +154,7 @@ export async function saveBrief(
       transcript,
       metrics,
       frames_status as "framesStatus",
+      frames_metrics as "framesMetrics",
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -214,6 +223,7 @@ export async function updateBrief(
       transcript,
       metrics,
       frames_status as "framesStatus",
+      frames_metrics as "framesMetrics",
       created_at as "createdAt",
       updated_at as "updatedAt"
   `;
@@ -254,6 +264,7 @@ export async function getBriefById(
         transcript,
         metrics,
         frames_status as "framesStatus",
+        frames_metrics as "framesMetrics",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -284,6 +295,7 @@ export async function getBriefById(
         transcript,
         metrics,
         frames_status as "framesStatus",
+        frames_metrics as "framesMetrics",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -353,6 +365,7 @@ export async function getBriefByVideoId(
         transcript,
         metrics,
         frames_status as "framesStatus",
+        frames_metrics as "framesMetrics",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -403,6 +416,7 @@ export async function findGlobalBriefByVideoId(
         transcript,
         metrics,
         frames_status as "framesStatus",
+        frames_metrics as "framesMetrics",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM digests
@@ -498,6 +512,7 @@ export async function copyBriefForUser(
       transcript,
       metrics,
       frames_status as "framesStatus",
+      frames_metrics as "framesMetrics",
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -688,6 +703,7 @@ export async function getSharedBriefBySlug(
       transcript,
       metrics,
       frames_status as "framesStatus",
+      frames_metrics as "framesMetrics",
       created_at as "createdAt",
       updated_at as "updatedAt"
     FROM digests

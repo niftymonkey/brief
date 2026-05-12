@@ -27,12 +27,17 @@ export interface SaveSubmissionArgs {
   frames: TranscriptSubmission["frames"];
 }
 
+export interface IntakeGenerateBriefArgs {
+  transcript: WebTranscriptEntry[];
+  metadata: VideoMetadata;
+  apiKey: string;
+  augmentedTranscript?: string;
+}
+
 export interface IntakeDeps {
   fetchVideoMetadata(videoId: string): Promise<VideoMetadata>;
   generateBrief(
-    transcript: WebTranscriptEntry[],
-    metadata: VideoMetadata,
-    apiKey: string,
+    args: IntakeGenerateBriefArgs,
   ): Promise<{ brief: StructuredBrief; metrics: BriefMetrics }>;
   saveSubmission(args: SaveSubmissionArgs): Promise<{ briefId: string }>;
   llmApiKey: string;
@@ -72,10 +77,17 @@ export async function handleIntake(
   }
 
   const flatTranscript = toFlatSpeechEntries(submission.transcript);
+  const augmentedTranscript =
+    submission.frames.kind === "included" ? submission.frames.transcript : undefined;
 
   let briefResult: { brief: StructuredBrief; metrics: BriefMetrics };
   try {
-    briefResult = await deps.generateBrief(flatTranscript, metadata, deps.llmApiKey);
+    briefResult = await deps.generateBrief({
+      transcript: flatTranscript,
+      metadata,
+      apiKey: deps.llmApiKey,
+      ...(augmentedTranscript ? { augmentedTranscript } : {}),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { kind: "transient", cause: message, message: `Failed to generate brief: ${message}` };

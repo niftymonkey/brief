@@ -1,7 +1,7 @@
 # Video Frames Plan
 
-> **Status:** Decided. Foundational issues (#84, #85, #86, #91) landed. Architectural pivot 2026-05-11 moves the frames pipeline to the CLI; #87 and #88 are reshaped accordingly.
-> **Last updated:** 2026-05-11
+> **Status:** **Shipped (Phases 1–6 of #87 complete).** Augmented briefs are produced end-to-end via `brief generate --with-frames` and `brief transcript --with-frames`. See "What Shipped" below for the file-level landing summary.
+> **Last updated:** 2026-05-12
 > **Predecessor:** `continue-video-frames.md` (4-round technical spike)
 > **Companion docs:** `docs/architecture/video-frames.md` (#87), `docs/architecture/cli-thin-client.md` (#88), `docs/youtube-tos-research.md` (#84), `docs/architecture/model-selection.md` (#86)
 
@@ -85,6 +85,31 @@ Brief's digest pipeline feeds the LLM only the spoken transcript of a video. For
 
 - None at the design level. Architectural pivot (CLI-side pipeline + thin-client transition) is locked. Module boundaries are documented in the companion architecture docs.
 - **Implementation-time decisions** (deferred to each issue's build pass): verbatim-vs-summary metrics surfacing, `workDir` lifecycle ownership, cost-cap-overflow behavior, cancellation granularity, anti-bot signature matching in the `download` adapter. All listed in the open-questions sections of `docs/architecture/video-frames.md` and `docs/architecture/cli-thin-client.md`.
+
+## What Shipped (2026-05-12)
+
+Six-phase landing on `feat/frames-phase-1`, one commit per phase. End-to-end smoke test confirmed VERBATIM mode firing on a real video (`Bgxsx8slDEA`): on-screen slash-commands, prompt templates, dashboard widget labels, and dated output filenames surface in the augmented brief that don't appear in the speech-only baseline.
+
+- **Phase 1 — tracer-bullet lift.** `extractFrames()` ported from the spike into `packages/core/src/frames/index.ts`. Wired through `apps/cli/src/handlers/run-generate.ts` (server submission path) and the server intake adapter. Augmented transcript travels on `submission.frames.included.transcript` (string contract per the locked design decision).
+- **Phase 2 — pure-module split + tests.** `selection.ts` (cue patterns, dedup, source priority, video-start anchor, chapter-interior ratios) and `weave.ts` (temporal interleave, 12-second chunking, `[VISUAL]` formatting, markdown-emphasis stripping with newline preservation) extracted as standalone modules. 36 unit tests across the two cover regex matching, dedup-window collisions, source-priority winner selection, chapter-interior ratios, boundary trim, transcript bucket flush thresholds, format markers, and the whitespace-preservation regression the spike documented.
+- **Local cache** (alongside Phases 1–2). Per-`videoId` cache at `os.tmpdir()/brief-frames-cache/<videoId>/` — yt-dlp and ffmpeg both short-circuit on existing files, so re-runs against the same video skip the ~30s download and per-frame ffmpeg work. LLM calls re-run by design (prompt iteration would be useless if we cached them).
+- **`transcript --with-frames` wired** (CLI-side, no server contact). Prints the augmented transcript to stdout — pipe-friendly. Falls back to speech-only on `attempted-failed` with a stderr note. Sets up future commands like `ask` that consume the augmented transcript via stdin.
+- **Phase 3 — adapter port interfaces.** `download.ts` (yt-dlp + anti-bot signature regex + public-only gating), `ffmpeg.ts` (scene detection + frame extraction), `vision.ts` (OpenRouter classify + describe), and `orchestrator.ts` (phase sequencing) carved out behind injectable adapter interfaces. `index.ts` becomes a ~40-line public-surface wrapper that wires production-default adapters into the orchestrator.
+- **Phase 4 — integration tests with stub adapters.** 17 orchestrator tests covering phase sequencing, error-to-result translation (each adapter's failure mode → the right `phase` + `reason`), metrics aggregation, cancellation. 2 public-surface contract tests (happy path returns `kind: "included"` with sane metrics; budget overflow returns `attempted-failed: budget-exceeded` with zero vision spend).
+- **Phase 5 — production hardening + persistence.** Per-phase `wallClockMs` tallies stored in `FramesMetrics.phasesMs`. Vision results tagged with `verbatim` or `summary` mode via a structured `<mode>...</mode>` marker the model emits and the adapter strips. New `frames_metrics` JSONB column (migration `010_add_frames_metrics.sql`) persists the full `FramesMetrics` blob alongside the existing brief-generation metrics — separates "frames pipeline cost" from "digest LLM cost" cleanly.
+- **Cost cap** (carried through from Phase 1, hardened by Phase 4 tests). `maxCandidates` default 100; selection returns `budget-exceeded` rather than running the vision pass over a too-long video. Tests verify zero LLM spend when the cap fires.
+- **Auth-fix prerequisites.** Issues #100 (refresh-token redemption on 401-expired) and #101 (`expiresAt` written in seconds, legacy ms invalidated on read) shipped on a separate PR cherry-picked off `main` so they merge independently of the frames work. Without these, the CLI's WorkOS access tokens (5-min lifetime) would expire mid-run on long augmented-generate calls.
+
+**Tests at end of #87:** 199 core / 136 CLI / 27 web — 362 total, all green.
+
+**Deferred to follow-ups (intentional non-scope):**
+- Subprocess kill-on-abort for in-flight yt-dlp / ffmpeg. Signal already checks between phases, which covers the common cancel case. Mid-subprocess cancellation requires switching from `execSync`/`spawnSync` to `spawn` + `.kill()` listeners; modest refactor, file as hardening issue if it ever bites.
+- Vision rate-limit retry inside the adapter. Today a 429 fails the run; the orchestrator returns `vision-failed` and the CLI downgrades to transcript-only. Acceptable for v1.
+- ~~The `brief ask <url> "<question>"` subcommand.~~ **Shipped.** First invocation builds + caches the augmented transcript via the per-`videoId` disk cache; subsequent calls reuse the cache for ~5–10s answers. Also supports a stdin-piped mode for `transcript --with-frames | brief ask "..."`.
+
+## Rollout Decision
+
+**Punted to the #94 follow-up.** The architecture doc lists "allowlist or per-day rate-limiting for augmented briefs" as a Phase 6 decision. Today, gating is implicit: anyone signed in via `brief login` can run augmented briefs, and the LLM cost lands on the CLI user's own OpenRouter account (`costSource: "cli-reported"`). That naturally caps abuse at the cost of being non-uniform across users. When #94 lands server-issued ephemeral OpenRouter tokens, the rate-limit decision becomes load-bearing — until then, the CLI-user-pays model is its own throttle.
 
 ## References
 

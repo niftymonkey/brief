@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-export const SCHEMA_VERSION = "2.0.0" as const;
+// Bumped to 2.1.0 alongside #87 Phase 5: FramesMetricsSchema added required
+// fields (visionVerbatim, visionSummary, phasesMs), and frames.included gained
+// a required `transcript: string`. Pre-2.1.0 clients submitting the old shape
+// get a clean schema-mismatch (HTTP 409) from the intake endpoint and the
+// `serverAccepts` array tells them which version to upgrade to.
+export const SCHEMA_VERSION = "2.1.0" as const;
 
 export const TranscriptEntrySchema = z.discriminatedUnion("kind", [
   z.object({
@@ -36,11 +41,17 @@ export const FramesMetricsSchema = z.object({
   classifierYes: z.number(),
   classifierNo: z.number(),
   visionCalls: z.number(),
+  visionVerbatim: z.number(),
+  visionSummary: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
   classifierModel: z.string(),
   visionModel: z.string(),
   wallClockMs: z.number(),
+  // String keys (intentionally not enum-constrained at the wire boundary) so
+  // a Phase 5+ producer can add new phases without breaking older consumers.
+  // The TypeScript shape is constrained to FramesPhase keys via the producer.
+  phasesMs: z.record(z.string(), z.number()),
   costSource: z.literal("cli-reported"),
 });
 
@@ -50,7 +61,11 @@ export const TranscriptSubmissionSchema = z.object({
   transcript: z.array(TranscriptEntrySchema),
   frames: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("not-requested") }),
-    z.object({ kind: z.literal("included"), metrics: FramesMetricsSchema }),
+    z.object({
+      kind: z.literal("included"),
+      transcript: z.string(),
+      metrics: FramesMetricsSchema,
+    }),
     z.object({
       kind: z.literal("attempted-failed"),
       reason: z.string(),

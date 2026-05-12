@@ -17,7 +17,7 @@ const sampleTokens: Tokens = {
 };
 
 const validIntakeResponse = {
-  schemaVersion: "2.0.0",
+  schemaVersion: "2.1.0",
   briefId: "brief_abc",
   briefUrl: "https://brief.niftymonkey.dev/brief/brief_abc",
   brief: {
@@ -38,7 +38,7 @@ const validIntakeResponse = {
 };
 
 const validSubmission = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   videoId: "abc123XYZAB",
   metadata: validIntakeResponse.metadata,
   transcript: [
@@ -155,7 +155,7 @@ describe("HostedClient.submit", () => {
     expect(result.kind).toBe("schema-mismatch");
     if (result.kind === "schema-mismatch") {
       expect(result.serverAccepts).toEqual(["3.0.0"]);
-      expect(result.sent).toBe("2.0.0");
+      expect(result.sent).toBe("2.1.0");
     }
   });
 

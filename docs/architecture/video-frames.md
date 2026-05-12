@@ -1,5 +1,7 @@
 # Video Frames Architecture
 
+> **Status (2026-05-12):** Phases 1–6 shipped on `feat/frames-phase-1`. The design described below landed substantially as written, with three differences worth noting up front: (a) the public surface includes injectable adapter overrides via `runFramesPipeline(opts, adapters)` so Phase 4 tests can stub `download`/`ffmpeg`/`vision` without the real subprocesses or OpenRouter; `extractFrames()` is a thin wrapper that wires production defaults. (b) Vision verbatim-vs-summary is detected via a structured `<mode>verbatim</mode>` / `<mode>summary</mode>` marker the prompt instructs the model to emit and the adapter strips — design open-question (b) resolved in favor of the structured-marker option. (c) `FramesMetrics` adds `phasesMs` (per-phase wall-clock) and `visionVerbatim`/`visionSummary` counts; persisted server-side in the new `frames_metrics` JSONB column (migration `010_add_frames_metrics.sql`). See `docs/video-frames-plan.md`'s "What Shipped" for the per-phase landing summary.
+
 Design pass for the video-frames integration — issue [#87](https://github.com/niftymonkey/brief/issues/87). Depends on [#88](https://github.com/niftymonkey/brief/issues/88) (CLI thin-client transition, which provides the auth + submission shape this module plugs into). Captures locked module boundaries and the trade-offs at the integration seam; the issue + its follow-up comment are the working source of truth, this document is the artifact.
 
 ## Executive summary

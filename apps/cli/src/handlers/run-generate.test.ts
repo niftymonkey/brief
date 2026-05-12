@@ -98,11 +98,12 @@ describe("runGenerate", () => {
     expect(submission).not.toHaveProperty("metadata");
   });
 
-  it("submits frames.kind=not-requested even when --with-frames is requested (no #87 yet)", async () => {
+  it("rejects --with-frames without an OpenRouter key (server is never called)", async () => {
     const deps = makeDeps();
-    await runGenerate(deps, { ...baseOptions, withFrames: true });
-    const [submission] = vi.mocked(deps.hostedClient.submit).mock.calls[0];
-    expect(submission.frames.kind).toBe("not-requested");
+    const result = await runGenerate(deps, { ...baseOptions, withFrames: true });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/OPENROUTER_API_KEY/);
+    expect(deps.hostedClient.submit).not.toHaveBeenCalled();
   });
 
   it("returns exit code 1 when input cannot be parsed as a YouTube video", async () => {
@@ -126,7 +127,7 @@ describe("runGenerate", () => {
       hostedClient: stubHostedClient({
         kind: "schema-mismatch",
         serverAccepts: ["3.0.0"],
-        sent: "2.0.0",
+        sent: "2.1.0",
       }),
     });
     const result = await runGenerate(deps, baseOptions);
