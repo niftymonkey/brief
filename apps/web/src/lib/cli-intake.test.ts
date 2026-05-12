@@ -65,7 +65,7 @@ const sampleMetrics = {
 };
 
 const baseSubmission: TranscriptSubmission = {
-  schemaVersion: "2.0.0",
+  schemaVersion: "2.1.0",
   videoId: "abc123XYZAB",
   transcript: [sampleSpeech],
   frames: { kind: "not-requested" },
@@ -121,7 +121,7 @@ describe("handleIntake", () => {
       expect(result.response.briefUrl).toBe("https://brief.test/brief/brief_01abc");
       expect(result.response.brief).toEqual(sampleBrief);
       expect(result.response.metadata).toEqual(sampleMetadata);
-      expect(result.response.schemaVersion).toBe("2.0.0");
+      expect(result.response.schemaVersion).toBe("2.1.0");
     }
   });
 

@@ -38,6 +38,18 @@ export function createFfmpegAdapter(): FfmpegAdapter {
         { encoding: "utf8", maxBuffer: 50 * 1024 * 1024 },
       );
 
+      // Fail loudly on subprocess errors. Returning a parsed-but-empty array
+      // from a crashed ffmpeg silently downgrades the run into a "no candidates
+      // found" path, which is indistinguishable from a video that genuinely
+      // has no scene changes — surface the failure so the orchestrator can
+      // translate it to attempted-failed with phase=scene-detection.
+      if (result.error) {
+        throw new Error(`ffmpeg scene detection failed to start: ${result.error.message}`);
+      }
+      if (result.status !== 0) {
+        throw new Error(`ffmpeg scene detection failed (exit ${result.status}): ${result.stderr}`);
+      }
+
       const times: number[] = [];
       let m: RegExpExecArray | null;
       while ((m = SHOWINFO_TIME_RE.exec(result.stderr))) times.push(parseFloat(m[1]));

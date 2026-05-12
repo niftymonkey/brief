@@ -5,6 +5,7 @@ import type { z } from "zod";
 import {
   extractFrames,
   extractVideoId,
+  SUBMISSION_SCHEMA_VERSION,
   TranscriptEntrySchema,
   type FramesResult,
   type SourceName,
@@ -138,7 +139,7 @@ export async function runGenerate(
   }
 
   const submission: TranscriptSubmission = {
-    schemaVersion: "2.0.0",
+    schemaVersion: SUBMISSION_SCHEMA_VERSION,
     videoId,
     transcript: toSubmissionEntries(transcript),
     frames:

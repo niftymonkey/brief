@@ -229,6 +229,9 @@ export async function runFramesPipeline(
       }),
     );
   } catch (err) {
+    if (opts.signal?.aborted) {
+      return finalize({ reason: "aborted", phase: "classify", message: "Aborted during classify." });
+    }
     return finalize({
       reason: "vision-failed",
       phase: "classify",
@@ -260,6 +263,9 @@ export async function runFramesPipeline(
       }),
     );
   } catch (err) {
+    if (opts.signal?.aborted) {
+      return finalize({ reason: "aborted", phase: "vision", message: "Aborted during vision pass." });
+    }
     return finalize({
       reason: "vision-failed",
       phase: "vision",

@@ -59,18 +59,35 @@ export function weave(transcript: TranscriptEntry[], candidates: Candidate[]): s
       }
     } else {
       flush();
-      const cleanText = ev.text
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/(?<![\w*])\*([^*\n]+)\*(?!\w)/g, "$1")
-        .replace(/_([^_\n]+)_/g, "$1")
-        .trim();
-      lines.push(`[${fmtTime(ev.t)}] [VISUAL] ${cleanText}`);
+      lines.push(`[${fmtTime(ev.t)}] [VISUAL] ${stripEmphasisOutsideCodeFences(ev.text).trim()}`);
       lines.push("");
     }
   }
   flush();
 
   return lines.join("\n");
+}
+
+/**
+ * Strips markdown emphasis (`**bold**`, `*italic*`, `_x_`) from prose segments
+ * but leaves fenced code blocks untouched. VERBATIM-mode vision results can
+ * contain code, config, or prompt templates where `*` and `_` are syntactically
+ * meaningful (e.g., glob patterns, snake_case identifiers); stripping them
+ * would corrupt copy-pasteable content. We split on the fenced-block delimiter
+ * and only sanitize segments that aren't a fence.
+ */
+function stripEmphasisOutsideCodeFences(text: string): string {
+  return text
+    .split(/(```[\s\S]*?```)/g)
+    .map((part) =>
+      part.startsWith("```")
+        ? part
+        : part
+            .replace(/\*\*([^*]+)\*\*/g, "$1")
+            .replace(/(?<![\w*])\*([^*\n]+)\*(?!\w)/g, "$1")
+            .replace(/_([^_\n]+)_/g, "$1"),
+    )
+    .join("");
 }
 
 export function fmtTime(s: number): string {

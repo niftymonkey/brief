@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { execSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import type { FramesFailReason } from "./types";
 
@@ -38,8 +38,21 @@ export function createYtDlpAdapter(): DownloadAdapter {
 
       if (!existsSync(videoPath) || !existsSync(infoPath)) {
         try {
-          execSync(
-            `yt-dlp -f 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]' --merge-output-format mp4 --write-info-json -o '${videoId}.%(ext)s' '${videoId}'`,
+          // execFileSync — no shell interpolation, so even if an upstream caller
+          // were to leak shell metacharacters into `videoId` they'd be passed
+          // verbatim as a single argv entry rather than evaluated by the shell.
+          execFileSync(
+            "yt-dlp",
+            [
+              "-f",
+              "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]",
+              "--merge-output-format",
+              "mp4",
+              "--write-info-json",
+              "-o",
+              `${videoId}.%(ext)s`,
+              videoId,
+            ],
             { cwd: workDir, stdio: "pipe" },
           );
         } catch (err) {

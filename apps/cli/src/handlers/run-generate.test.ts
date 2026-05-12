@@ -127,7 +127,7 @@ describe("runGenerate", () => {
       hostedClient: stubHostedClient({
         kind: "schema-mismatch",
         serverAccepts: ["3.0.0"],
-        sent: "2.0.0",
+        sent: "2.1.0",
       }),
     });
     const result = await runGenerate(deps, baseOptions);

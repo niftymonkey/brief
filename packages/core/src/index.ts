@@ -47,6 +47,7 @@ export {
   IntakeResponseSchema,
   KeyPointSchema,
   LinkSchema,
+  SCHEMA_VERSION as SUBMISSION_SCHEMA_VERSION,
   SchemaMismatchResponseSchema,
   TranscriptEntrySchema,
   TranscriptSubmissionSchema,

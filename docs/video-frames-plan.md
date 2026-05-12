@@ -105,7 +105,7 @@ Six-phase landing on `feat/frames-phase-1`, one commit per phase. End-to-end smo
 **Deferred to follow-ups (intentional non-scope):**
 - Subprocess kill-on-abort for in-flight yt-dlp / ffmpeg. Signal already checks between phases, which covers the common cancel case. Mid-subprocess cancellation requires switching from `execSync`/`spawnSync` to `spawn` + `.kill()` listeners; modest refactor, file as hardening issue if it ever bites.
 - Vision rate-limit retry inside the adapter. Today a 429 fails the run; the orchestrator returns `vision-failed` and the CLI downgrades to transcript-only. Acceptable for v1.
-- The `brief ask <url> "<question>"` subcommand. The transcript-with-frames work sets up the inputs (the augmented transcript is already a first-class output); `ask` itself is a follow-up commit on this branch, tracked separately.
+- ~~The `brief ask <url> "<question>"` subcommand.~~ **Shipped.** First invocation builds + caches the augmented transcript via the per-`videoId` disk cache; subsequent calls reuse the cache for ~5–10s answers. Also supports a stdin-piped mode for `transcript --with-frames | brief ask "..."`.
 
 ## Rollout Decision
 

@@ -52,7 +52,7 @@ const validMetrics = {
 
 describe("SCHEMA_VERSION", () => {
   it("is the v2 literal", () => {
-    expect(SCHEMA_VERSION).toBe("2.0.0");
+    expect(SCHEMA_VERSION).toBe("2.1.0");
   });
 });
 
@@ -167,7 +167,7 @@ describe("FramesMetricsSchema", () => {
 
 describe("TranscriptSubmissionSchema", () => {
   const validTranscriptOnly = {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     videoId: "abc123XYZAB",
     transcript: [validSpeech],
     frames: { kind: "not-requested" },
@@ -246,11 +246,11 @@ describe("TranscriptSubmissionSchema", () => {
 
   it("inferred type matches expected discriminated-union shape", () => {
     const submission: TranscriptSubmission = {
-      schemaVersion: "2.0.0",
+      schemaVersion: "2.1.0",
       videoId: "abc",
       transcript: [{ kind: "speech", offsetSec: 0, durationSec: 1, text: "x" }],
       frames: { kind: "not-requested" },
     };
-    expect(submission.schemaVersion).toBe("2.0.0");
+    expect(submission.schemaVersion).toBe("2.1.0");
   });
 });

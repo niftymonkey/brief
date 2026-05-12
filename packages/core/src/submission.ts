@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-export const SCHEMA_VERSION = "2.0.0" as const;
+// Bumped to 2.1.0 alongside #87 Phase 5: FramesMetricsSchema added required
+// fields (visionVerbatim, visionSummary, phasesMs), and frames.included gained
+// a required `transcript: string`. Pre-2.1.0 clients submitting the old shape
+// get a clean schema-mismatch (HTTP 409) from the intake endpoint and the
+// `serverAccepts` array tells them which version to upgrade to.
+export const SCHEMA_VERSION = "2.1.0" as const;
 
 export const TranscriptEntrySchema = z.discriminatedUnion("kind", [
   z.object({
