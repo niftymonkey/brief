@@ -106,6 +106,11 @@ export const SchemaMismatchResponseSchema = z.object({
   serverAccepts: z.array(z.string()),
 });
 
+export const CliConfigResponseSchema = z.object({
+  workosClientId: z.string(),
+});
+
 export type BriefBody = z.infer<typeof BriefBodySchema>;
 export type IntakeResponse = z.infer<typeof IntakeResponseSchema>;
 export type WhoamiResponse = z.infer<typeof WhoamiResponseSchema>;
+export type CliConfigResponse = z.infer<typeof CliConfigResponseSchema>;

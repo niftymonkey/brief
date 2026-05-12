@@ -25,6 +25,7 @@ export type {
 } from "./types";
 export {
   BriefBodySchema,
+  CliConfigResponseSchema,
   ContentSectionSchema,
   FramesMetricsSchema,
   IntakeResponseSchema,
@@ -38,6 +39,7 @@ export {
 } from "./submission";
 export type {
   BriefBody,
+  CliConfigResponse,
   IntakeResponse,
   TranscriptSubmission,
   WhoamiResponse,

@@ -2,13 +2,14 @@ import { parseArgs } from "node:util";
 import { fetchMetadata, fetchTranscript, type SourceName } from "@brief/core";
 import { createAuthFlow } from "./auth";
 import { createFilesystemStore } from "./credentials";
-import { EXIT_ARG_ERROR } from "./exit-codes";
+import { EXIT_ARG_ERROR, EXIT_TRANSIENT } from "./exit-codes";
 import { createHostedClient } from "./hosted-client";
 import { runGenerate } from "./handlers/run-generate";
 import { runLogin } from "./handlers/run-login";
 import { runLogout } from "./handlers/run-logout";
 import { runTranscript } from "./handlers/run-transcript";
 import { runWhoami } from "./handlers/run-whoami";
+import { fetchServerConfig } from "./server-config";
 
 const DEFAULT_API_BASE = "https://brief.niftymonkey.dev";
 
@@ -35,7 +36,7 @@ Options:
 
 Environment:
   BRIEF_API_URL                            Hosted brief service URL (default: ${DEFAULT_API_BASE})
-  WORKOS_CLIENT_ID                         WorkOS client ID (required for login)
+  WORKOS_CLIENT_ID                         WorkOS client ID override (CLI fetches the value from the server by default)
 
 Exit codes:
   0  Success
@@ -148,12 +149,14 @@ function buildCommonOpts(parsed: ParsedFlags): ParsedCommon | { error: string } 
 }
 
 async function dispatchLogin(): Promise<number> {
-  const clientId = process.env.WORKOS_CLIENT_ID;
+  let clientId = process.env.WORKOS_CLIENT_ID;
   if (!clientId) {
-    process.stderr.write(
-      "Login requires WORKOS_CLIENT_ID env var. Ask brief support for the value.\n",
-    );
-    return EXIT_ARG_ERROR;
+    const config = await fetchServerConfig({ baseUrl: getApiBase() });
+    if (config.kind !== "ok") {
+      process.stderr.write(`${config.message}\n`);
+      return EXIT_TRANSIENT;
+    }
+    clientId = config.config.workosClientId;
   }
   const authFlow = createAuthFlow({
     clientId,
