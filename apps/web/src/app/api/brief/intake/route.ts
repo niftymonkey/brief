@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const llmApiKey = process.env.OPENROUTER_API_KEY ?? "";
   const youtubeApiKey = process.env.YOUTUBE_API_KEY ?? "";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://brief.niftymonkey.dev";
+  const origin = req.nextUrl.origin;
 
   const deps: IntakeDeps = {
     fetchVideoMetadata: (videoId) => fetchVideoMetadata(videoId, youtubeApiKey),
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       return { briefId: dbBrief.id };
     },
     llmApiKey,
-    buildBriefUrl: (briefId) => `${appUrl}/brief/${briefId}`,
+    buildBriefUrl: (briefId) => `${origin}/brief/${briefId}`,
   };
 
   const result = await handleIntake(parsed.data, { userId: verified.userId }, deps);
