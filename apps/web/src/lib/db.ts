@@ -3,6 +3,7 @@ import type {
   BriefMetrics,
   BriefSummary,
   DbBrief,
+  FramesStatus,
   Link,
   StoredTranscript,
   StructuredBrief,
@@ -78,7 +79,8 @@ export async function saveBrief(
   brief: StructuredBrief,
   hasCreatorChapters: boolean,
   transcript: StoredTranscript | null,
-  metrics: BriefMetrics | null
+  metrics: BriefMetrics | null,
+  framesStatus: FramesStatus = "not-requested"
 ): Promise<DbBrief> {
   const startTime = Date.now();
   console.log(`[DB] saveBrief called, userId: ${userId}, videoId: ${metadata.videoId}`);
@@ -105,7 +107,8 @@ export async function saveBrief(
       has_creator_chapters,
       search_text,
       transcript,
-      metrics
+      metrics,
+      frames_status
     ) VALUES (
       ${userId},
       ${metadata.videoId},
@@ -122,7 +125,8 @@ export async function saveBrief(
       ${hasCreatorChapters},
       ${searchText},
       ${transcript ? JSON.stringify(transcript) : null},
-      ${metrics ? JSON.stringify(metrics) : null}
+      ${metrics ? JSON.stringify(metrics) : null},
+      ${framesStatus}
     )
     RETURNING
       id,

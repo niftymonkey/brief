@@ -27,16 +27,20 @@ Subcommands:
 Options:
   --json                                   Emit machine-readable JSON
   --no-metadata                            (transcript) Skip video-metadata fetch in the header
-  --with-frames                            (placeholder; frames pipeline lands in #87)
+  --with-frames                            (generate) Augment the brief with on-screen content captured from video frames.
+                                           Requires yt-dlp + ffmpeg on PATH and OPENROUTER_API_KEY (or --openrouter-key).
+                                           Adds 1–3 min runtime per video.
   --source=<auto|local|supadata>           Override the transcript cascade
   --timeout=<ms>                           Overall request budget
   --supadata-key=<key>                     Override SUPADATA_API_KEY env var
   --youtube-key=<key>                      (transcript) Override YOUTUBE_API_KEY env var
+  --openrouter-key=<key>                   (generate --with-frames) Override OPENROUTER_API_KEY env var
   --help                                   Show this help
 
 Environment:
   BRIEF_API_URL                            Hosted brief service URL (default: ${DEFAULT_API_BASE})
   WORKOS_CLIENT_ID                         WorkOS client ID override (CLI fetches the value from the server by default)
+  OPENROUTER_API_KEY                       Required when --with-frames is set (your own OpenRouter key)
 
 Exit codes:
   0  Success
@@ -56,6 +60,7 @@ type ParsedFlags = {
     timeout?: string;
     "supadata-key"?: string;
     "youtube-key"?: string;
+    "openrouter-key"?: string;
     help?: boolean;
   };
   positionals: string[];
@@ -73,6 +78,7 @@ function parseFlags(argv: string[]): ParsedFlags {
       timeout: { type: "string" },
       "supadata-key": { type: "string" },
       "youtube-key": { type: "string" },
+      "openrouter-key": { type: "string" },
       help: { type: "boolean" },
     },
   });
@@ -132,6 +138,7 @@ interface ParsedCommon {
   signal?: AbortSignal;
   supadataKey?: string;
   youtubeKey?: string;
+  openRouterKey?: string;
 }
 
 function buildCommonOpts(parsed: ParsedFlags): ParsedCommon | { error: string } {
@@ -156,6 +163,7 @@ function buildCommonOpts(parsed: ParsedFlags): ParsedCommon | { error: string } 
 
   const supadataKey = parsed.values["supadata-key"] ?? process.env.SUPADATA_API_KEY;
   const youtubeKey = parsed.values["youtube-key"] ?? process.env.YOUTUBE_API_KEY;
+  const openRouterKey = parsed.values["openrouter-key"] ?? process.env.OPENROUTER_API_KEY;
 
   if (parsed.values.source === "supadata" && !supadataKey) {
     return {
@@ -173,6 +181,7 @@ function buildCommonOpts(parsed: ParsedFlags): ParsedCommon | { error: string } 
   if (signal) opts.signal = signal;
   if (supadataKey) opts.supadataKey = supadataKey;
   if (youtubeKey) opts.youtubeKey = youtubeKey;
+  if (openRouterKey) opts.openRouterKey = openRouterKey;
   return opts;
 }
 
@@ -290,6 +299,7 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   if (common.sources) generateOpts.sources = common.sources;
   if (common.signal) generateOpts.signal = common.signal;
   if (common.supadataKey) generateOpts.supadataKey = common.supadataKey;
+  if (common.openRouterKey) generateOpts.openRouterKey = common.openRouterKey;
 
   return writeResult(
     await runGenerate(

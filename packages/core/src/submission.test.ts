@@ -179,9 +179,21 @@ describe("TranscriptSubmissionSchema", () => {
     const result = TranscriptSubmissionSchema.safeParse({
       ...validTranscriptOnly,
       transcript: [validSpeech, validVisual],
-      frames: { kind: "included", metrics: validMetrics },
+      frames: {
+        kind: "included",
+        transcript: "[0:00] [VISUAL] Pricing table",
+        metrics: validMetrics,
+      },
     });
     expect(result.success).toBe(true);
+  });
+
+  it("rejects frames.kind=included without a transcript string", () => {
+    const result = TranscriptSubmissionSchema.safeParse({
+      ...validTranscriptOnly,
+      frames: { kind: "included", metrics: validMetrics },
+    });
+    expect(result.success).toBe(false);
   });
 
   it("accepts a submission with frames.kind attempted-failed", () => {

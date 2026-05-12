@@ -107,7 +107,12 @@ export async function POST(request: NextRequest) {
       const metadata = await fetchVideoMetadata(videoId, youtubeApiKey);
       const chapters = extractChapters(metadata.description, metadata.duration);
       const { entries: transcript, source: transcriptSource, lang: transcriptLang } = await fetchTranscript(videoId);
-      const { brief, metrics } = await generateBrief(transcript, metadata, openrouterApiKey, chapters);
+      const { brief, metrics } = await generateBrief({
+        transcript,
+        metadata,
+        apiKey: openrouterApiKey,
+        chapters,
+      });
       const hasCreatorChapters = chapters !== null && chapters.length > 0;
 
       const storedTranscript: StoredTranscript = {

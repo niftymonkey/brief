@@ -50,7 +50,11 @@ export const TranscriptSubmissionSchema = z.object({
   transcript: z.array(TranscriptEntrySchema),
   frames: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("not-requested") }),
-    z.object({ kind: z.literal("included"), metrics: FramesMetricsSchema }),
+    z.object({
+      kind: z.literal("included"),
+      transcript: z.string(),
+      metrics: FramesMetricsSchema,
+    }),
     z.object({
       kind: z.literal("attempted-failed"),
       reason: z.string(),

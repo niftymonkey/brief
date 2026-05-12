@@ -137,10 +137,26 @@ describe("handleIntake", () => {
     );
 
     expect(deps.generateBrief).toHaveBeenCalledTimes(1);
-    const [transcript, metadata, apiKey] = vi.mocked(deps.generateBrief).mock.calls[0];
-    expect(transcript).toEqual([{ text: "Hello world", offset: 0, duration: 5.2 }]);
-    expect(metadata).toEqual(sampleMetadata);
-    expect(apiKey).toBe("test-key");
+    const [args] = vi.mocked(deps.generateBrief).mock.calls[0];
+    expect(args.transcript).toEqual([{ text: "Hello world", offset: 0, duration: 5.2 }]);
+    expect(args.metadata).toEqual(sampleMetadata);
+    expect(args.apiKey).toBe("test-key");
+    expect(args.augmentedTranscript).toBeUndefined();
+  });
+
+  it("forwards the augmented transcript to generateBrief when frames are included", async () => {
+    const deps = makeDeps();
+    const augmented = "[0:00-0:05] Hello world\n\n[0:30] [VISUAL] Pricing: $19/mo";
+    await handleIntake(
+      {
+        ...baseSubmission,
+        frames: { kind: "included", transcript: augmented, metrics: sampleMetrics },
+      },
+      baseCtx,
+      deps,
+    );
+    const [args] = vi.mocked(deps.generateBrief).mock.calls[0];
+    expect(args.augmentedTranscript).toBe(augmented);
   });
 
   it("persists the row with sum-type entries (preserves visual)", async () => {
@@ -165,6 +181,7 @@ describe("handleIntake", () => {
     const deps = makeDeps();
     const augmentedFrames = {
       kind: "included" as const,
+      transcript: "[0:00] [VISUAL] something",
       metrics: sampleMetrics,
     };
     await handleIntake(

@@ -1,7 +1,12 @@
+import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { z } from "zod";
 import {
+  extractFrames,
   extractVideoId,
   TranscriptEntrySchema,
+  type FramesResult,
   type SourceName,
   type TranscriptResult,
   type TranscriptSubmission,
@@ -37,6 +42,7 @@ export interface RunGenerateOptions {
   input: string;
   json: boolean;
   withFrames: boolean;
+  openRouterKey?: string;
   sources?: SourceName[];
   signal?: AbortSignal;
   supadataKey?: string;
@@ -101,17 +107,58 @@ export async function runGenerate(
     };
   }
 
-  // Frames pipeline lands in #87; v1 always submits `not-requested`.
+  let framesResult: FramesResult | null = null;
+  let framesNotice = "";
+  if (opts.withFrames) {
+    if (!opts.openRouterKey) {
+      return {
+        stdout: "",
+        stderr: "Missing OPENROUTER_API_KEY (or --openrouter-key) — required for --with-frames.\n",
+        exitCode: EXIT_ARG_ERROR,
+      };
+    }
+    // Cache video bytes + extracted frames per videoId so subsequent runs against
+    // the same video reuse the download and the per-timestamp PNGs. yt-dlp and
+    // ffmpeg both short-circuit when their output files already exist. Cleared
+    // automatically when the OS rotates its tempdir (typically on reboot).
+    const workDir = join(tmpdir(), "brief-frames-cache", videoId);
+    mkdirSync(workDir, { recursive: true });
+    deps.progress(`Extracting frames... (cached at ${workDir}; first run ~1–3 min, re-runs skip download + frame extraction)`);
+    const framesOpts: Parameters<typeof extractFrames>[0] = {
+      videoId,
+      transcript: transcript.entries,
+      openRouterApiKey: opts.openRouterKey,
+      workDir,
+    };
+    if (opts.signal) framesOpts.signal = opts.signal;
+    framesResult = await extractFrames(framesOpts);
+    if (framesResult.kind === "attempted-failed") {
+      framesNotice = `Note: frames pipeline failed (${framesResult.reason} at ${framesResult.phase}): ${framesResult.message}. Submitting transcript-only.\n`;
+    }
+  }
+
   const submission: TranscriptSubmission = {
     schemaVersion: "2.0.0",
     videoId,
     transcript: toSubmissionEntries(transcript),
-    frames: { kind: "not-requested" },
+    frames:
+      framesResult?.kind === "included"
+        ? {
+            kind: "included",
+            transcript: framesResult.transcript,
+            metrics: framesResult.metrics,
+          }
+        : framesResult?.kind === "attempted-failed"
+          ? {
+              kind: "attempted-failed",
+              reason: framesResult.reason,
+              phase: framesResult.phase,
+              metrics: framesResult.metrics,
+            }
+          : { kind: "not-requested" },
   };
 
-  const noticeStderr = opts.withFrames
-    ? "Note: `--with-frames` accepted but not yet wired (frames pipeline lands in #87). Submitting transcript-only.\n"
-    : "";
+  const noticeStderr = framesNotice;
 
   deps.progress("Generating brief on the server... (typically 5–15s)");
   const result = await deps.hostedClient.submit(submission);

@@ -8,7 +8,7 @@
     "start": "pnpm --filter @brief/web start",
     "lint": "pnpm --filter @brief/web lint",
     "cli": "node apps/cli/dist/main.cjs",
-    "cli:local": "BRIEF_API_URL=http://localhost:3000 pnpm --filter @brief/cli dev",
+    "cli:local": "set -a && . ./apps/web/.env.local && set +a && BRIEF_API_URL=http://localhost:3000 pnpm --filter @brief/cli dev",
     "migrate": "pnpm --filter @brief/web migrate",
     "backfill-search": "pnpm --filter @brief/web backfill-search",
     "security": "pnpm --filter @brief/web security",

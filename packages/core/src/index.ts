@@ -10,6 +10,15 @@ export {
   VISION_MODEL,
   estimateCost,
 } from "./models";
+export { extractFrames } from "./frames";
+export type {
+  Chapter as FramesChapter,
+  FramesFailReason,
+  FramesMetrics,
+  FramesOptions,
+  FramesPhase,
+  FramesResult,
+} from "./frames";
 export type {
   MetadataOptions,
   MetadataResult,

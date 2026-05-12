@@ -166,35 +166,46 @@ function createBriefSchema(keyPointsMin: number, keyPointsMax: number) {
  * Model choice is driven by `DIGEST_MODEL` from `@brief/core` and routed
  * through OpenRouter so the model can change without an SDK swap.
  *
- * @param transcript - Array of transcript entries with timestamps
- * @param metadata - Video metadata including description and pinned comment
- * @param apiKey - OpenRouter API key
- * @param chapters - Optional creator-defined chapters to use as section structure
- * @returns Structured brief with sections and categorized links
+ * When `augmentedTranscript` is provided (the CLI's `--with-frames` path),
+ * the pre-formatted string with `[VISUAL]` markers is fed to the LLM directly
+ * instead of re-formatting the speech-only `transcript`. The `transcript`
+ * array is still used for URL extraction context downstream.
  */
+export interface GenerateBriefOptions {
+  transcript: TranscriptEntry[];
+  metadata: VideoMetadata;
+  apiKey: string;
+  chapters?: Chapter[] | null;
+  augmentedTranscript?: string;
+}
+
 export async function generateBrief(
-  transcript: TranscriptEntry[],
-  metadata: VideoMetadata,
-  apiKey: string,
-  chapters?: Chapter[] | null
+  options: GenerateBriefOptions
 ): Promise<{ brief: StructuredBrief; metrics: BriefMetrics }> {
-  // Format transcript with `[M:SS] line` anchors via @brief/core's canonical
-  // formatter. We wrap the in-memory web-shape entries in a TranscriptResult
-  // stub because formatTranscript operates on results, not bare entries — the
-  // source field is meaningless here (we already have the entries) but the
-  // type requires it.
-  const stubResult: TranscriptResult = {
-    kind: "ok",
-    source: "youtube-transcript-plus",
-    ...(transcript[0]?.lang ? { lang: transcript[0].lang } : {}),
-    entries: transcript.map((e) => ({
-      offsetSec: e.offset,
-      durationSec: e.duration,
-      text: e.text,
-      ...(e.lang ? { lang: e.lang } : {}),
-    })),
-  };
-  const formattedTranscript = formatTranscript(stubResult, "timestamped");
+  const { transcript, metadata, apiKey, chapters, augmentedTranscript } = options;
+
+  let formattedTranscript: string;
+  if (augmentedTranscript) {
+    formattedTranscript = augmentedTranscript;
+  } else {
+    // Format transcript with `[M:SS] line` anchors via @brief/core's canonical
+    // formatter. We wrap the in-memory web-shape entries in a TranscriptResult
+    // stub because formatTranscript operates on results, not bare entries — the
+    // source field is meaningless here (we already have the entries) but the
+    // type requires it.
+    const stubResult: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      ...(transcript[0]?.lang ? { lang: transcript[0].lang } : {}),
+      entries: transcript.map((e) => ({
+        offsetSec: e.offset,
+        durationSec: e.duration,
+        text: e.text,
+        ...(e.lang ? { lang: e.lang } : {}),
+      })),
+    };
+    formattedTranscript = formatTranscript(stubResult, "timestamped");
+  }
 
   // Extract all URLs from description and pinned comment
   const allUrls = combineUrls(metadata.description, metadata.pinnedComment);
