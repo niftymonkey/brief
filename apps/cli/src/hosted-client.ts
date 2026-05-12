@@ -17,7 +17,20 @@ export const defaultTransport: Transport = {
   fetch: (input, init) => globalThis.fetch(input, init),
 };
 
-export type AuthRequiredReason = "missing" | "expired" | "revoked";
+export type AuthRequiredReason = "missing" | "expired" | "invalid" | "revoked";
+
+async function authRequiredReasonFromResponse(res: Response): Promise<AuthRequiredReason> {
+  try {
+    const body = (await res.clone().json()) as { error?: string };
+    if (body.error === "expired") return "expired";
+    if (body.error === "invalid") return "invalid";
+    if (body.error === "malformed") return "invalid";
+    if (body.error === "revoked") return "revoked";
+  } catch {
+    // fall through to default
+  }
+  return "expired";
+}
 
 export type BriefResult =
   | {
@@ -124,7 +137,9 @@ export function createHostedClient(opts: HostedClientOptions): HostedClient {
       if (call.kind === "throw") return transientFromThrow(call.err);
       const res = call.res;
 
-      if (res.status === 401) return { kind: "auth-required", reason: "expired" };
+      if (res.status === 401) {
+        return { kind: "auth-required", reason: await authRequiredReasonFromResponse(res) };
+      }
       if (res.status === 409) {
         const body = await safeJson(res);
         const parsed = SchemaMismatchResponseSchema.safeParse(body);
@@ -167,7 +182,9 @@ export function createHostedClient(opts: HostedClientOptions): HostedClient {
         return { kind: "transient", cause: message, message: `Network error: ${message}` };
       }
       const res = call.res;
-      if (res.status === 401) return { kind: "auth-required", reason: "expired" };
+      if (res.status === 401) {
+        return { kind: "auth-required", reason: await authRequiredReasonFromResponse(res) };
+      }
       if (!res.ok) {
         return { kind: "transient", cause: `http-${res.status}`, message: `Unexpected status ${res.status}` };
       }

@@ -2,7 +2,6 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createTokenVerifier, type TokenVerifier } from "./cli-auth";
 
 const WORKOS_API_BASE = "https://api.workos.com";
-const WORKOS_ISSUER = "https://api.workos.com";
 const USER_LOOKUP_TIMEOUT_MS = 10_000;
 
 let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
@@ -22,11 +21,15 @@ function getJwks() {
   return cachedJwks;
 }
 
+// Note on tenant isolation: the JWKS URL itself is scoped to `${WORKOS_API_BASE}/sso/jwks/<clientId>`,
+// so a token signed by a different WorkOS client won't have a matching JWK and signature verification
+// fails. We additionally pin the `iss` claim to this client's per-tenant issuer URL as defense in depth.
+// We do NOT validate `aud` — WorkOS AuthKit access tokens don't carry an `aud` claim today.
 export function createWorkosTokenVerifier(): TokenVerifier {
   return createTokenVerifier(async (token) => {
+    const clientId = requireClientId();
     return jwtVerify(token, getJwks(), {
-      issuer: WORKOS_ISSUER,
-      audience: requireClientId(),
+      issuer: `${WORKOS_API_BASE}/user_management/${clientId}`,
     });
   });
 }

@@ -1,6 +1,19 @@
-import type { HostedClient } from "../hosted-client";
+import type { AuthRequiredReason, HostedClient } from "../hosted-client";
 import { EXIT_AUTH_REQUIRED, EXIT_OK, EXIT_TRANSIENT } from "../exit-codes";
 import type { HandlerResult } from "./run-login";
+
+function authRequiredMessage(reason: AuthRequiredReason): string {
+  switch (reason) {
+    case "missing":
+      return "Not signed in. Run `brief login`.\n";
+    case "expired":
+      return "Your session has expired. Run `brief login`.\n";
+    case "invalid":
+      return "Your credentials weren't accepted by brief (likely a server-side WorkOS config issue). Run `brief login` to retry; if it persists, contact brief support.\n";
+    case "revoked":
+      return "Your session was revoked. Run `brief login`.\n";
+  }
+}
 
 export interface RunWhoamiDeps {
   hostedClient: HostedClient;
@@ -43,10 +56,7 @@ export async function runWhoami(
     case "auth-required":
       return {
         stdout: "",
-        stderr:
-          result.reason === "expired"
-            ? "Your session has expired. Run `brief login`.\n"
-            : "Not signed in. Run `brief login`.\n",
+        stderr: authRequiredMessage(result.reason),
         exitCode: EXIT_AUTH_REQUIRED,
       };
     case "transient":
