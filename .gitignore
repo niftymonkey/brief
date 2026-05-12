@@ -15,3 +15,9 @@ tsconfig.tsbuildinfo
 
 # Extension build output
 .output/
+
+# Spikes / throwaway PoCs
+spikes/
+
+# Next.js auto-generated typedefs (regenerated per environment)
+apps/web/next-env.d.ts
