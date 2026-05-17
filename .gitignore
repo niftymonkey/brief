@@ -19,5 +19,8 @@ tsconfig.tsbuildinfo
 # Spikes / throwaway PoCs
 spikes/
 
+# Cross-session working notes (local only)
+continue.md
+
 # Next.js auto-generated typedefs (regenerated per environment)
 apps/web/next-env.d.ts
