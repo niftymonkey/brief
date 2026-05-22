@@ -84,7 +84,10 @@ export function createInMemoryUsageLedger(
     },
 
     rows() {
-      return store.slice();
+      return store.map((r) => ({
+        ...r,
+        createdAt: new Date(r.createdAt.getTime()),
+      }));
     },
   };
 }

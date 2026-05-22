@@ -51,7 +51,7 @@ export function createInMemoryOpenRouterClient(
 
   return {
     async generateText(req) {
-      log.push(req);
+      log.push({ ...req, messages: [...req.messages] });
       return opts.respond(req);
     },
     calls() {
@@ -75,6 +75,10 @@ export function createOpenRouterClient(
         model: openrouter(req.model),
         messages: req.messages,
         maxOutputTokens: req.maxOutputTokens,
+        // AI SDK v6 has no default request timeout; without one a stuck
+        // upstream call would hang indefinitely. 60s is generous enough for
+        // worst-case vision payloads but short enough to surface real outages.
+        timeout: DEFAULT_TIMEOUT_MS,
         ...(req.signal ? { abortSignal: req.signal } : {}),
       });
       return {
@@ -87,3 +91,5 @@ export function createOpenRouterClient(
     },
   };
 }
+
+const DEFAULT_TIMEOUT_MS = 60_000;

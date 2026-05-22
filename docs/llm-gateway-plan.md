@@ -54,6 +54,7 @@ Smallest piece, lands last.
 Server-side foundation, no consumer wired yet.
 
 - **Migration 011** (`apps/web/migrations/011_add_usage_ledger.sql`) applied locally; 9 columns verified via `pnpm --filter @brief/web query`. Not yet applied to prod.
+- **Migration 012** (`apps/web/migrations/012_add_usage_ledger_checks.sql`) adds non-negativity CHECK constraints on the numeric columns, in response to PR #107 review. Skipped the `op IN (...)` CHECK because the vocabulary is server-controlled and will grow.
 - **`apps/web/src/lib/usage-ledger.ts`**: `UsageLedger` port (`record`, `summarize`) + `createInMemoryUsageLedger` (test adapter with `clock` injection and `rows()` inspection) + `createPgUsageLedger` (Postgres adapter via `@vercel/postgres` `sql`). 7 unit tests against the in-memory adapter.
 - **`apps/web/src/lib/openrouter-client.ts`**: `OpenRouterClient` port (`generateText`) + `createInMemoryOpenRouterClient` (scripted-response test adapter with `calls()` inspection) + `createOpenRouterClient` (production adapter via `@openrouter/ai-sdk-provider` + Vercel AI SDK). 4 unit tests against the in-memory adapter.
 - Web tests: 27 to 38 (+11). Typecheck clean. Production adapters ship without unit tests in line with the rest of `apps/web`; integration confidence lands in Phase 2 when the gateway runs through real Postgres + real OpenRouter.
