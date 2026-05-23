@@ -14,11 +14,17 @@ Lay down the persistent and external surfaces the gateway will compose. Nothing 
 
 Tracer-bullet slice. One operation working start to finish: CLI calls the gateway, server route accepts the request, server-side gateway composes UsageLedger + OpenRouterClient, returns parsed classifier verdict plus server-attested tokens plus ledger row id.
 
-- `LlmGateway` interface in `@brief/core/llm-gateway/port.ts`. Result type: `ClassifyResult = { verdict: "yes" | "no", inputTokens, outputTokens, ledgerId }` plus a typed error union for `auth`, `quota-exceeded`, `rate-limited`, `transient`, `bad-input`.
-- Server-side `createServerLlmGateway()` composing UsageLedger + OpenRouterClient.
-- Route handler `POST /api/cli/llm/classify` (verify WorkOS bearer, parse multipart {png, json}, dispatch).
-- CLI-side `createHttpLlmGateway()` adapter.
+Shipping in two sub-PRs:
+
+**Sub-PR A (server side):**
+- `ClassifyResult` discriminated union + `LlmFailReason` in `@brief/core/llm-gateway/`.
+- `createServerLlmGateway()` composing UsageLedger + OpenRouterClient. `classify(input)` returns `ClassifyResult`; both LLM and ledger failures route through the typed `kind: "failed"` branch (ledger-after-LLM failure discards the verdict to keep attribution honest).
 - Server-side `CLASSIFIER_PROMPT` constant (mirrors the one in the CLI; CLI still owns its copy until Phase 4).
+- Zod wire schemas: `ClassifyOkBodySchema`, `LlmErrorBodySchema`.
+- Route handler `POST /api/cli/llm/classify` (verify WorkOS bearer, parse multipart {frame}, dispatch, map result to HTTP status).
+
+**Sub-PR B (CLI side):**
+- `createHttpLlmGateway()` HTTP adapter in `apps/cli`.
 - Contract test at the public `LlmGateway` interface using in-memory adapters on both sides.
 
 ## Phase 3: `describe` and `ask`
