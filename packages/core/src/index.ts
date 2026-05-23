@@ -19,6 +19,12 @@ export type {
   FramesPhase,
   FramesResult,
 } from "./frames";
+export type {
+  ClassifyResult,
+  ClassifyVerdict,
+  LlmCallSucceeded,
+  LlmFailReason,
+} from "./llm-gateway";
 export { askVideo, ASK_SYSTEM_PROMPT } from "./ask";
 export type {
   AskVideoOptions,
