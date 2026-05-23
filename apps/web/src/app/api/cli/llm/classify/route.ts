@@ -40,7 +40,15 @@ function statusForReason(reason: LlmFailReason): number {
     case "transient":
       return 503;
   }
+  // Exhaustive over LlmFailReason; this line forces a TS error if a new
+  // reason is added without a corresponding case above.
+  const _exhaustive: never = reason;
+  return _exhaustive;
 }
+
+// PNG frames in the existing pipeline run ~100-500KB. 2 MiB is generous.
+// Checked against `frameField.size` before materializing the buffer.
+const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -86,23 +94,39 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const frame = Buffer.from(await frameField.arrayBuffer());
-  if (frame.length === 0) {
+  if (frameField.size === 0) {
     return NextResponse.json(
       errorBody("bad-input", "'frame' field is empty"),
       { status: 400 },
     );
   }
 
+  if (frameField.size > MAX_FRAME_BYTES) {
+    return NextResponse.json(
+      errorBody(
+        "bad-input",
+        `'frame' exceeds ${MAX_FRAME_BYTES}-byte cap`,
+      ),
+      { status: 400 },
+    );
+  }
+
+  const frame = Buffer.from(await frameField.arrayBuffer());
+
   const gateway = createServerLlmGateway({
     ledger: createPgUsageLedger(),
     openrouter: createOpenRouterClient({ apiKey: openRouterKey }),
   });
 
+  // Deliberately not forwarding `req.signal`. NextRequest's abort semantics
+  // on App Router are unreliable; aborting after the LLM call has started
+  // produces real token spend with no audit row (the ledger write is
+  // skipped). The 60s timeout inside `createOpenRouterClient` is the bound
+  // that matters here; client disconnect does not save us tokens once the
+  // upstream call is in flight.
   const result = await gateway.classify({
     userId: verified.userId,
     frame,
-    signal: req.signal,
   });
 
   if (result.kind === "ok") {
@@ -114,16 +138,26 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Log transient failures server-side so on-call has the OpenRouter or
-  // ledger error message even though the CLI only sees the wire reason.
-  if (result.reason === "transient") {
+  // Server-side logs for failure modes that are signals about our
+  // infrastructure, not the CLI caller: bad server credentials (`auth`),
+  // upstream rate-limiting (`rate-limited`), and unclassified failures
+  // (`transient`). Log the gateway message; redact it from the wire body
+  // for `transient` since that path can carry DB or OpenRouter internals.
+  if (
+    result.reason === "transient" ||
+    result.reason === "auth" ||
+    result.reason === "rate-limited"
+  ) {
     console.error(
-      `[cli/llm/classify] transient for user ${verified.userId}:`,
+      `[cli/llm/classify] ${result.reason} for user ${verified.userId}:`,
       result.message,
     );
   }
 
-  return NextResponse.json(errorBody(result.reason, result.message), {
+  const wireMessage =
+    result.reason === "transient" ? "upstream-unavailable" : result.message;
+
+  return NextResponse.json(errorBody(result.reason, wireMessage), {
     status: statusForReason(result.reason),
   });
 }

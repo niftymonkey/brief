@@ -14,12 +14,18 @@
 
 import { z } from "zod";
 
-export type LlmFailReason =
-  | "auth"
-  | "quota-exceeded"
-  | "rate-limited"
-  | "transient"
-  | "bad-input";
+// Single source of truth for the wire-level failure vocabulary. The Zod
+// enum below uses this list directly so the schema and the `LlmFailReason`
+// type cannot drift.
+export const LLM_FAIL_REASONS = [
+  "auth",
+  "quota-exceeded",
+  "rate-limited",
+  "transient",
+  "bad-input",
+] as const;
+
+export type LlmFailReason = (typeof LLM_FAIL_REASONS)[number];
 
 export interface LlmCallSucceeded {
   ledgerId: string;
@@ -34,6 +40,9 @@ export type ClassifyResult =
   | { kind: "failed"; reason: LlmFailReason; message: string };
 
 // Wire schemas: the shapes that travel over HTTP between CLI and server.
+// Deliberately non-strict (Zod's default for `z.object`): a server emitting
+// additional fields should not break older CLIs. CLI-side parsing extracts
+// known fields and ignores the rest.
 
 export const ClassifyOkBodySchema = z.object({
   verdict: z.enum(["yes", "no"]),
@@ -44,13 +53,7 @@ export const ClassifyOkBodySchema = z.object({
 export type ClassifyOkBody = z.infer<typeof ClassifyOkBodySchema>;
 
 export const LlmErrorBodySchema = z.object({
-  reason: z.enum([
-    "auth",
-    "quota-exceeded",
-    "rate-limited",
-    "transient",
-    "bad-input",
-  ]),
+  reason: z.enum(LLM_FAIL_REASONS),
   message: z.string(),
 });
 export type LlmErrorBody = z.infer<typeof LlmErrorBodySchema>;
