@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { CLASSIFY_MODEL } from "@brief/core";
 import { createInMemoryOpenRouterClient } from "./openrouter-client";
-import { createInMemoryUsageLedger } from "./usage-ledger";
+import {
+  createInMemoryUsageLedger,
+  type UsageLedger,
+} from "./usage-ledger";
 import { createServerLlmGateway } from "./llm-gateway";
 
 const fakeFrame = Buffer.from("not-a-real-png");
@@ -106,6 +109,77 @@ describe("createServerLlmGateway.classify", () => {
     const textPart = userMessage.content.find((p) => p.type === "text");
     expect(imagePart).toBeDefined();
     expect(textPart).toBeDefined();
+  });
+
+  it("forwards the abort signal to the underlying LLM call", async () => {
+    const openrouter = createInMemoryOpenRouterClient({
+      respond: () => ({
+        text: "yes",
+        usage: { inputTokens: 10, outputTokens: 1 },
+      }),
+    });
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter,
+    });
+    const controller = new AbortController();
+
+    await gateway.classify({ ...baseInput, signal: controller.signal });
+
+    expect(openrouter.calls()[0]?.signal).toBe(controller.signal);
+  });
+
+  it("returns kind 'failed' with transient when the LLM call throws", async () => {
+    const ledger = createInMemoryUsageLedger();
+    const gateway = createServerLlmGateway({
+      ledger,
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => {
+          throw new Error("upstream went away");
+        },
+      }),
+    });
+
+    const result = await gateway.classify(baseInput);
+
+    expect(result.kind).toBe("failed");
+    if (result.kind === "failed") {
+      expect(result.reason).toBe("transient");
+      expect(result.message).toMatch(/upstream went away/);
+    }
+    expect(ledger.rows()).toHaveLength(0);
+  });
+
+  it("returns kind 'failed' with transient when the ledger write throws, preserving attribution discipline", async () => {
+    // LLM call succeeded (token spend happened), but the ledger write failed.
+    // The caller must not see an "ok" verdict it can act on without an audit
+    // row, so the gateway discards the verdict and the caller retries.
+    const failingLedger: UsageLedger = {
+      async record() {
+        throw new Error("DB unavailable");
+      },
+      async summarize() {
+        return { inputTokens: 0, outputTokens: 0, costUsd: 0, calls: 0 };
+      },
+    };
+    const gateway = createServerLlmGateway({
+      ledger: failingLedger,
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({
+          text: "yes",
+          usage: { inputTokens: 200, outputTokens: 1 },
+        }),
+      }),
+    });
+
+    const result = await gateway.classify(baseInput);
+
+    expect(result.kind).toBe("failed");
+    if (result.kind === "failed") {
+      expect(result.reason).toBe("transient");
+      expect(result.message).toMatch(/ledger/i);
+      expect(result.message).toMatch(/DB unavailable/);
+    }
   });
 
   it("allows the classify model id to be overridden via options", async () => {
