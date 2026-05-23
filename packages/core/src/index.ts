@@ -19,10 +19,16 @@ export type {
   FramesPhase,
   FramesResult,
 } from "./frames";
+export {
+  ClassifyOkBodySchema,
+  LlmErrorBodySchema,
+} from "./llm-gateway";
 export type {
+  ClassifyOkBody,
   ClassifyResult,
   ClassifyVerdict,
   LlmCallSucceeded,
+  LlmErrorBody,
   LlmFailReason,
 } from "./llm-gateway";
 export { askVideo, ASK_SYSTEM_PROMPT } from "./ask";
