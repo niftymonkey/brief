@@ -49,6 +49,30 @@ describe("createServerLlmGateway.classify", () => {
     expect(result.verdict).toBe("no");
   });
 
+  it.each([
+    ['"yes"', "double-quoted"],
+    ["'yes'", "single-quoted"],
+    ["`yes`", "backtick-quoted"],
+    ["﻿yes", "BOM-prefixed"],
+    ['﻿"yes"', "BOM + quoted"],
+    ["  yes", "leading whitespace"],
+    ["**yes**", "bold-wrapped"],
+  ])("treats %s (%s) as 'yes'", async (text) => {
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({
+          text,
+          usage: { inputTokens: 50, outputTokens: 2 },
+        }),
+      }),
+    });
+
+    const result = await gateway.classify(baseInput);
+    if (result.kind !== "ok") throw new Error("expected ok");
+    expect(result.verdict).toBe("yes");
+  });
+
   it("records one ledger row keyed by userId with server-attested token counts", async () => {
     const ledger = createInMemoryUsageLedger();
     const gateway = createServerLlmGateway({

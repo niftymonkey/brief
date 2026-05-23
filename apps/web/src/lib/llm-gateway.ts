@@ -93,9 +93,7 @@ export function createServerLlmGateway(
       // value returned to the caller are syntactically the same observation,
       // not a coincidence of two reads against the same field.
       const { inputTokens, outputTokens } = result.usage;
-      const verdict: ClassifyVerdict = result.text.trim().toLowerCase().startsWith("yes")
-        ? "yes"
-        : "no";
+      const verdict: ClassifyVerdict = parseVerdict(result.text);
 
       let ledgerId: string;
       try {
@@ -130,6 +128,27 @@ export function createServerLlmGateway(
       };
     },
   };
+}
+
+/**
+ * Maps the classifier's text output to a yes/no verdict, defensively.
+ *
+ * The prompt asks the model to reply with exactly "yes" or "no", but real
+ * outputs sometimes carry common LLM formatting artifacts: a leading UTF-8
+ * BOM, surrounding quotes (`"yes"`, `'yes'`, `` `yes` ``), or a stray
+ * markdown asterisk. Strip those before checking the prefix so a true
+ * affirmative isn't silently flipped to "no" (which would skip a vision
+ * call the user paid the classifier for).
+ *
+ * The bias remains conservative: anything that does not normalize to a
+ * leading "yes" is "no".
+ */
+function parseVerdict(text: string): ClassifyVerdict {
+  const cleaned = text
+    .replace(/^﻿/, "") // strip UTF-8 BOM
+    .replace(/^[\s"'`*_]+/, "") // strip leading whitespace and common wrapper punctuation
+    .toLowerCase();
+  return cleaned.startsWith("yes") ? "yes" : "no";
 }
 
 function mapLlmError(err: unknown): LlmFailReason {

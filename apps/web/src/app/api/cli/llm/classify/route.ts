@@ -64,15 +64,27 @@ export async function POST(req: NextRequest) {
     console.error("[cli/llm/classify] env-misconfig:", err);
     return NextResponse.json(
       errorBody("transient", "server-misconfigured"),
-      { status: 500 },
+      { status: 503 },
     );
   }
 
   const token = extractBearer(req.headers.get("authorization"));
   if (!token) return unauthorized("missing-auth");
 
+  // `verifier.verify` reaches out to WorkOS's JWKS endpoint; a network or
+  // upstream failure there should surface as a contract-shaped transient
+  // error, not a framework 500 that bypasses `{ reason, message }`.
   const verifier = createWorkosTokenVerifier();
-  const verified = await verifier.verify(token);
+  let verified;
+  try {
+    verified = await verifier.verify(token);
+  } catch (err) {
+    console.error("[cli/llm/classify] verifier-fault:", err);
+    return NextResponse.json(
+      errorBody("transient", "auth-service-unavailable"),
+      { status: 503 },
+    );
+  }
   if (verified.kind !== "ok") return unauthorized(verified.kind);
 
   // Multipart parsing. The CLI sends the PNG bytes under a `frame` field.
@@ -90,6 +102,19 @@ export async function POST(req: NextRequest) {
   if (!(frameField instanceof File)) {
     return NextResponse.json(
       errorBody("bad-input", "missing 'frame' file field"),
+      { status: 400 },
+    );
+  }
+
+  // Reject non-PNG before any paid upstream work. Browsers/clients sometimes
+  // omit the type; treat empty as "unknown" and accept it (the size + LLM call
+  // remain the real protections), but reject any explicit non-PNG.
+  if (frameField.type && frameField.type !== "image/png") {
+    return NextResponse.json(
+      errorBody(
+        "bad-input",
+        `'frame' must be image/png (got ${frameField.type})`,
+      ),
       { status: 400 },
     );
   }
