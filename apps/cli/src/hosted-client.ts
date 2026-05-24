@@ -93,10 +93,11 @@ export interface HostedClientOptions {
   credentials: CredentialStore;
   transport?: Transport;
   /**
-   * Per-request timeout for fetch calls. Defaults to 300s to match the
-   * intake route's `maxDuration`. Submissions with augmented frames data can
-   * easily exceed the older 60s ceiling because the server-side digest LLM
-   * has to chew through 100+ frame descriptions woven into the transcript.
+   * Per-request timeout for fetch calls. Defaults to 330s (a 30s buffer over
+   * the intake route's `maxDuration = 300`). Submissions with augmented frames
+   * data can easily exceed the older 60s ceiling because the server-side
+   * digest LLM has to chew through 100+ frame descriptions woven into the
+   * transcript.
    */
   requestTimeoutMs?: number;
   /**

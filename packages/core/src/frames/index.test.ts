@@ -139,8 +139,8 @@ describe("extractFrames public contract", () => {
     expect(result.kind).toBe("included");
     if (result.kind === "included") {
       expect(result.metrics.candidatesAfterDedup).toBeGreaterThan(5);
-      expect(result.metrics.candidatesAfterDownsample).toBeLessThanOrEqual(5);
-      expect(result.metrics.visionCalls).toBeGreaterThan(0);
+      expect(result.metrics.candidatesAfterDownsample).toBe(5);
+      expect(result.metrics.visionCalls).toBe(result.metrics.candidatesAfterDownsample);
     }
   });
 });

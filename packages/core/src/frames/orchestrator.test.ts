@@ -326,7 +326,7 @@ describe("runFramesPipeline — error to FramesResult translation", () => {
       buildAdapters({ download, ffmpeg, vision }),
     );
     expect(result.kind).toBe("included");
-    expect(vision.classifyCalls.length).toBeLessThanOrEqual(5);
+    expect(vision.classifyCalls.length).toBe(5);
     expect(result.metrics.candidatesAfterDedup).toBeGreaterThan(5);
     expect(result.metrics.candidatesAfterDownsample).toBe(vision.classifyCalls.length);
   });
@@ -403,6 +403,24 @@ describe("runFramesPipeline phase-level caching", () => {
     const visionA = stubVision({ visionModel: "model-a" });
     await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
     wipeSuccessCache();
+
+    const visionB = stubVision({ visionModel: "model-b" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
+    expect(visionB.describeCalls.length).toBeGreaterThan(0);
+  });
+
+  it("bypasses the success cache (augmented.txt) when classifierModel changes", async () => {
+    const visionA = stubVision({ classifierModel: "model-a" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
+
+    const visionB = stubVision({ classifierModel: "model-b" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
+    expect(visionB.classifyCalls.length).toBeGreaterThan(0);
+  });
+
+  it("bypasses the success cache (augmented.txt) when visionModel changes", async () => {
+    const visionA = stubVision({ visionModel: "model-a" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
 
     const visionB = stubVision({ visionModel: "model-b" });
     await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));

@@ -160,16 +160,26 @@ export async function runFramesPipeline(
     try {
       const cachedTranscript = readFileSync(augmentedPath, "utf-8");
       const cachedMetrics = JSON.parse(readFileSync(metricsPath, "utf-8")) as FramesMetrics;
-      // Refresh the wall-clock so a downstream consumer can tell this run was
-      // cheap (a near-zero ms total signals "served from cache"). Per-phase
-      // numbers stay at their original values from the producing run.
-      const cacheRefreshedMetrics: FramesMetrics = {
-        ...cachedMetrics,
-        wallClockMs: Date.now() - startedAt,
-      };
-      return { kind: "included", transcript: cachedTranscript, metrics: cacheRefreshedMetrics };
+      // Bypass the success cache when either model has changed since it was
+      // produced. Mirrors the phase-cache invalidation pattern below so a
+      // model swap never serves stale weave output. Falling through here
+      // means we re-run, which will overwrite augmented.txt/metrics.json with
+      // fresh output keyed to the current models.
+      const modelsMatch =
+        cachedMetrics.classifierModel === adapters.vision.classifierModel &&
+        cachedMetrics.visionModel === adapters.vision.visionModel;
+      if (modelsMatch) {
+        // Refresh the wall-clock so a downstream consumer can tell this run
+        // was cheap (a near-zero ms total signals "served from cache"). Per-
+        // phase numbers stay at their original values from the producing run.
+        const cacheRefreshedMetrics: FramesMetrics = {
+          ...cachedMetrics,
+          wallClockMs: Date.now() - startedAt,
+        };
+        return { kind: "included", transcript: cachedTranscript, metrics: cacheRefreshedMetrics };
+      }
     } catch {
-      // Cache files exist but are unreadable/malformed — fall through to a
+      // Cache files exist but are unreadable/malformed; fall through to a
       // fresh run rather than crashing. The fresh run will overwrite them.
     }
   }
@@ -411,7 +421,7 @@ function readClassificationsCache(workDir: string, model: string): Record<string
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as ClassificationsCache;
     if (parsed.classifierModel !== model) return {};
-    return parsed.entries ?? {};
+    return isPlainRecord(parsed.entries) ? (parsed.entries as Record<string, ClassifyResult>) : {};
   } catch {
     return {};
   }
@@ -436,10 +446,19 @@ function readVisionCache(workDir: string, model: string): Record<string, VisionC
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as VisionCache;
     if (parsed.visionModel !== model) return {};
-    return parsed.entries ?? {};
+    return isPlainRecord(parsed.entries) ? (parsed.entries as Record<string, VisionCacheEntry>) : {};
   } catch {
     return {};
   }
+}
+
+/**
+ * True for shapes that can be safely treated as a string-keyed mutable map.
+ * Used to gate phase-cache reads so a malformed sidecar (array, null, primitive)
+ * never reaches a downstream `cache[key] = value` write and crashes the run.
+ */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function writeVisionCache(
