@@ -6,6 +6,7 @@ import {
 } from "next/font/google";
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { LayoutProvider } from "@/components/layout";
 import "./globals.css";
@@ -64,6 +65,7 @@ export default function RootLayout({
             </ThemeProvider>
           </NuqsAdapter>
         </AuthKitProvider>
+        <Analytics />
       </body>
     </html>
   );

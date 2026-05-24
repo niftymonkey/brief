@@ -47,6 +47,7 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/postgres": "^0.10.0",
     "@workos-inc/authkit-nextjs": "^2.13.0",
     "ai": "^6.0.39",
