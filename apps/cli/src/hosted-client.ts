@@ -92,7 +92,12 @@ export interface HostedClientOptions {
   baseUrl: string;
   credentials: CredentialStore;
   transport?: Transport;
-  /** Per-request timeout for fetch calls. Defaults to 60s to accommodate server-side LLM generation. */
+  /**
+   * Per-request timeout for fetch calls. Defaults to 300s to match the
+   * intake route's `maxDuration`. Submissions with augmented frames data can
+   * easily exceed the older 60s ceiling because the server-side digest LLM
+   * has to chew through 100+ frame descriptions woven into the transcript.
+   */
   requestTimeoutMs?: number;
   /**
    * Optional refresh-token redeemer. When supplied, a 401 with reason `expired`
@@ -104,7 +109,7 @@ export interface HostedClientOptions {
 }
 
 const DEFAULT_RATE_LIMIT_RETRY_SEC = 60;
-const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000;
 
 function parseRetryAfter(value: string | null): number {
   if (!value) return DEFAULT_RATE_LIMIT_RETRY_SEC;

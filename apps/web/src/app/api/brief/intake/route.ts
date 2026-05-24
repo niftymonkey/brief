@@ -7,6 +7,15 @@ import { fetchVideoMetadata } from "@/lib/metadata";
 import { generateBrief } from "@/lib/summarize";
 import { saveBrief } from "@/lib/db";
 
+/**
+ * Intake handles a synchronous metadata fetch + digest LLM call + DB save.
+ * With `--with-frames`, the augmented transcript can be ~60-100KB and the
+ * digest model needs to consume 100+ frame descriptions, so the 60s Vercel
+ * default is too tight. 300s matches the Pro plan ceiling and keeps headroom
+ * for long videos with dense visual content.
+ */
+export const maxDuration = 300;
+
 function unauthorized(reason: string) {
   return NextResponse.json(
     { error: reason },
