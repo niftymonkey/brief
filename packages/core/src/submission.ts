@@ -38,6 +38,7 @@ export const FramesMetricsSchema = z.object({
   videoDurationSec: z.number(),
   candidatesGenerated: z.number(),
   candidatesAfterDedup: z.number(),
+  candidatesAfterDownsample: z.number().optional(),
   classifierYes: z.number(),
   classifierNo: z.number(),
   visionCalls: z.number(),

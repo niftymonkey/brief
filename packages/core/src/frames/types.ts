@@ -50,6 +50,13 @@ export interface FramesMetrics {
   videoDurationSec: number;
   candidatesGenerated: number;
   candidatesAfterDedup: number;
+  /**
+   * Present only when the post-dedup candidate count exceeded `maxCandidates`
+   * and the selector downsampled to fit. Equal to the cap when set; absent
+   * when no downsample occurred. Lets metrics consumers distinguish "we
+   * processed every candidate" from "we trimmed to fit the budget."
+   */
+  candidatesAfterDownsample?: number;
   classifierYes: number;
   classifierNo: number;
   visionCalls: number;

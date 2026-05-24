@@ -308,18 +308,27 @@ describe("runFramesPipeline — error to FramesResult translation", () => {
     }
   });
 
-  it("returns budget-exceeded with phase=selection when candidates > maxCandidates", async () => {
-    // Force a lot of scenes so the candidate count blows past the cap.
-    const ffmpeg = stubFfmpeg({ scenes: Array.from({ length: 200 }, (_, i) => i * 0.1 + 1) });
+  it("downsamples to maxCandidates instead of bailing when candidates exceed the cap", async () => {
+    // 200 scenes well separated by dedup window so they all survive selection,
+    // then must be trimmed to fit a cap of 5.
+    const ffmpeg = stubFfmpeg({ scenes: Array.from({ length: 200 }, (_, i) => i * 5 + 5) });
+    const download = stubDownload({
+      result: {
+        kind: "ok",
+        videoPath: join(workDir, "abc123.mp4"),
+        infoPath: join(workDir, "abc123.info.json"),
+        durationSec: 2000,
+      },
+    });
+    const vision = stubVision();
     const result = await runFramesPipeline(
       buildOpts({ maxCandidates: 5 }),
-      buildAdapters({ ffmpeg }),
+      buildAdapters({ download, ffmpeg, vision }),
     );
-    expect(result.kind).toBe("attempted-failed");
-    if (result.kind === "attempted-failed") {
-      expect(result.reason).toBe("budget-exceeded");
-      expect(result.phase).toBe("selection");
-    }
+    expect(result.kind).toBe("included");
+    expect(vision.classifyCalls.length).toBe(5);
+    expect(result.metrics.candidatesAfterDedup).toBeGreaterThan(5);
+    expect(result.metrics.candidatesAfterDownsample).toBe(vision.classifyCalls.length);
   });
 
   it("always returns metrics, even on failure (partial telemetry is useful for iteration)", async () => {
@@ -329,6 +338,119 @@ describe("runFramesPipeline — error to FramesResult translation", () => {
     expect(result.metrics).toBeDefined();
     expect(result.metrics.classifierYes).toBeGreaterThanOrEqual(0);
     expect(result.metrics.wallClockMs).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("runFramesPipeline phase-level caching", () => {
+  // Each scenario exercises a single phase cache by wiping the success-cache
+  // (augmented.txt + metrics.json) between runs. Without that wipe the
+  // top-of-function short-circuit returns the prior result and the phase
+  // caches never get a chance to fire.
+  function wipeSuccessCache(): void {
+    rmSync(join(workDir, "augmented.txt"), { force: true });
+    rmSync(join(workDir, "metrics.json"), { force: true });
+  }
+
+  it("reuses scenes.json from a prior run and skips ffmpeg.detectScenes", async () => {
+    const ffmpegFirst = stubFfmpeg({ scenes: [10, 30, 60] });
+    await runFramesPipeline(buildOpts(), buildAdapters({ ffmpeg: ffmpegFirst }));
+    expect(ffmpegFirst.detectCalls).toBe(1);
+    wipeSuccessCache();
+
+    const ffmpegSecond = stubFfmpeg({ scenes: [99, 99, 99] });
+    const result = await runFramesPipeline(buildOpts(), buildAdapters({ ffmpeg: ffmpegSecond }));
+    expect(result.kind).toBe("included");
+    expect(ffmpegSecond.detectCalls).toBe(0);
+  });
+
+  it("reuses cached classifier verdicts and only calls classify for missing frames", async () => {
+    const visionFirst = stubVision();
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionFirst }));
+    const firstClassifyCount = visionFirst.classifyCalls.length;
+    expect(firstClassifyCount).toBeGreaterThan(0);
+    wipeSuccessCache();
+
+    const visionSecond = stubVision();
+    const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionSecond }));
+    expect(result.kind).toBe("included");
+    expect(visionSecond.classifyCalls).toHaveLength(0);
+  });
+
+  it("invalidates cached classifier verdicts when classifierModel changes", async () => {
+    const visionA = stubVision({ classifierModel: "model-a" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
+    wipeSuccessCache();
+
+    const visionB = stubVision({ classifierModel: "model-b" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
+    expect(visionB.classifyCalls.length).toBeGreaterThan(0);
+  });
+
+  it("reuses cached vision descriptions and only calls describe for missing frames", async () => {
+    const visionFirst = stubVision();
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionFirst }));
+    const firstDescribeCount = visionFirst.describeCalls.length;
+    expect(firstDescribeCount).toBeGreaterThan(0);
+    wipeSuccessCache();
+
+    const visionSecond = stubVision();
+    const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionSecond }));
+    expect(result.kind).toBe("included");
+    expect(visionSecond.describeCalls).toHaveLength(0);
+  });
+
+  it("invalidates cached vision descriptions when visionModel changes", async () => {
+    const visionA = stubVision({ visionModel: "model-a" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
+    wipeSuccessCache();
+
+    const visionB = stubVision({ visionModel: "model-b" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
+    expect(visionB.describeCalls.length).toBeGreaterThan(0);
+  });
+
+  it("bypasses the success cache (augmented.txt) when classifierModel changes", async () => {
+    const visionA = stubVision({ classifierModel: "model-a" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
+
+    const visionB = stubVision({ classifierModel: "model-b" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
+    expect(visionB.classifyCalls.length).toBeGreaterThan(0);
+  });
+
+  it("bypasses the success cache (augmented.txt) when visionModel changes", async () => {
+    const visionA = stubVision({ visionModel: "model-a" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
+
+    const visionB = stubVision({ visionModel: "model-b" });
+    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
+    expect(visionB.describeCalls.length).toBeGreaterThan(0);
+  });
+
+  it("does not bill cached tokens to the current run's input/outputTokens", async () => {
+    const visionFirst = stubVision({
+      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },
+      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80 },
+    });
+    const firstResult = await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionFirst }));
+    expect(firstResult.kind).toBe("included");
+    const firstTokens = firstResult.kind === "included" ? firstResult.metrics.inputTokens : 0;
+    expect(firstTokens).toBeGreaterThan(0);
+
+    wipeSuccessCache();
+
+    const visionSecond = stubVision({
+      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },
+      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80 },
+    });
+    const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionSecond }));
+    expect(result.kind).toBe("included");
+    if (result.kind === "included") {
+      expect(result.metrics.inputTokens).toBe(0);
+      expect(result.metrics.outputTokens).toBe(0);
+      expect(result.metrics.classifierYes).toBeGreaterThan(0);
+      expect(result.metrics.visionCalls).toBeGreaterThan(0);
+    }
   });
 });
 

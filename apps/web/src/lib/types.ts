@@ -78,6 +78,7 @@ export interface FramesMetrics {
   videoDurationSec: number;
   candidatesGenerated: number;
   candidatesAfterDedup: number;
+  candidatesAfterDownsample?: number;
   classifierYes: number;
   classifierNo: number;
   visionCalls: number;
