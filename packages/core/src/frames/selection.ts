@@ -69,6 +69,58 @@ function priority(source: string): number {
   return 0;
 }
 
+/**
+ * Trim a candidate list down to `cap` items while preserving the highest-
+ * signal sources and even time coverage. Used as a soft target instead of a
+ * hard failure when selection produces more candidates than the budget allows.
+ *
+ * Strategy: walk priority tiers from highest to lowest. Include each tier
+ * whole until adding the next would overflow the cap; then evenly sample that
+ * tier across time to fill the remaining slots. Lower-priority tiers are
+ * dropped entirely. This keeps every chapter-start and transcript cue when
+ * scene-changes dominate (the common case on long technical videos) and
+ * degrades gracefully when even the high-priority sources blow the cap.
+ */
+export function downsampleCandidates(candidates: Candidate[], cap: number): Candidate[] {
+  if (cap <= 0) return [];
+  if (candidates.length <= cap) return candidates;
+
+  const tiers = new Map<number, Candidate[]>();
+  for (const c of candidates) {
+    const p = priority(c.source);
+    const existing = tiers.get(p);
+    if (existing) existing.push(c);
+    else tiers.set(p, [c]);
+  }
+  const sortedTiers = [...tiers.entries()].sort((a, b) => b[0] - a[0]);
+
+  const selected: Candidate[] = [];
+  let remaining = cap;
+  for (const [, items] of sortedTiers) {
+    if (items.length <= remaining) {
+      selected.push(...items);
+      remaining -= items.length;
+      if (remaining === 0) break;
+      continue;
+    }
+    const byTime = [...items].sort((a, b) => a.t - b.t);
+    const k = remaining;
+    const n = byTime.length;
+    if (k === 1) {
+      selected.push(byTime[Math.floor((n - 1) / 2)]);
+    } else {
+      for (let i = 0; i < k; i++) {
+        const idx = Math.round((i * (n - 1)) / (k - 1));
+        selected.push(byTime[idx]);
+      }
+    }
+    remaining = 0;
+    break;
+  }
+  selected.sort((a, b) => a.t - b.t);
+  return selected;
+}
+
 export function selectCandidates(input: SelectionInput): SelectionResult {
   const { scenes, chapters, transcript, durationSec } = input;
   const sources: Candidate[] = [];

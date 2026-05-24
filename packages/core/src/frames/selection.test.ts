@@ -4,7 +4,9 @@ import {
   CHAPTER_INTERIOR_RATIOS,
   DEDUP_WINDOW_S,
   TRANSCRIPT_CUE_PATTERNS,
+  downsampleCandidates,
   selectCandidates,
+  type Candidate,
   type Chapter,
 } from "./selection";
 
@@ -170,5 +172,81 @@ describe("selectCandidates", () => {
     });
     const timestamps = result.candidates.map((c) => c.t);
     expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
+  });
+});
+
+describe("downsampleCandidates", () => {
+  const scene = (t: number): Candidate => ({ t, source: "scene-change" });
+  const chapterStart = (t: number, title = "Section"): Candidate => ({
+    t,
+    source: `chapter-start:${title}`,
+  });
+  const cue = (t: number): Candidate => ({ t, source: `transcript-cue:"right here"` });
+
+  it("returns the input unchanged when it already fits the cap", () => {
+    const input = [scene(10), scene(20), scene(30)];
+    expect(downsampleCandidates(input, 5)).toBe(input);
+  });
+
+  it("returns an empty list when the cap is zero or negative", () => {
+    const input = [scene(10), scene(20)];
+    expect(downsampleCandidates(input, 0)).toEqual([]);
+    expect(downsampleCandidates(input, -1)).toEqual([]);
+  });
+
+  it("keeps every higher-priority candidate and only trims the lowest tier present", () => {
+    const candidates: Candidate[] = [
+      chapterStart(1, "A"),
+      scene(5),
+      scene(10),
+      scene(15),
+      scene(20),
+      scene(25),
+      cue(30),
+    ];
+    const result = downsampleCandidates(candidates, 4);
+    expect(result.some((c) => c.source.startsWith("chapter-start:A"))).toBe(true);
+    expect(result.some((c) => c.source.startsWith("transcript-cue"))).toBe(true);
+    expect(result.filter((c) => c.source === "scene-change")).toHaveLength(2);
+    expect(result).toHaveLength(4);
+  });
+
+  it("evenly spaces the within-tier sample across time when trimming a single tier", () => {
+    const candidates = Array.from({ length: 10 }, (_, i) => scene(i * 10 + 5));
+    const result = downsampleCandidates(candidates, 3);
+    expect(result).toHaveLength(3);
+    expect(result.map((c) => c.t)).toEqual([5, 55, 95]);
+  });
+
+  it("drops the lowest tier entirely when higher tiers fill the cap", () => {
+    const candidates: Candidate[] = [
+      chapterStart(1, "A"),
+      chapterStart(20, "B"),
+      chapterStart(40, "C"),
+      scene(10),
+      scene(30),
+    ];
+    const result = downsampleCandidates(candidates, 3);
+    expect(result).toHaveLength(3);
+    expect(result.every((c) => c.source.startsWith("chapter-start:"))).toBe(true);
+  });
+
+  it("returns the result sorted by timestamp regardless of tier order", () => {
+    const candidates: Candidate[] = [
+      scene(50),
+      chapterStart(10, "A"),
+      scene(20),
+      cue(40),
+    ];
+    const result = downsampleCandidates(candidates, 3);
+    const times = result.map((c) => c.t);
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+  });
+
+  it("picks the middle item when sampling a single slot from a multi-item tier", () => {
+    const candidates = [scene(0), scene(10), scene(20), scene(30), scene(40)];
+    const result = downsampleCandidates(candidates, 1);
+    expect(result).toHaveLength(1);
+    expect(result[0].t).toBe(20);
   });
 });

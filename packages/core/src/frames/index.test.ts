@@ -15,8 +15,10 @@ import type { TranscriptEntry } from "../types";
  *
  * - happy path returns kind=included with a non-empty augmented transcript
  *   and metrics that account for the run.
- * - budget overflow returns kind=attempted-failed with reason=budget-exceeded
- *   and ZERO vision spend — selection's cap fires before any LLM call.
+ * - candidate overflow downsamples to the cap rather than failing. The
+ *   `--with-frames` opt-in is expensive, so silently demoting to transcript-
+ *   only would defeat it. Metrics carry `candidatesAfterDownsample` to make
+ *   the trim visible.
  *
  * Other failure modes (download / scene / extraction / classify / vision)
  * have full coverage at the orchestrator level in orchestrator.test.ts.
@@ -114,12 +116,12 @@ describe("extractFrames public contract", () => {
     }
   });
 
-  it("budget overflow: returns attempted-failed/budget-exceeded with zero vision spend", async () => {
-    // Force way more scenes than the cap allows; every other adapter is rigged
-    // to succeed, but selection's cap must fire before classify/vision do.
+  it("candidate overflow: downsamples to the cap and still returns included", async () => {
+    // Way more scenes than the cap allows, well-separated so dedup keeps them.
+    // Every other adapter succeeds; selection should trim, not abort.
     const adapters: FramesAdapters = {
       download: okDownload(),
-      ffmpeg: okFfmpeg(Array.from({ length: 500 }, (_, i) => i * 0.1 + 1)),
+      ffmpeg: okFfmpeg(Array.from({ length: 200 }, (_, i) => i * 5 + 5)),
       vision: okVision(),
     };
 
@@ -134,16 +136,11 @@ describe("extractFrames public contract", () => {
       adapters,
     );
 
-    expect(result.kind).toBe("attempted-failed");
-    if (result.kind === "attempted-failed") {
-      expect(result.reason).toBe("budget-exceeded");
-      expect(result.phase).toBe("selection");
-      // No LLM calls fired — the cap is enforced *before* classify/vision.
-      expect(result.metrics.classifierYes).toBe(0);
-      expect(result.metrics.classifierNo).toBe(0);
-      expect(result.metrics.visionCalls).toBe(0);
-      expect(result.metrics.inputTokens).toBe(0);
-      expect(result.metrics.outputTokens).toBe(0);
+    expect(result.kind).toBe("included");
+    if (result.kind === "included") {
+      expect(result.metrics.candidatesAfterDedup).toBeGreaterThan(5);
+      expect(result.metrics.candidatesAfterDownsample).toBeLessThanOrEqual(5);
+      expect(result.metrics.visionCalls).toBeGreaterThan(0);
     }
   });
 });

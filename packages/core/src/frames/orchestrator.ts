@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DownloadAdapter } from "./download";
 import { extractAllFrames, type FfmpegAdapter } from "./ffmpeg";
-import { selectCandidates, type Candidate } from "./selection";
-import type { VisionClient } from "./vision";
+import { downsampleCandidates, selectCandidates, type Candidate } from "./selection";
+import type { ClassifyResult, VisionClient, VisionMode } from "./vision";
 import { weave } from "./weave";
 import type {
   FramesFailReason,
@@ -13,7 +13,7 @@ import type {
   FramesResult,
 } from "./types";
 
-const DEFAULT_MAX_CANDIDATES = 100;
+const DEFAULT_MAX_CANDIDATES = 250;
 const SCENE_THRESHOLD = 0.2;
 const CLASSIFIER_CONCURRENCY = 5;
 const VISION_CONCURRENCY = 4;
@@ -22,6 +22,34 @@ const VISION_CONCURRENCY = 4;
 const AUGMENTED_CACHE_FILE = "augmented.txt";
 /** Filename of the FramesMetrics blob, written alongside augmented.txt. */
 const METRICS_CACHE_FILE = "metrics.json";
+/**
+ * Per-phase cache filenames. Each is written after its phase succeeds so a
+ * subsequent run that aborts/fails downstream can skip the expensive work the
+ * prior run already paid for. Cache invalidation: scenes is content-free so
+ * it's reused unconditionally; classifications/vision tie reuse to the model
+ * id captured at write time so swapping models discards the cached entries.
+ */
+const SCENES_CACHE_FILE = "scenes.json";
+const CLASSIFICATIONS_CACHE_FILE = "classifications.json";
+const VISION_CACHE_FILE = "vision.json";
+
+interface ScenesCache {
+  scenes: number[];
+}
+interface ClassificationsCache {
+  classifierModel: string;
+  entries: Record<string, ClassifyResult>;
+}
+interface VisionCacheEntry {
+  description: string;
+  mode: VisionMode;
+  inputTokens: number;
+  outputTokens: number;
+}
+interface VisionCache {
+  visionModel: string;
+  entries: Record<string, VisionCacheEntry>;
+}
 
 export interface FramesAdapters {
   download: DownloadAdapter;
@@ -165,16 +193,22 @@ export async function runFramesPipeline(
 
   // ---------- phase: scene-detection ----------
   let scenes: number[];
-  try {
-    scenes = await timePhase("scene-detection", () =>
-      adapters.ffmpeg.detectScenes(downloadResult.videoPath, SCENE_THRESHOLD),
-    );
-  } catch (err) {
-    return finalize({
-      reason: "ffmpeg-failed",
-      phase: "scene-detection",
-      message: err instanceof Error ? err.message : String(err),
-    });
+  const cachedScenes = readScenesCache(opts.workDir);
+  if (cachedScenes) {
+    scenes = cachedScenes;
+  } else {
+    try {
+      scenes = await timePhase("scene-detection", () =>
+        adapters.ffmpeg.detectScenes(downloadResult.videoPath, SCENE_THRESHOLD),
+      );
+    } catch (err) {
+      return finalize({
+        reason: "ffmpeg-failed",
+        phase: "scene-detection",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+    writeScenesCache(opts.workDir, scenes);
   }
 
   // ---------- phase: selection ----------
@@ -186,16 +220,20 @@ export async function runFramesPipeline(
       durationSec: downloadResult.durationSec,
     });
   });
-  const { candidates, candidatesGenerated } = selection;
+  const { candidates: dedupedCandidates, candidatesGenerated } = selection;
   metrics.candidatesGenerated = candidatesGenerated;
-  metrics.candidatesAfterDedup = candidates.length;
+  metrics.candidatesAfterDedup = dedupedCandidates.length;
 
-  if (candidates.length > maxCandidates) {
-    return finalize({
-      reason: "budget-exceeded",
-      phase: "selection",
-      message: `Candidate count ${candidates.length} exceeds cap ${maxCandidates}.`,
-    });
+  // If post-dedup count exceeds the budget, downsample to the cap rather than
+  // failing the run. The `--with-frames` opt-in is expensive; silently demoting
+  // to transcript-only defeats it. Tier-priority sampling keeps every chapter
+  // start and transcript cue and thins scene-changes by even time spread.
+  const candidates =
+    dedupedCandidates.length > maxCandidates
+      ? downsampleCandidates(dedupedCandidates, maxCandidates)
+      : dedupedCandidates;
+  if (candidates.length !== dedupedCandidates.length) {
+    metrics.candidatesAfterDownsample = candidates.length;
   }
 
   if (opts.signal?.aborted) {
@@ -216,19 +254,28 @@ export async function runFramesPipeline(
   }
 
   // ---------- phase: classify ----------
+  const classifierCache = readClassificationsCache(opts.workDir, adapters.vision.classifierModel);
   try {
     await timePhase("classify", () =>
       runWithConcurrency(candidates, CLASSIFIER_CONCURRENCY, async (c) => {
         if (opts.signal?.aborted || !c.frame) return;
-        const result = await adapters.vision.classify(resolve(framesDir, c.frame), opts.signal);
+        const cached = classifierCache[c.frame];
+        let result: ClassifyResult;
+        if (cached) {
+          result = cached;
+        } else {
+          result = await adapters.vision.classify(resolve(framesDir, c.frame), opts.signal);
+          classifierCache[c.frame] = result;
+          metrics.inputTokens += result.inputTokens;
+          metrics.outputTokens += result.outputTokens;
+        }
         c.classification = { verdict: result.verdict };
         if (result.verdict === "yes") metrics.classifierYes++;
         else metrics.classifierNo++;
-        metrics.inputTokens += result.inputTokens;
-        metrics.outputTokens += result.outputTokens;
       }),
     );
   } catch (err) {
+    writeClassificationsCache(opts.workDir, adapters.vision.classifierModel, classifierCache);
     if (opts.signal?.aborted) {
       return finalize({ reason: "aborted", phase: "classify", message: "Aborted during classify." });
     }
@@ -238,6 +285,7 @@ export async function runFramesPipeline(
       message: err instanceof Error ? err.message : String(err),
     });
   }
+  writeClassificationsCache(opts.workDir, adapters.vision.classifierModel, classifierCache);
 
   if (opts.signal?.aborted) {
     return finalize({ reason: "aborted", phase: "classify", message: "Aborted before vision pass." });
@@ -245,24 +293,39 @@ export async function runFramesPipeline(
 
   // ---------- phase: vision ----------
   const yesFrames = candidates.filter((c) => c.classification?.verdict === "yes");
+  const visionCache = readVisionCache(opts.workDir, adapters.vision.visionModel);
   try {
     await timePhase("vision", () =>
       runWithConcurrency(yesFrames, VISION_CONCURRENCY, async (c) => {
         if (opts.signal?.aborted || !c.frame) return;
-        const result = await adapters.vision.describe(resolve(framesDir, c.frame), opts.signal);
+        const cached = visionCache[c.frame];
+        let entry: VisionCacheEntry;
+        if (cached) {
+          entry = cached;
+        } else {
+          const result = await adapters.vision.describe(resolve(framesDir, c.frame), opts.signal);
+          entry = {
+            description: result.description,
+            mode: result.mode,
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+          };
+          visionCache[c.frame] = entry;
+          metrics.inputTokens += result.inputTokens;
+          metrics.outputTokens += result.outputTokens;
+        }
         c.vision = {
-          description: result.description,
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
+          description: entry.description,
+          inputTokens: entry.inputTokens,
+          outputTokens: entry.outputTokens,
         };
         metrics.visionCalls++;
-        if (result.mode === "verbatim") metrics.visionVerbatim++;
+        if (entry.mode === "verbatim") metrics.visionVerbatim++;
         else metrics.visionSummary++;
-        metrics.inputTokens += result.inputTokens;
-        metrics.outputTokens += result.outputTokens;
       }),
     );
   } catch (err) {
+    writeVisionCache(opts.workDir, adapters.vision.visionModel, visionCache);
     if (opts.signal?.aborted) {
       return finalize({ reason: "aborted", phase: "vision", message: "Aborted during vision pass." });
     }
@@ -272,6 +335,7 @@ export async function runFramesPipeline(
       message: err instanceof Error ? err.message : String(err),
     });
   }
+  writeVisionCache(opts.workDir, adapters.vision.visionModel, visionCache);
 
   // ---------- phase: weave ----------
   const woven = await timePhase("weave", async () => weave(opts.transcript, candidates));
@@ -312,6 +376,83 @@ async function runWithConcurrency<T>(
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+}
+
+function readScenesCache(workDir: string): number[] | null {
+  const path = resolve(workDir, SCENES_CACHE_FILE);
+  if (!existsSync(path)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as ScenesCache;
+    if (!Array.isArray(parsed.scenes)) return null;
+    if (!parsed.scenes.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
+    return parsed.scenes;
+  } catch {
+    return null;
+  }
+}
+
+function writeScenesCache(workDir: string, scenes: number[]): void {
+  try {
+    writeFileSync(resolve(workDir, SCENES_CACHE_FILE), JSON.stringify({ scenes } satisfies ScenesCache));
+  } catch {
+    // Best-effort; cache writes never fail the run.
+  }
+}
+
+/**
+ * Reads the classifier cache scoped to `model`. Returns an empty object when
+ * the cache file is absent, malformed, or was produced by a different model.
+ * Returning a mutable record (not null) lets the classify phase write new
+ * entries into it and flush atomically at the end.
+ */
+function readClassificationsCache(workDir: string, model: string): Record<string, ClassifyResult> {
+  const path = resolve(workDir, CLASSIFICATIONS_CACHE_FILE);
+  if (!existsSync(path)) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as ClassificationsCache;
+    if (parsed.classifierModel !== model) return {};
+    return parsed.entries ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeClassificationsCache(
+  workDir: string,
+  model: string,
+  entries: Record<string, ClassifyResult>,
+): void {
+  try {
+    const payload: ClassificationsCache = { classifierModel: model, entries };
+    writeFileSync(resolve(workDir, CLASSIFICATIONS_CACHE_FILE), JSON.stringify(payload));
+  } catch {
+    // Best-effort.
+  }
+}
+
+function readVisionCache(workDir: string, model: string): Record<string, VisionCacheEntry> {
+  const path = resolve(workDir, VISION_CACHE_FILE);
+  if (!existsSync(path)) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as VisionCache;
+    if (parsed.visionModel !== model) return {};
+    return parsed.entries ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeVisionCache(
+  workDir: string,
+  model: string,
+  entries: Record<string, VisionCacheEntry>,
+): void {
+  try {
+    const payload: VisionCache = { visionModel: model, entries };
+    writeFileSync(resolve(workDir, VISION_CACHE_FILE), JSON.stringify(payload));
+  } catch {
+    // Best-effort.
+  }
 }
 
 // Re-export Candidate for adapter authors who want to inspect the orchestrator
