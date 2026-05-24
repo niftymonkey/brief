@@ -419,8 +419,7 @@ describe("runFramesPipeline phase-level caching", () => {
     const firstTokens = firstResult.kind === "included" ? firstResult.metrics.inputTokens : 0;
     expect(firstTokens).toBeGreaterThan(0);
 
-    // Wipe the success cache so phase caches are forced to do the work.
-    rmSync(join(workDir, "augmented.txt"), { force: true });
+    wipeSuccessCache();
 
     const visionSecond = stubVision({
       classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },

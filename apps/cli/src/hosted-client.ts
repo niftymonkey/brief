@@ -109,7 +109,9 @@ export interface HostedClientOptions {
 }
 
 const DEFAULT_RATE_LIMIT_RETRY_SEC = 60;
-const DEFAULT_REQUEST_TIMEOUT_MS = 300_000;
+// 30s buffer over the intake route's `maxDuration = 300` so the server has
+// room to finish or to emit a structured error/504 before the client aborts.
+const DEFAULT_REQUEST_TIMEOUT_MS = 330_000;
 
 function parseRetryAfter(value: string | null): number {
   if (!value) return DEFAULT_RATE_LIMIT_RETRY_SEC;
