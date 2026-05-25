@@ -50,7 +50,10 @@ function statusForReason(reason: LlmFailReason): number {
   return _exhaustive;
 }
 
-const MAX_FRAME_BYTES = 2 * 1024 * 1024;
+// Matches the classify route's cap. See that file for the rationale: real
+// PNG frames run 1-2 MiB with a tail to 4 MiB; Vercel's request-body ceiling
+// is 4.5 MB; per-frame resilience is the long-term fix for frames above 4 MiB.
+const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 
 function requireEnv(name: string): string {
   const value = process.env[name];

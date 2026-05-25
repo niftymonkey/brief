@@ -46,9 +46,14 @@ function statusForReason(reason: LlmFailReason): number {
   return _exhaustive;
 }
 
-// PNG frames in the existing pipeline run ~100-500KB. 2 MiB is generous.
+// Real-world PNG frames from 1080p YouTube source typically run 1-2 MiB with
+// a long tail toward 4 MiB on code/text-heavy slides. The previous 2 MiB cap
+// failed ~6% of frames on dense videos. 4 MiB clears that tail while staying
+// under Vercel's 4.5 MB platform request-body limit (~300 KB headroom for
+// multipart framing). Frames above 4 MiB still fail bad-input; per-frame
+// resilience in the orchestrator is the long-term fix tracked separately.
 // Checked against `frameField.size` before materializing the buffer.
-const MAX_FRAME_BYTES = 2 * 1024 * 1024;
+const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 
 function requireEnv(name: string): string {
   const value = process.env[name];
