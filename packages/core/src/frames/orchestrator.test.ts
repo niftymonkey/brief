@@ -206,8 +206,8 @@ describe("runFramesPipeline — happy path", () => {
 
   it("aggregates token counts and verdict tallies across the run", async () => {
     const vision = stubVision({
-      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },
-      describeResult: { description: "[stub]", inputTokens: 500, outputTokens: 80 },
+      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1, model: "stub-classifier" },
+      describeResult: { description: "[stub]", mode: "summary", inputTokens: 500, outputTokens: 80, model: "stub-vision" },
     });
     const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision }));
     expect(result.kind).toBe("included");
@@ -240,7 +240,7 @@ describe("runFramesPipeline — happy path", () => {
 
   it("skips describe entirely when every classifier verdict is no", async () => {
     const vision = stubVision({
-      classifyResult: { verdict: "no", inputTokens: 80, outputTokens: 1 },
+      classifyResult: { verdict: "no", inputTokens: 80, outputTokens: 1, model: "stub-classifier" },
     });
     const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision }));
     expect(result.kind).toBe("included");
@@ -416,8 +416,8 @@ describe("runFramesPipeline phase-level caching", () => {
 
   it("does not bill cached tokens to the current run's input/outputTokens", async () => {
     const visionFirst = stubVision({
-      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },
-      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80 },
+      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1, model: "stub-classifier" },
+      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80, model: "stub-vision" },
     });
     const firstResult = await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionFirst }));
     expect(firstResult.kind).toBe("included");
@@ -427,8 +427,8 @@ describe("runFramesPipeline phase-level caching", () => {
     wipeSuccessCache();
 
     const visionSecond = stubVision({
-      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },
-      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80 },
+      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1, model: "stub-classifier" },
+      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80, model: "stub-vision" },
     });
     const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionSecond }));
     expect(result.kind).toBe("included");
