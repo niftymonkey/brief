@@ -31,12 +31,31 @@ export interface LlmCallSucceeded {
   ledgerId: string;
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Model ID the server actually used. Echoed back so callers (and on-disk
+   * caches) can invalidate when the server upgrades models without needing a
+   * separate config endpoint.
+   */
+  model: string;
 }
 
 export type ClassifyVerdict = "yes" | "no";
 
 export type ClassifyResult =
   | (LlmCallSucceeded & { kind: "ok"; verdict: ClassifyVerdict })
+  | { kind: "failed"; reason: LlmFailReason; message: string };
+
+export type VisionMode = "verbatim" | "summary";
+
+/**
+ * One frame's vision pass result. `mode` is parsed from the leading
+ * `<mode>verbatim</mode>` / `<mode>summary</mode>` marker the prompt instructs
+ * the model to emit; on a missing or malformed marker the server returns
+ * `summary` (the prose default) so downstream consumers never have to handle
+ * a third "unknown" case.
+ */
+export type VisionDescribeResult =
+  | (LlmCallSucceeded & { kind: "ok"; description: string; mode: VisionMode })
   | { kind: "failed"; reason: LlmFailReason; message: string };
 
 // Wire schemas: the shapes that travel over HTTP between CLI and server.
@@ -49,11 +68,35 @@ export const ClassifyOkBodySchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   ledgerId: z.string().min(1),
+  model: z.string().min(1),
 });
 export type ClassifyOkBody = z.infer<typeof ClassifyOkBodySchema>;
+
+export const VisionDescribeOkBodySchema = z.object({
+  description: z.string(),
+  mode: z.enum(["verbatim", "summary"]),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  ledgerId: z.string().min(1),
+  model: z.string().min(1),
+});
+export type VisionDescribeOkBody = z.infer<typeof VisionDescribeOkBodySchema>;
 
 export const LlmErrorBodySchema = z.object({
   reason: z.enum(LLM_FAIL_REASONS),
   message: z.string(),
 });
 export type LlmErrorBody = z.infer<typeof LlmErrorBodySchema>;
+
+/**
+ * Port interface for callers that need server-mediated LLM operations.
+ * Concrete adapters live in consumer packages (today: `apps/cli/src/
+ * llm-gateway-client.ts` for the CLI's HTTP implementation). Having the
+ * interface in core keeps consumers like the frames pipeline independent of
+ * any particular transport adapter, while leaving the auth-bearing concrete
+ * impl alongside the credential store it depends on.
+ */
+export interface LlmGatewayClient {
+  classify(frame: Buffer, signal?: AbortSignal): Promise<ClassifyResult>;
+  describe(frame: Buffer, signal?: AbortSignal): Promise<VisionDescribeResult>;
+}

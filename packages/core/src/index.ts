@@ -22,6 +22,7 @@ export type {
 export {
   ClassifyOkBodySchema,
   LlmErrorBodySchema,
+  VisionDescribeOkBodySchema,
 } from "./llm-gateway";
 export type {
   ClassifyOkBody,
@@ -30,6 +31,10 @@ export type {
   LlmCallSucceeded,
   LlmErrorBody,
   LlmFailReason,
+  LlmGatewayClient,
+  VisionDescribeOkBody,
+  VisionDescribeResult,
+  VisionMode,
 } from "./llm-gateway";
 export { askVideo, ASK_SYSTEM_PROMPT } from "./ask";
 export type {

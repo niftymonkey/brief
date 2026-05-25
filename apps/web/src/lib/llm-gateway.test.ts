@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CLASSIFY_MODEL } from "@brief/core";
+import { CLASSIFY_MODEL, VISION_MODEL } from "@brief/core";
 import { createInMemoryOpenRouterClient } from "./openrouter-client";
 import {
   createInMemoryUsageLedger,
@@ -30,6 +30,7 @@ describe("createServerLlmGateway.classify", () => {
       expect(result.inputTokens).toBe(200);
       expect(result.outputTokens).toBe(1);
       expect(typeof result.ledgerId).toBe("string");
+      expect(result.model).toBe(CLASSIFY_MODEL);
     }
   });
 
@@ -223,6 +224,159 @@ describe("createServerLlmGateway.classify", () => {
     });
 
     await gateway.classify(baseInput);
+
+    expect(openrouter.calls()[0]?.model).toBe(overrideModel);
+  });
+});
+
+describe("createServerLlmGateway.describe", () => {
+  it("returns ok with description + verbatim mode when the model emits a verbatim marker", async () => {
+    const responseText = "<mode>verbatim</mode>\n[Editor showing config.ts]\n```ts\nconst x = 1;\n```";
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({
+          text: responseText,
+          usage: { inputTokens: 800, outputTokens: 120 },
+        }),
+      }),
+    });
+
+    const result = await gateway.describe(baseInput);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.mode).toBe("verbatim");
+      expect(result.description).not.toMatch(/<mode>/);
+      expect(result.description).toContain("const x = 1");
+      expect(result.inputTokens).toBe(800);
+      expect(result.outputTokens).toBe(120);
+      expect(typeof result.ledgerId).toBe("string");
+      expect(result.model).toBe(VISION_MODEL);
+    }
+  });
+
+  it("returns mode=summary when the marker is summary", async () => {
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({
+          text: "<mode>summary</mode>\nA dashboard showing four KPIs.",
+          usage: { inputTokens: 600, outputTokens: 30 },
+        }),
+      }),
+    });
+
+    const result = await gateway.describe(baseInput);
+    if (result.kind !== "ok") throw new Error("expected ok");
+    expect(result.mode).toBe("summary");
+    expect(result.description).toBe("A dashboard showing four KPIs.");
+  });
+
+  it("falls back to mode=summary when the marker is missing", async () => {
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({
+          text: "Just a description with no mode marker.",
+          usage: { inputTokens: 600, outputTokens: 12 },
+        }),
+      }),
+    });
+
+    const result = await gateway.describe(baseInput);
+    if (result.kind !== "ok") throw new Error("expected ok");
+    expect(result.mode).toBe("summary");
+    expect(result.description).toBe("Just a description with no mode marker.");
+  });
+
+  it("records one ledger row keyed by userId with op=describe and the vision model", async () => {
+    const ledger = createInMemoryUsageLedger();
+    const gateway = createServerLlmGateway({
+      ledger,
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({
+          text: "<mode>summary</mode>\nstub",
+          usage: { inputTokens: 700, outputTokens: 50 },
+        }),
+      }),
+    });
+
+    const result = await gateway.describe(baseInput);
+    if (result.kind !== "ok") throw new Error("expected ok");
+
+    const rows = ledger.rows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: result.ledgerId,
+      userId: "user_01",
+      op: "describe",
+      model: VISION_MODEL,
+      inputTokens: 700,
+      outputTokens: 50,
+    });
+  });
+
+  it("returns kind=failed with reason=transient when the upstream LLM throws", async () => {
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter: {
+        async generateText() {
+          throw new Error("upstream is down");
+        },
+      },
+    });
+
+    const result = await gateway.describe(baseInput);
+    expect(result.kind).toBe("failed");
+    if (result.kind === "failed") {
+      expect(result.reason).toBe("transient");
+      expect(result.message).toMatch(/upstream is down/);
+    }
+  });
+
+  it("returns kind=failed with reason=transient when the ledger write fails after the LLM call", async () => {
+    const brokenLedger: UsageLedger = {
+      async record() {
+        throw new Error("DB unavailable");
+      },
+      async summarize() {
+        return { inputTokens: 0, outputTokens: 0, costUsd: 0, calls: 0 };
+      },
+    };
+    const gateway = createServerLlmGateway({
+      ledger: brokenLedger,
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({
+          text: "<mode>summary</mode>\nstub",
+          usage: { inputTokens: 200, outputTokens: 10 },
+        }),
+      }),
+    });
+
+    const result = await gateway.describe(baseInput);
+    expect(result.kind).toBe("failed");
+    if (result.kind === "failed") {
+      expect(result.reason).toBe("transient");
+      expect(result.message).toMatch(/ledger/i);
+    }
+  });
+
+  it("allows the vision model id to be overridden via options", async () => {
+    const overrideModel = "openai/gpt-5.4-nano";
+    const openrouter = createInMemoryOpenRouterClient({
+      respond: () => ({
+        text: "<mode>summary</mode>\nstub",
+        usage: { inputTokens: 50, outputTokens: 10 },
+      }),
+    });
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter,
+      visionModel: overrideModel,
+    });
+
+    await gateway.describe(baseInput);
 
     expect(openrouter.calls()[0]?.model).toBe(overrideModel);
   });
