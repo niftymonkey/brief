@@ -44,10 +44,18 @@ const okMetadata: MetadataResult = {
   },
 };
 
+function stubGatewayClient(): NonNullable<RunTranscriptDeps["gatewayClient"]> {
+  return {
+    classify: vi.fn(),
+    describe: vi.fn(),
+  };
+}
+
 function makeDeps(overrides: Partial<RunTranscriptDeps> = {}): RunTranscriptDeps {
   return {
     fetchTranscript: vi.fn().mockResolvedValue(okTranscript),
     fetchMetadata: vi.fn().mockResolvedValue(okMetadata),
+    gatewayClient: stubGatewayClient(),
     ...overrides,
   };
 }
@@ -164,8 +172,8 @@ describe("runTranscript with --with-frames", () => {
     costSource: "cli-reported" as const,
   };
 
-  it("returns ARG_ERROR when withFrames is set but no OpenRouter key is supplied", async () => {
-    const deps = makeDeps({ extractFrames: vi.fn() });
+  it("returns ARG_ERROR when withFrames is set but no gateway client is supplied (internal wiring bug)", async () => {
+    const deps = makeDeps({ extractFrames: vi.fn(), gatewayClient: undefined });
     const result = await runTranscript(deps, {
       input: "dQw4w9WgXcQ",
       json: false,
@@ -173,7 +181,7 @@ describe("runTranscript with --with-frames", () => {
       withFrames: true,
     });
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toMatch(/OPENROUTER_API_KEY/);
+    expect(result.stderr).toMatch(/gateway client/);
     expect(deps.extractFrames).not.toHaveBeenCalled();
     expect(deps.fetchTranscript).not.toHaveBeenCalled();
   });
@@ -192,7 +200,6 @@ describe("runTranscript with --with-frames", () => {
       json: false,
       noMetadata: true,
       withFrames: true,
-      openRouterKey: "sk-or-test",
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("[VISUAL]");
@@ -214,7 +221,6 @@ describe("runTranscript with --with-frames", () => {
       json: false,
       noMetadata: true,
       withFrames: true,
-      openRouterKey: "sk-or-test",
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Hello world");
@@ -230,7 +236,6 @@ describe("runTranscript with --with-frames", () => {
       json: false,
       noMetadata: true,
       withFrames: false,
-      openRouterKey: "sk-or-test",
     });
     expect(extractFrames).not.toHaveBeenCalled();
   });
@@ -246,7 +251,6 @@ describe("runTranscript with --with-frames", () => {
       json: false,
       noMetadata: true,
       withFrames: true,
-      openRouterKey: "sk-or-test",
     });
     expect(result.exitCode).toBe(3);
     expect(extractFrames).not.toHaveBeenCalled();
@@ -260,7 +264,6 @@ describe("runTranscript with --with-frames", () => {
       json: false,
       noMetadata: true,
       withFrames: true,
-      openRouterKey: "sk-or-test",
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Hello world");
@@ -275,7 +278,6 @@ describe("runTranscript with --with-frames", () => {
       json: true,
       noMetadata: true,
       withFrames: true,
-      openRouterKey: "sk-or-test",
     });
     expect(result.exitCode).toBe(0);
     // JSON format short-circuits before extractFrames runs; the structured shape

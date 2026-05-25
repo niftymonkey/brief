@@ -10,6 +10,7 @@ import {
   type TranscriptResult,
 } from "@brief/core";
 import { EXIT_ARG_ERROR, EXIT_OK, mapExitCode } from "../exit-codes";
+import type { LlmGatewayClient } from "../llm-gateway-client";
 import { render, type CombinedResult } from "../renderer";
 import type { HandlerResult } from "./run-login";
 
@@ -35,6 +36,12 @@ export interface RunTranscriptDeps {
    * the network. Only invoked when withFrames is true.
    */
   extractFrames?: typeof extractFrames;
+  /**
+   * Required only when withFrames is true. The server-mediated LLM gateway
+   * client the frames pipeline calls for classify + describe. Tests inject a
+   * stub; production wires the real HTTP-backed client from main.ts.
+   */
+  gatewayClient?: LlmGatewayClient;
 }
 
 export interface RunTranscriptOptions {
@@ -46,7 +53,6 @@ export interface RunTranscriptOptions {
   signal?: AbortSignal;
   supadataKey?: string;
   youtubeKey?: string;
-  openRouterKey?: string;
   ttyStderr?: boolean;
   bareShortcut?: boolean;
 }
@@ -59,10 +65,10 @@ export async function runTranscript(
 ): Promise<HandlerResult> {
   // Fail fast on --with-frames misconfiguration so we don't burn the transcript
   // fetch only to discover we can't run the frames pipeline at the end.
-  if (opts.withFrames && !opts.openRouterKey) {
+  if (opts.withFrames && !deps.gatewayClient) {
     return {
       stdout: "",
-      stderr: "Missing OPENROUTER_API_KEY (or --openrouter-key) — required for --with-frames.\n",
+      stderr: "Internal error: --with-frames requires a gateway client (caller did not provide one).\n",
       exitCode: EXIT_ARG_ERROR,
     };
   }
@@ -124,7 +130,7 @@ export async function runTranscript(
   const framesOpts: Parameters<typeof extractFrames>[0] = {
     videoId,
     transcript: transcript.entries,
-    openRouterApiKey: opts.openRouterKey!,
+    gateway: deps.gatewayClient!,
     workDir,
   };
   if (opts.signal) framesOpts.signal = opts.signal;

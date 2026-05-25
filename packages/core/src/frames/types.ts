@@ -1,15 +1,22 @@
+import type { LlmGatewayClient } from "../llm-gateway";
 import type { TranscriptEntry } from "../types";
 import type { Chapter } from "./selection";
 
 /**
  * Public surface for the video-frames pipeline. All types consumers depend on
- * live here — adapters and orchestrator share them but never re-define them.
+ * live here; adapters and orchestrator share them but never re-define them.
+ *
+ * `gateway` is the server-mediated LLM gateway client. The CLI builds one
+ * from its credential store and passes it in; the orchestrator forwards it
+ * to the vision adapter which uses it for classify + describe calls. There
+ * is no local `OPENROUTER_API_KEY` requirement; the server holds the LLM
+ * credential.
  */
 export interface FramesOptions {
   videoId: string;
   transcript: TranscriptEntry[];
   chapters?: Chapter[] | null;
-  openRouterApiKey: string;
+  gateway: LlmGatewayClient;
   workDir: string;
   maxCandidates?: number;
   signal?: AbortSignal;

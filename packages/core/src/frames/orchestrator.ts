@@ -37,7 +37,6 @@ interface ScenesCache {
   scenes: number[];
 }
 interface ClassificationsCache {
-  classifierModel: string;
   entries: Record<string, ClassifyResult>;
 }
 interface VisionCacheEntry {
@@ -47,7 +46,6 @@ interface VisionCacheEntry {
   outputTokens: number;
 }
 interface VisionCache {
-  visionModel: string;
   entries: Record<string, VisionCacheEntry>;
 }
 
@@ -85,8 +83,11 @@ export async function runFramesPipeline(
     visionSummary: 0,
     inputTokens: 0,
     outputTokens: 0,
-    classifierModel: adapters.vision.classifierModel,
-    visionModel: adapters.vision.visionModel,
+    // Init empty; updated from per-call response data as the pipeline runs.
+    // Server owns the model selection now, so the CLI doesn't know which
+    // model the gateway will use until the first response comes back.
+    classifierModel: "",
+    visionModel: "",
     wallClockMs: 0,
     phasesMs: {},
     costSource: "cli-reported",
@@ -160,24 +161,21 @@ export async function runFramesPipeline(
     try {
       const cachedTranscript = readFileSync(augmentedPath, "utf-8");
       const cachedMetrics = JSON.parse(readFileSync(metricsPath, "utf-8")) as FramesMetrics;
-      // Bypass the success cache when either model has changed since it was
-      // produced. Mirrors the phase-cache invalidation pattern below so a
-      // model swap never serves stale weave output. Falling through here
-      // means we re-run, which will overwrite augmented.txt/metrics.json with
-      // fresh output keyed to the current models.
-      const modelsMatch =
-        cachedMetrics.classifierModel === adapters.vision.classifierModel &&
-        cachedMetrics.visionModel === adapters.vision.visionModel;
-      if (modelsMatch) {
-        // Refresh the wall-clock so a downstream consumer can tell this run
-        // was cheap (a near-zero ms total signals "served from cache"). Per-
-        // phase numbers stay at their original values from the producing run.
-        const cacheRefreshedMetrics: FramesMetrics = {
-          ...cachedMetrics,
-          wallClockMs: Date.now() - startedAt,
-        };
-        return { kind: "included", transcript: cachedTranscript, metrics: cacheRefreshedMetrics };
-      }
+      // Refresh the wall-clock so a downstream consumer can tell this run was
+      // cheap (a near-zero ms total signals "served from cache"). Per-phase
+      // numbers stay at their original values from the producing run.
+      //
+      // The cache is best-effort. We deliberately do NOT compare cached
+      // classifier/vision model ids against the current adapter's models:
+      // server-mediated runs don't know the model until the first response,
+      // so a model-match check would always fail and defeat the cache. Users
+      // who want to force a re-run after a server-side model swap can delete
+      // the workDir.
+      const cacheRefreshedMetrics: FramesMetrics = {
+        ...cachedMetrics,
+        wallClockMs: Date.now() - startedAt,
+      };
+      return { kind: "included", transcript: cachedTranscript, metrics: cacheRefreshedMetrics };
     } catch {
       // Cache files exist but are unreadable/malformed; fall through to a
       // fresh run rather than crashing. The fresh run will overwrite them.
@@ -264,7 +262,7 @@ export async function runFramesPipeline(
   }
 
   // ---------- phase: classify ----------
-  const classifierCache = readClassificationsCache(opts.workDir, adapters.vision.classifierModel);
+  const classifierCache = readClassificationsCache(opts.workDir);
   try {
     await timePhase("classify", () =>
       runWithConcurrency(candidates, CLASSIFIER_CONCURRENCY, async (c) => {
@@ -278,6 +276,7 @@ export async function runFramesPipeline(
           classifierCache[c.frame] = result;
           metrics.inputTokens += result.inputTokens;
           metrics.outputTokens += result.outputTokens;
+          metrics.classifierModel = result.model;
         }
         c.classification = { verdict: result.verdict };
         if (result.verdict === "yes") metrics.classifierYes++;
@@ -285,7 +284,7 @@ export async function runFramesPipeline(
       }),
     );
   } catch (err) {
-    writeClassificationsCache(opts.workDir, adapters.vision.classifierModel, classifierCache);
+    writeClassificationsCache(opts.workDir, classifierCache);
     if (opts.signal?.aborted) {
       return finalize({ reason: "aborted", phase: "classify", message: "Aborted during classify." });
     }
@@ -295,7 +294,7 @@ export async function runFramesPipeline(
       message: err instanceof Error ? err.message : String(err),
     });
   }
-  writeClassificationsCache(opts.workDir, adapters.vision.classifierModel, classifierCache);
+  writeClassificationsCache(opts.workDir, classifierCache);
 
   if (opts.signal?.aborted) {
     return finalize({ reason: "aborted", phase: "classify", message: "Aborted before vision pass." });
@@ -303,7 +302,7 @@ export async function runFramesPipeline(
 
   // ---------- phase: vision ----------
   const yesFrames = candidates.filter((c) => c.classification?.verdict === "yes");
-  const visionCache = readVisionCache(opts.workDir, adapters.vision.visionModel);
+  const visionCache = readVisionCache(opts.workDir);
   try {
     await timePhase("vision", () =>
       runWithConcurrency(yesFrames, VISION_CONCURRENCY, async (c) => {
@@ -323,6 +322,7 @@ export async function runFramesPipeline(
           visionCache[c.frame] = entry;
           metrics.inputTokens += result.inputTokens;
           metrics.outputTokens += result.outputTokens;
+          metrics.visionModel = result.model;
         }
         c.vision = {
           description: entry.description,
@@ -335,7 +335,7 @@ export async function runFramesPipeline(
       }),
     );
   } catch (err) {
-    writeVisionCache(opts.workDir, adapters.vision.visionModel, visionCache);
+    writeVisionCache(opts.workDir, visionCache);
     if (opts.signal?.aborted) {
       return finalize({ reason: "aborted", phase: "vision", message: "Aborted during vision pass." });
     }
@@ -345,7 +345,7 @@ export async function runFramesPipeline(
       message: err instanceof Error ? err.message : String(err),
     });
   }
-  writeVisionCache(opts.workDir, adapters.vision.visionModel, visionCache);
+  writeVisionCache(opts.workDir, visionCache);
 
   // ---------- phase: weave ----------
   const woven = await timePhase("weave", async () => weave(opts.transcript, candidates));
@@ -410,17 +410,20 @@ function writeScenesCache(workDir: string, scenes: number[]): void {
 }
 
 /**
- * Reads the classifier cache scoped to `model`. Returns an empty object when
- * the cache file is absent, malformed, or was produced by a different model.
- * Returning a mutable record (not null) lets the classify phase write new
- * entries into it and flush atomically at the end.
+ * Reads the classifier cache. Returns an empty object when the cache file is
+ * absent or malformed. Returning a mutable record (not null) lets the
+ * classify phase write new entries into it and flush atomically at the end.
+ *
+ * Model invalidation: cache is server-mediated now, and the CLI doesn't know
+ * which model the gateway will use until the first response. We trust the
+ * cache regardless of model; users who want to invalidate after a server-side
+ * model swap can delete the workDir.
  */
-function readClassificationsCache(workDir: string, model: string): Record<string, ClassifyResult> {
+function readClassificationsCache(workDir: string): Record<string, ClassifyResult> {
   const path = resolve(workDir, CLASSIFICATIONS_CACHE_FILE);
   if (!existsSync(path)) return {};
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as ClassificationsCache;
-    if (parsed.classifierModel !== model) return {};
     return isPlainRecord(parsed.entries) ? (parsed.entries as Record<string, ClassifyResult>) : {};
   } catch {
     return {};
@@ -429,23 +432,21 @@ function readClassificationsCache(workDir: string, model: string): Record<string
 
 function writeClassificationsCache(
   workDir: string,
-  model: string,
   entries: Record<string, ClassifyResult>,
 ): void {
   try {
-    const payload: ClassificationsCache = { classifierModel: model, entries };
+    const payload: ClassificationsCache = { entries };
     writeFileSync(resolve(workDir, CLASSIFICATIONS_CACHE_FILE), JSON.stringify(payload));
   } catch {
     // Best-effort.
   }
 }
 
-function readVisionCache(workDir: string, model: string): Record<string, VisionCacheEntry> {
+function readVisionCache(workDir: string): Record<string, VisionCacheEntry> {
   const path = resolve(workDir, VISION_CACHE_FILE);
   if (!existsSync(path)) return {};
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as VisionCache;
-    if (parsed.visionModel !== model) return {};
     return isPlainRecord(parsed.entries) ? (parsed.entries as Record<string, VisionCacheEntry>) : {};
   } catch {
     return {};
@@ -463,11 +464,10 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 function writeVisionCache(
   workDir: string,
-  model: string,
   entries: Record<string, VisionCacheEntry>,
 ): void {
   try {
-    const payload: VisionCache = { visionModel: model, entries };
+    const payload: VisionCache = { entries };
     writeFileSync(resolve(workDir, VISION_CACHE_FILE), JSON.stringify(payload));
   } catch {
     // Best-effort.

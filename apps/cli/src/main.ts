@@ -4,6 +4,7 @@ import { createAuthFlow, type AuthFlow } from "./auth";
 import { createFilesystemStore } from "./credentials";
 import { EXIT_ARG_ERROR, EXIT_TRANSIENT } from "./exit-codes";
 import { createHostedClient, type RefreshTokensFn } from "./hosted-client";
+import { createLlmGatewayClient } from "./llm-gateway-client";
 import { runAsk } from "./handlers/run-ask";
 import { runGenerate } from "./handlers/run-generate";
 import { runLogin } from "./handlers/run-login";
@@ -263,9 +264,18 @@ async function dispatchTranscript(argv: string[], bareShortcut: boolean): Promis
     return EXIT_ARG_ERROR;
   }
 
+  const transcriptDeps: Parameters<typeof runTranscript>[0] = { fetchTranscript, fetchMetadata };
+  if (common.withFrames) {
+    const credentials = createFilesystemStore();
+    transcriptDeps.gatewayClient = createLlmGatewayClient({
+      baseUrl: getApiBase(),
+      credentials,
+      refreshTokens: makeRefreshTokens(),
+    });
+  }
   return writeResult(
     await runTranscript(
-      { fetchTranscript, fetchMetadata },
+      transcriptDeps,
       {
         ...common,
         ...(bareShortcut ? { bareShortcut: true } : {}),
@@ -294,10 +304,16 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   }
 
   const credentials = createFilesystemStore();
+  const refreshTokens = makeRefreshTokens();
   const hostedClient = createHostedClient({
     baseUrl: getApiBase(),
     credentials,
-    refreshTokens: makeRefreshTokens(),
+    refreshTokens,
+  });
+  const gatewayClient = createLlmGatewayClient({
+    baseUrl: getApiBase(),
+    credentials,
+    refreshTokens,
   });
 
   const generateOpts: Parameters<typeof runGenerate>[1] = {
@@ -308,13 +324,13 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   if (common.sources) generateOpts.sources = common.sources;
   if (common.signal) generateOpts.signal = common.signal;
   if (common.supadataKey) generateOpts.supadataKey = common.supadataKey;
-  if (common.openRouterKey) generateOpts.openRouterKey = common.openRouterKey;
 
   return writeResult(
     await runGenerate(
       {
         fetchTranscript,
         hostedClient,
+        gatewayClient,
         progress: (line) => process.stderr.write(`${line}\n`),
       },
       generateOpts,
@@ -379,17 +395,26 @@ async function dispatchAsk(argv: string[]): Promise<number> {
   if (supadataKey) askOpts.supadataKey = supadataKey;
   if (signal) askOpts.signal = signal;
 
+  const askDeps: Parameters<typeof runAsk>[0] = {
+    fetchTranscript,
+    extractFrames,
+    askVideo,
+    readStdin: readStdinToString,
+    progress: (line) => process.stderr.write(`${line}\n`),
+  };
+  // URL mode runs the frames pipeline; stdin mode does not. Build the gateway
+  // client only when an input URL is supplied so stdin-only invocations don't
+  // require a logged-in session.
+  if (input) {
+    const credentials = createFilesystemStore();
+    askDeps.gatewayClient = createLlmGatewayClient({
+      baseUrl: getApiBase(),
+      credentials,
+      refreshTokens: makeRefreshTokens(),
+    });
+  }
   return writeResult(
-    await runAsk(
-      {
-        fetchTranscript,
-        extractFrames,
-        askVideo,
-        readStdin: readStdinToString,
-        progress: (line) => process.stderr.write(`${line}\n`),
-      },
-      askOpts,
-    ),
+    await runAsk(askDeps, askOpts),
   );
 }
 

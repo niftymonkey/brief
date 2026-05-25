@@ -95,7 +95,12 @@ function stubVision(config: StubVisionConfig = {}): VisionClient & {
       if (config.classifyThrows) throw config.classifyThrows;
       const r = config.classifyResult;
       if (typeof r === "function") return r(framePath);
-      return r ?? { verdict: "yes", inputTokens: 100, outputTokens: 1 };
+      return r ?? {
+        verdict: "yes",
+        inputTokens: 100,
+        outputTokens: 1,
+        model: config.classifierModel ?? "stub-classifier",
+      };
     },
     async describe(framePath) {
       describeCalls.push(framePath);
@@ -105,8 +110,10 @@ function stubVision(config: StubVisionConfig = {}): VisionClient & {
       return (
         r ?? {
           description: `[stub] description of ${framePath}`,
+          mode: "summary",
           inputTokens: 500,
           outputTokens: 80,
+          model: config.visionModel ?? "stub-vision",
         }
       );
     },
@@ -376,16 +383,6 @@ describe("runFramesPipeline phase-level caching", () => {
     expect(visionSecond.classifyCalls).toHaveLength(0);
   });
 
-  it("invalidates cached classifier verdicts when classifierModel changes", async () => {
-    const visionA = stubVision({ classifierModel: "model-a" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
-    wipeSuccessCache();
-
-    const visionB = stubVision({ classifierModel: "model-b" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
-    expect(visionB.classifyCalls.length).toBeGreaterThan(0);
-  });
-
   it("reuses cached vision descriptions and only calls describe for missing frames", async () => {
     const visionFirst = stubVision();
     await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionFirst }));
@@ -399,33 +396,11 @@ describe("runFramesPipeline phase-level caching", () => {
     expect(visionSecond.describeCalls).toHaveLength(0);
   });
 
-  it("invalidates cached vision descriptions when visionModel changes", async () => {
-    const visionA = stubVision({ visionModel: "model-a" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
-    wipeSuccessCache();
-
-    const visionB = stubVision({ visionModel: "model-b" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
-    expect(visionB.describeCalls.length).toBeGreaterThan(0);
-  });
-
-  it("bypasses the success cache (augmented.txt) when classifierModel changes", async () => {
-    const visionA = stubVision({ classifierModel: "model-a" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
-
-    const visionB = stubVision({ classifierModel: "model-b" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
-    expect(visionB.classifyCalls.length).toBeGreaterThan(0);
-  });
-
-  it("bypasses the success cache (augmented.txt) when visionModel changes", async () => {
-    const visionA = stubVision({ visionModel: "model-a" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
-
-    const visionB = stubVision({ visionModel: "model-b" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
-    expect(visionB.describeCalls.length).toBeGreaterThan(0);
-  });
+  // Model-invalidation tests removed: the gateway architecture means the CLI
+  // doesn't know which model the server will use until the first response,
+  // so model-keyed cache invalidation can't fire. Cache is best-effort; users
+  // who want to force a re-run after a server-side model swap can delete the
+  // workDir. See `docs/architecture/llm-gateway.md`.
 
   it("does not bill cached tokens to the current run's input/outputTokens", async () => {
     const visionFirst = stubVision({

@@ -17,6 +17,7 @@ import {
   EXIT_TRANSIENT,
   EXIT_UNAVAILABLE,
 } from "../exit-codes";
+import type { LlmGatewayClient } from "../llm-gateway-client";
 import type { HandlerResult } from "./run-login";
 
 /**
@@ -37,6 +38,12 @@ export interface RunAskDeps {
   fetchTranscript: typeof fetchTranscript;
   extractFrames: typeof extractFrames;
   askVideo: typeof askVideo;
+  /**
+   * Server-mediated LLM gateway client. Required for URL mode (the frames
+   * pipeline needs it for classify + describe). Stdin mode never invokes the
+   * gateway, so it can be omitted in that flow.
+   */
+  gatewayClient?: LlmGatewayClient;
   /** Reads stdin to completion. Production passes a `process.stdin` reader; tests inject a string. */
   readStdin: () => Promise<string>;
   progress: (line: string) => void;
@@ -140,11 +147,19 @@ export async function runAsk(
   const workDir = join(tmpdir(), "brief-frames-cache", videoId);
   mkdirSync(workDir, { recursive: true });
 
+  if (!deps.gatewayClient) {
+    return {
+      stdout: "",
+      stderr: "Internal error: ask URL mode requires a gateway client (caller did not provide one).\n",
+      exitCode: EXIT_ARG_ERROR,
+    };
+  }
+
   deps.progress("Preparing augmented transcript... (cache hit if you've run --with-frames on this video before)");
   const framesOpts: Parameters<typeof extractFrames>[0] = {
     videoId,
     transcript: transcript.entries,
-    openRouterApiKey: opts.openRouterKey,
+    gateway: deps.gatewayClient,
     workDir,
   };
   if (opts.signal) framesOpts.signal = opts.signal;

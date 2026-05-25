@@ -22,6 +22,7 @@ import {
   EXIT_UNAVAILABLE,
 } from "../exit-codes";
 import type { HostedClient } from "../hosted-client";
+import type { LlmGatewayClient } from "../llm-gateway-client";
 import type { HandlerResult } from "./run-login";
 
 type SumTypeEntry = z.infer<typeof TranscriptEntrySchema>;
@@ -36,6 +37,7 @@ export interface RunGenerateDeps {
     },
   ) => Promise<TranscriptResult>;
   hostedClient: HostedClient;
+  gatewayClient: LlmGatewayClient;
   progress: (line: string) => void;
 }
 
@@ -43,7 +45,6 @@ export interface RunGenerateOptions {
   input: string;
   json: boolean;
   withFrames: boolean;
-  openRouterKey?: string;
   sources?: SourceName[];
   signal?: AbortSignal;
   supadataKey?: string;
@@ -111,13 +112,6 @@ export async function runGenerate(
   let framesResult: FramesResult | null = null;
   let framesNotice = "";
   if (opts.withFrames) {
-    if (!opts.openRouterKey) {
-      return {
-        stdout: "",
-        stderr: "Missing OPENROUTER_API_KEY (or --openrouter-key) — required for --with-frames.\n",
-        exitCode: EXIT_ARG_ERROR,
-      };
-    }
     // Cache video bytes + extracted frames per videoId so subsequent runs against
     // the same video reuse the download and the per-timestamp PNGs. yt-dlp and
     // ffmpeg both short-circuit when their output files already exist. Cleared
@@ -128,7 +122,7 @@ export async function runGenerate(
     const framesOpts: Parameters<typeof extractFrames>[0] = {
       videoId,
       transcript: transcript.entries,
-      openRouterApiKey: opts.openRouterKey,
+      gateway: deps.gatewayClient,
       workDir,
     };
     if (opts.signal) framesOpts.signal = opts.signal;
