@@ -111,6 +111,14 @@ export async function runAsk(
     };
   }
 
+  if (!deps.gatewayClient) {
+    return {
+      stdout: "",
+      stderr: "Internal error: ask URL mode requires a gateway client (caller did not provide one).\n",
+      exitCode: EXIT_ARG_ERROR,
+    };
+  }
+
   const transcriptOpts: {
     supadataApiKey?: string;
     sources?: SourceName[];
@@ -146,14 +154,6 @@ export async function runAsk(
 
   const workDir = join(tmpdir(), "brief-frames-cache", videoId);
   mkdirSync(workDir, { recursive: true });
-
-  if (!deps.gatewayClient) {
-    return {
-      stdout: "",
-      stderr: "Internal error: ask URL mode requires a gateway client (caller did not provide one).\n",
-      exitCode: EXIT_ARG_ERROR,
-    };
-  }
 
   deps.progress("Preparing augmented transcript... (cache hit if you've run --with-frames on this video before)");
   const framesOpts: Parameters<typeof extractFrames>[0] = {

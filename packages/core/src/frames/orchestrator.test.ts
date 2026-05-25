@@ -142,11 +142,23 @@ afterEach(() => {
   }
 });
 
+// Inert gateway stub: orchestrator tests inject a stubbed VisionClient via
+// FramesAdapters, so the gateway field is type-required but never invoked.
+// Throws if anything ever reaches it so a regression is loud, not silent.
+const inertGateway: FramesOptions["gateway"] = {
+  classify() {
+    throw new Error("orchestrator test reached the gateway; use the VisionClient stub instead");
+  },
+  describe() {
+    throw new Error("orchestrator test reached the gateway; use the VisionClient stub instead");
+  },
+};
+
 function buildOpts(overrides: Partial<FramesOptions> = {}): FramesOptions {
   return {
     videoId: "abc123",
     transcript: sampleTranscript,
-    openRouterApiKey: "stub-key",
+    gateway: inertGateway,
     workDir,
     ...overrides,
   };

@@ -87,6 +87,17 @@ const sampleTranscript: TranscriptEntry[] = [
   { offsetSec: 30, durationSec: 5, text: "Body of the talk" },
 ];
 
+// Inert gateway: these contract tests inject a stubbed VisionClient via
+// FramesAdapters, so the gateway field is type-required but never invoked.
+const inertGateway = {
+  classify() {
+    throw new Error("index test reached the gateway; use the VisionClient stub instead");
+  },
+  describe() {
+    throw new Error("index test reached the gateway; use the VisionClient stub instead");
+  },
+} as const;
+
 describe("extractFrames public contract", () => {
   it("happy path: returns kind=included with augmented transcript + non-zero metrics", async () => {
     const adapters: FramesAdapters = {
@@ -98,7 +109,7 @@ describe("extractFrames public contract", () => {
       {
         videoId: "abc123",
         transcript: sampleTranscript,
-        openRouterApiKey: "stub",
+        gateway: inertGateway,
         workDir,
       },
       adapters,
@@ -129,7 +140,7 @@ describe("extractFrames public contract", () => {
       {
         videoId: "abc123",
         transcript: sampleTranscript,
-        openRouterApiKey: "stub",
+        gateway: inertGateway,
         workDir,
         maxCandidates: 5,
       },

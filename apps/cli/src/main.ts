@@ -36,21 +36,23 @@ Options:
                                            into the transcript at the right timestamps. \`transcript --with-frames\` writes the
                                            augmented transcript to stdout (pipe-friendly). \`generate --with-frames\` ships it
                                            to the server so the brief picks up on-screen detail like code, slides, dashboards,
-                                           and prompt templates. Requires yt-dlp + ffmpeg on PATH and OPENROUTER_API_KEY (or
-                                           --openrouter-key). First run ~1–3 min per video; subsequent runs on the same video
-                                           reuse the cached download + frames. Cost lands on your own OpenRouter key:
-                                           roughly \$0.10–\$0.30 per ~15-min video at current rates.
+                                           and prompt templates. Requires yt-dlp + ffmpeg on PATH and a logged-in session
+                                           (\`brief login\`); LLM calls run server-side so no OPENROUTER_API_KEY is needed.
+                                           First run ~1–3 min per video; subsequent runs on the same video reuse the cached
+                                           download + frames. Cost is attributed to your brief account.
   --source=<auto|local|supadata>           Override the transcript cascade
   --timeout=<ms>                           Overall request budget
   --supadata-key=<key>                     Override SUPADATA_API_KEY env var
   --youtube-key=<key>                      (transcript) Override YOUTUBE_API_KEY env var
-  --openrouter-key=<key>                   (with --with-frames) Override OPENROUTER_API_KEY env var
+  --openrouter-key=<key>                   (ask) Override OPENROUTER_API_KEY env var for question-answering
   --help                                   Show this help
 
 Environment:
   BRIEF_API_URL                            Hosted brief service URL (default: ${DEFAULT_API_BASE})
   WORKOS_CLIENT_ID                         WorkOS client ID override (CLI fetches the value from the server by default)
-  OPENROUTER_API_KEY                       Required when --with-frames is set (your own OpenRouter key)
+  OPENROUTER_API_KEY                       Required for \`brief ask\` (your own OpenRouter key). Not needed for
+                                           \`transcript --with-frames\` or \`generate --with-frames\`: those route LLM
+                                           calls through the server and bill your brief account.
 
 Exit codes:
   0  Success

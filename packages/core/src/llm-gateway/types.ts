@@ -73,7 +73,7 @@ export const ClassifyOkBodySchema = z.object({
 export type ClassifyOkBody = z.infer<typeof ClassifyOkBodySchema>;
 
 export const VisionDescribeOkBodySchema = z.object({
-  description: z.string(),
+  description: z.string().min(1),
   mode: z.enum(["verbatim", "summary"]),
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),

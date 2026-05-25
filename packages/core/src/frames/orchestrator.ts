@@ -25,9 +25,11 @@ const METRICS_CACHE_FILE = "metrics.json";
 /**
  * Per-phase cache filenames. Each is written after its phase succeeds so a
  * subsequent run that aborts/fails downstream can skip the expensive work the
- * prior run already paid for. Cache invalidation: scenes is content-free so
- * it's reused unconditionally; classifications/vision tie reuse to the model
- * id captured at write time so swapping models discards the cached entries.
+ * prior run already paid for. Cache is best-effort and model-agnostic; the
+ * server now owns model selection and the CLI doesn't learn the model until
+ * the first response, so model-keyed invalidation isn't possible here. Users
+ * who want to force a re-run after a server-side model swap can delete the
+ * workDir.
  */
 const SCENES_CACHE_FILE = "scenes.json";
 const CLASSIFICATIONS_CACHE_FILE = "classifications.json";
