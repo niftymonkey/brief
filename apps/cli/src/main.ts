@@ -4,6 +4,7 @@ import { createAuthFlow, type AuthFlow } from "./auth";
 import { createFilesystemStore } from "./credentials";
 import { EXIT_ARG_ERROR, EXIT_TRANSIENT } from "./exit-codes";
 import { createHostedClient, type RefreshTokensFn } from "./hosted-client";
+import { createLlmGatewayClient } from "./llm-gateway-client";
 import { runAsk } from "./handlers/run-ask";
 import { runGenerate } from "./handlers/run-generate";
 import { runLogin } from "./handlers/run-login";
@@ -35,21 +36,23 @@ Options:
                                            into the transcript at the right timestamps. \`transcript --with-frames\` writes the
                                            augmented transcript to stdout (pipe-friendly). \`generate --with-frames\` ships it
                                            to the server so the brief picks up on-screen detail like code, slides, dashboards,
-                                           and prompt templates. Requires yt-dlp + ffmpeg on PATH and OPENROUTER_API_KEY (or
-                                           --openrouter-key). First run ~1–3 min per video; subsequent runs on the same video
-                                           reuse the cached download + frames. Cost lands on your own OpenRouter key:
-                                           roughly \$0.10–\$0.30 per ~15-min video at current rates.
+                                           and prompt templates. Requires yt-dlp + ffmpeg on PATH and a logged-in session
+                                           (\`brief login\`); LLM calls run server-side so no OPENROUTER_API_KEY is needed.
+                                           First run ~1–3 min per video; subsequent runs on the same video reuse the cached
+                                           download + frames. Cost is attributed to your brief account.
   --source=<auto|local|supadata>           Override the transcript cascade
   --timeout=<ms>                           Overall request budget
   --supadata-key=<key>                     Override SUPADATA_API_KEY env var
   --youtube-key=<key>                      (transcript) Override YOUTUBE_API_KEY env var
-  --openrouter-key=<key>                   (with --with-frames) Override OPENROUTER_API_KEY env var
+  --openrouter-key=<key>                   (ask) Override OPENROUTER_API_KEY env var for question-answering
   --help                                   Show this help
 
 Environment:
   BRIEF_API_URL                            Hosted brief service URL (default: ${DEFAULT_API_BASE})
   WORKOS_CLIENT_ID                         WorkOS client ID override (CLI fetches the value from the server by default)
-  OPENROUTER_API_KEY                       Required when --with-frames is set (your own OpenRouter key)
+  OPENROUTER_API_KEY                       Required for \`brief ask\` (your own OpenRouter key). Not needed for
+                                           \`transcript --with-frames\` or \`generate --with-frames\`: those route LLM
+                                           calls through the server and bill your brief account.
 
 Exit codes:
   0  Success
@@ -263,9 +266,18 @@ async function dispatchTranscript(argv: string[], bareShortcut: boolean): Promis
     return EXIT_ARG_ERROR;
   }
 
+  const transcriptDeps: Parameters<typeof runTranscript>[0] = { fetchTranscript, fetchMetadata };
+  if (common.withFrames) {
+    const credentials = createFilesystemStore();
+    transcriptDeps.gatewayClient = createLlmGatewayClient({
+      baseUrl: getApiBase(),
+      credentials,
+      refreshTokens: makeRefreshTokens(),
+    });
+  }
   return writeResult(
     await runTranscript(
-      { fetchTranscript, fetchMetadata },
+      transcriptDeps,
       {
         ...common,
         ...(bareShortcut ? { bareShortcut: true } : {}),
@@ -294,10 +306,16 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   }
 
   const credentials = createFilesystemStore();
+  const refreshTokens = makeRefreshTokens();
   const hostedClient = createHostedClient({
     baseUrl: getApiBase(),
     credentials,
-    refreshTokens: makeRefreshTokens(),
+    refreshTokens,
+  });
+  const gatewayClient = createLlmGatewayClient({
+    baseUrl: getApiBase(),
+    credentials,
+    refreshTokens,
   });
 
   const generateOpts: Parameters<typeof runGenerate>[1] = {
@@ -308,13 +326,13 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
   if (common.sources) generateOpts.sources = common.sources;
   if (common.signal) generateOpts.signal = common.signal;
   if (common.supadataKey) generateOpts.supadataKey = common.supadataKey;
-  if (common.openRouterKey) generateOpts.openRouterKey = common.openRouterKey;
 
   return writeResult(
     await runGenerate(
       {
         fetchTranscript,
         hostedClient,
+        gatewayClient,
         progress: (line) => process.stderr.write(`${line}\n`),
       },
       generateOpts,
@@ -379,17 +397,26 @@ async function dispatchAsk(argv: string[]): Promise<number> {
   if (supadataKey) askOpts.supadataKey = supadataKey;
   if (signal) askOpts.signal = signal;
 
+  const askDeps: Parameters<typeof runAsk>[0] = {
+    fetchTranscript,
+    extractFrames,
+    askVideo,
+    readStdin: readStdinToString,
+    progress: (line) => process.stderr.write(`${line}\n`),
+  };
+  // URL mode runs the frames pipeline; stdin mode does not. Build the gateway
+  // client only when an input URL is supplied so stdin-only invocations don't
+  // require a logged-in session.
+  if (input) {
+    const credentials = createFilesystemStore();
+    askDeps.gatewayClient = createLlmGatewayClient({
+      baseUrl: getApiBase(),
+      credentials,
+      refreshTokens: makeRefreshTokens(),
+    });
+  }
   return writeResult(
-    await runAsk(
-      {
-        fetchTranscript,
-        extractFrames,
-        askVideo,
-        readStdin: readStdinToString,
-        progress: (line) => process.stderr.write(`${line}\n`),
-      },
-      askOpts,
-    ),
+    await runAsk(askDeps, askOpts),
   );
 }
 

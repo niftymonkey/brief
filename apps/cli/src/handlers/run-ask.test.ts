@@ -45,11 +45,19 @@ const okAnswer: AskVideoResult = {
   metrics: { inputTokens: 200, outputTokens: 30, model: "openai/gpt-5.5", latencyMs: 1000 },
 };
 
+function stubGatewayClient(): NonNullable<RunAskDeps["gatewayClient"]> {
+  return {
+    classify: vi.fn(),
+    describe: vi.fn(),
+  };
+}
+
 function makeDeps(overrides: Partial<RunAskDeps> = {}): RunAskDeps {
   return {
     fetchTranscript: vi.fn().mockResolvedValue(okTranscript),
     extractFrames: vi.fn().mockResolvedValue(includedFrames),
     askVideo: vi.fn().mockResolvedValue(okAnswer),
+    gatewayClient: stubGatewayClient(),
     readStdin: vi.fn().mockResolvedValue(""),
     progress: vi.fn(),
     ...overrides,

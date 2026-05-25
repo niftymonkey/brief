@@ -7,15 +7,21 @@ import { createOpenRouterClient } from "@/lib/openrouter-client";
 import { createPgUsageLedger } from "@/lib/usage-ledger";
 
 /**
- * Server-mediated classify endpoint for the CLI's frames pipeline.
+ * Server-mediated vision-describe endpoint for the CLI's frames pipeline.
  *
- * Wire shape: `POST /api/cli/llm/classify` with a `multipart/form-data` body
+ * Wire shape: `POST /api/cli/llm/describe` with a `multipart/form-data` body
  * containing a `frame` field (PNG bytes). Authenticated via WorkOS bearer.
- * 200 returns `ClassifyOkBody`; non-200 returns `LlmErrorBody`. The CLI HTTP
- * adapter (Phase 2 follow-up) lifts (status, body) back into `ClassifyResult`.
+ * 200 returns `VisionDescribeOkBody`; non-200 returns `LlmErrorBody`. The CLI
+ * HTTP adapter lifts (status, body) back into `VisionDescribeResult`.
+ *
+ * Vision calls are slower than classify (10-30s per frame is common) so the
+ * route bumps Vercel's function timeout. The intake route bumped for the
+ * same reason; same ceiling chosen for consistency.
  *
  * Architecture: `docs/architecture/llm-gateway.md`. Epic: #94.
  */
+
+export const maxDuration = 300;
 
 function errorBody(reason: LlmFailReason, message: string) {
   return { reason, message };
@@ -40,14 +46,10 @@ function statusForReason(reason: LlmFailReason): number {
     case "transient":
       return 503;
   }
-  // Exhaustive over LlmFailReason; this line forces a TS error if a new
-  // reason is added without a corresponding case above.
   const _exhaustive: never = reason;
   return _exhaustive;
 }
 
-// PNG frames in the existing pipeline run ~100-500KB. 2 MiB is generous.
-// Checked against `frameField.size` before materializing the buffer.
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 
 function requireEnv(name: string): string {
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
   try {
     openRouterKey = requireEnv("OPENROUTER_API_KEY");
   } catch (err) {
-    console.error("[cli/llm/classify] env-misconfig:", err);
+    console.error("[cli/llm/describe] env-misconfig:", err);
     return NextResponse.json(
       errorBody("transient", "server-misconfigured"),
       { status: 503 },
@@ -71,15 +73,12 @@ export async function POST(req: NextRequest) {
   const token = extractBearer(req.headers.get("authorization"));
   if (!token) return unauthorized("missing-auth");
 
-  // `verifier.verify` reaches out to WorkOS's JWKS endpoint; a network or
-  // upstream failure there should surface as a contract-shaped transient
-  // error, not a framework 500 that bypasses `{ reason, message }`.
   const verifier = createWorkosTokenVerifier();
   let verified;
   try {
     verified = await verifier.verify(token);
   } catch (err) {
-    console.error("[cli/llm/classify] verifier-fault:", err);
+    console.error("[cli/llm/describe] verifier-fault:", err);
     return NextResponse.json(
       errorBody("transient", "auth-service-unavailable"),
       { status: 503 },
@@ -87,7 +86,6 @@ export async function POST(req: NextRequest) {
   }
   if (verified.kind !== "ok") return unauthorized(verified.kind);
 
-  // Multipart parsing. The CLI sends the PNG bytes under a `frame` field.
   let form: FormData;
   try {
     form = await req.formData();
@@ -106,9 +104,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Reject non-PNG before any paid upstream work. Browsers/clients sometimes
-  // omit the type; treat empty as "unknown" and accept it (the size + LLM call
-  // remain the real protections), but reject any explicit non-PNG.
   if (frameField.type && frameField.type !== "image/png") {
     return NextResponse.json(
       errorBody(
@@ -143,20 +138,16 @@ export async function POST(req: NextRequest) {
     openrouter: createOpenRouterClient({ apiKey: openRouterKey }),
   });
 
-  // Deliberately not forwarding `req.signal`. NextRequest's abort semantics
-  // on App Router are unreliable; aborting after the LLM call has started
-  // produces real token spend with no audit row (the ledger write is
-  // skipped). The 60s timeout inside `createOpenRouterClient` is the bound
-  // that matters here; client disconnect does not save us tokens once the
-  // upstream call is in flight.
-  const result = await gateway.classify({
+  // Deliberately not forwarding `req.signal`; same rationale as classify.
+  const result = await gateway.describe({
     userId: verified.userId,
     frame,
   });
 
   if (result.kind === "ok") {
     return NextResponse.json({
-      verdict: result.verdict,
+      description: result.description,
+      mode: result.mode,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
       ledgerId: result.ledgerId,
@@ -164,18 +155,13 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Server-side logs for failure modes that are signals about our
-  // infrastructure, not the CLI caller: bad server credentials (`auth`),
-  // upstream rate-limiting (`rate-limited`), and unclassified failures
-  // (`transient`). Log the gateway message; redact it from the wire body
-  // for `transient` since that path can carry DB or OpenRouter internals.
   if (
     result.reason === "transient" ||
     result.reason === "auth" ||
     result.reason === "rate-limited"
   ) {
     console.error(
-      `[cli/llm/classify] ${result.reason} for user ${verified.userId}:`,
+      `[cli/llm/describe] ${result.reason} for user ${verified.userId}:`,
       result.message,
     );
   }

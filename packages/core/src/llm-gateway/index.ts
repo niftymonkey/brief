@@ -1,6 +1,7 @@
 export {
   ClassifyOkBodySchema,
   LlmErrorBodySchema,
+  VisionDescribeOkBodySchema,
 } from "./types";
 export type {
   ClassifyOkBody,
@@ -9,4 +10,8 @@ export type {
   LlmCallSucceeded,
   LlmErrorBody,
   LlmFailReason,
+  LlmGatewayClient,
+  VisionDescribeOkBody,
+  VisionDescribeResult,
+  VisionMode,
 } from "./types";

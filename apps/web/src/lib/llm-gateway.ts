@@ -16,9 +16,12 @@
 
 import {
   CLASSIFY_MODEL,
+  VISION_MODEL,
   type ClassifyResult,
   type ClassifyVerdict,
   type LlmFailReason,
+  type VisionDescribeResult,
+  type VisionMode,
 } from "@brief/core";
 import type { OpenRouterClient } from "./openrouter-client";
 import type { UsageLedger } from "./usage-ledger";
@@ -39,6 +42,34 @@ When uncertain, lean "yes". Reply with exactly one word: yes or no.`;
 // Azure-hosted GPT-5 nano). Anthropic-direct accepts 5; routing through
 // OpenRouter forces the higher minimum.
 const CLASSIFIER_MAX_OUTPUT_TOKENS = 16;
+const VISION_MAX_OUTPUT_TOKENS = 2000;
+
+const MODE_MARKER_RE = /^\s*<mode>(verbatim|summary)<\/mode>\s*/i;
+
+// Vision prompt lives server-side per the gateway architecture: prompt
+// iteration no longer requires a CLI release. Mirrors the spec from the
+// pre-migration `packages/core/src/frames/vision.ts`. When that file
+// collapses into a thin client adapter, remove its copy.
+const VISION_PROMPT = `You're extracting on-screen content from a YouTube video frame for a reader who is consuming the video as a transcript+visuals document. They will not see the image itself.
+
+Identify the PRIMARY on-screen content (the thing the speaker is showing, not background chrome). Then choose ONE of two modes:
+
+**VERBATIM mode** when the primary content is something a viewer would plausibly want to copy out of the video and paste somewhere: code blocks, configuration files, system prompts, LLM instructions, terminal commands, URLs, regex patterns, JSON/YAML, structured templates, file content, schemas, anything intended for direct reuse.
+
+In verbatim mode: reproduce the visible text WORD-FOR-WORD as it appears on screen. Preserve original formatting (line breaks, indentation, headers, bullet markers). Do not paraphrase. Do not add a summary. Lead with a one-line label like "[Obsidian note titled X]" then the verbatim content as a code block. Mark unreadable spans "[illegible]" rather than guessing. Use as many tokens as needed up to your output limit.
+
+**SUMMARY mode** when the primary content is descriptive: a slide explaining a concept, a diagram, a dashboard, a busy screen recording, a multi-pane composite, the speaker on camera, a browser tab with mixed content.
+
+In summary mode: write a single concise paragraph under 200 words. Quote specific labels, headings, names, prices, URLs, and short identifiers. Briefly state the scene type (slide / dashboard / IDE / diagram / etc.).
+
+If both apply (e.g., a slide that contains a code block as its central content), prefer VERBATIM for the central content and add one short sentence of context.
+
+Don't pad with "this frame shows" or "the screen displays" filler. Lead with the content.
+
+Begin your response with exactly one of these mode markers on the first line:
+\`<mode>verbatim</mode>\`
+\`<mode>summary</mode>\`
+Then continue with the content as described above. The marker is for downstream processing; do not reference it in your prose.`;
 
 export interface ClassifyInput {
   userId: string;
@@ -46,20 +77,25 @@ export interface ClassifyInput {
   signal?: AbortSignal;
 }
 
+export type DescribeInput = ClassifyInput;
+
 export interface ServerLlmGateway {
   classify(input: ClassifyInput): Promise<ClassifyResult>;
+  describe(input: DescribeInput): Promise<VisionDescribeResult>;
 }
 
 export interface ServerLlmGatewayOptions {
   ledger: UsageLedger;
   openrouter: OpenRouterClient;
   classifyModel?: string;
+  visionModel?: string;
 }
 
 export function createServerLlmGateway(
   opts: ServerLlmGatewayOptions,
 ): ServerLlmGateway {
   const classifyModel = opts.classifyModel ?? CLASSIFY_MODEL;
+  const visionModel = opts.visionModel ?? VISION_MODEL;
 
   return {
     async classify(input) {
@@ -125,9 +161,86 @@ export function createServerLlmGateway(
         inputTokens,
         outputTokens,
         ledgerId,
+        model: classifyModel,
+      };
+    },
+
+    async describe(input) {
+      const start = Date.now();
+      let result;
+      try {
+        result = await opts.openrouter.generateText({
+          model: visionModel,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "image", image: input.frame, mediaType: "image/png" },
+                { type: "text", text: VISION_PROMPT },
+              ],
+            },
+          ],
+          maxOutputTokens: VISION_MAX_OUTPUT_TOKENS,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+      } catch (err) {
+        return {
+          kind: "failed",
+          reason: mapLlmError(err),
+          message: errMessage(err),
+        };
+      }
+      const latencyMs = Date.now() - start;
+
+      const { inputTokens, outputTokens } = result.usage;
+      const { mode, description } = parseModeMarker(result.text);
+
+      let ledgerId: string;
+      try {
+        ledgerId = await opts.ledger.record({
+          userId: input.userId,
+          op: "describe",
+          model: visionModel,
+          inputTokens,
+          outputTokens,
+          latencyMs,
+        });
+      } catch (err) {
+        // Same invariant as classify: drop the result rather than return a
+        // verdict with no audit row. Caller retries; the double spend is the
+        // explicit cost of trustworthy attribution.
+        return {
+          kind: "failed",
+          reason: "transient",
+          message: `ledger write failed: ${errMessage(err)}`,
+        };
+      }
+
+      return {
+        kind: "ok",
+        description,
+        mode,
+        inputTokens,
+        outputTokens,
+        ledgerId,
+        model: visionModel,
       };
     },
   };
+}
+
+/**
+ * Extracts the `<mode>verbatim</mode>` / `<mode>summary</mode>` marker the
+ * prompt instructs the model to emit on the first line. Returns the parsed
+ * mode plus the description with the marker stripped. Missing or malformed
+ * marker normalizes to summary, the conservative default for prose.
+ */
+function parseModeMarker(rawText: string): { mode: VisionMode; description: string } {
+  const m = rawText.match(MODE_MARKER_RE);
+  if (!m) return { mode: "summary", description: rawText.trim() };
+  const mode = m[1].toLowerCase() as VisionMode;
+  const description = rawText.slice(m[0].length).trim();
+  return { mode, description };
 }
 
 /**

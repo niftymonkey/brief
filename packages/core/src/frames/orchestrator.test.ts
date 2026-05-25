@@ -95,7 +95,12 @@ function stubVision(config: StubVisionConfig = {}): VisionClient & {
       if (config.classifyThrows) throw config.classifyThrows;
       const r = config.classifyResult;
       if (typeof r === "function") return r(framePath);
-      return r ?? { verdict: "yes", inputTokens: 100, outputTokens: 1 };
+      return r ?? {
+        verdict: "yes",
+        inputTokens: 100,
+        outputTokens: 1,
+        model: config.classifierModel ?? "stub-classifier",
+      };
     },
     async describe(framePath) {
       describeCalls.push(framePath);
@@ -105,8 +110,10 @@ function stubVision(config: StubVisionConfig = {}): VisionClient & {
       return (
         r ?? {
           description: `[stub] description of ${framePath}`,
+          mode: "summary",
           inputTokens: 500,
           outputTokens: 80,
+          model: config.visionModel ?? "stub-vision",
         }
       );
     },
@@ -135,11 +142,23 @@ afterEach(() => {
   }
 });
 
+// Inert gateway stub: orchestrator tests inject a stubbed VisionClient via
+// FramesAdapters, so the gateway field is type-required but never invoked.
+// Throws if anything ever reaches it so a regression is loud, not silent.
+const inertGateway: FramesOptions["gateway"] = {
+  classify() {
+    throw new Error("orchestrator test reached the gateway; use the VisionClient stub instead");
+  },
+  describe() {
+    throw new Error("orchestrator test reached the gateway; use the VisionClient stub instead");
+  },
+};
+
 function buildOpts(overrides: Partial<FramesOptions> = {}): FramesOptions {
   return {
     videoId: "abc123",
     transcript: sampleTranscript,
-    openRouterApiKey: "stub-key",
+    gateway: inertGateway,
     workDir,
     ...overrides,
   };
@@ -187,8 +206,8 @@ describe("runFramesPipeline — happy path", () => {
 
   it("aggregates token counts and verdict tallies across the run", async () => {
     const vision = stubVision({
-      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },
-      describeResult: { description: "[stub]", inputTokens: 500, outputTokens: 80 },
+      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1, model: "stub-classifier" },
+      describeResult: { description: "[stub]", mode: "summary", inputTokens: 500, outputTokens: 80, model: "stub-vision" },
     });
     const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision }));
     expect(result.kind).toBe("included");
@@ -221,7 +240,7 @@ describe("runFramesPipeline — happy path", () => {
 
   it("skips describe entirely when every classifier verdict is no", async () => {
     const vision = stubVision({
-      classifyResult: { verdict: "no", inputTokens: 80, outputTokens: 1 },
+      classifyResult: { verdict: "no", inputTokens: 80, outputTokens: 1, model: "stub-classifier" },
     });
     const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision }));
     expect(result.kind).toBe("included");
@@ -376,16 +395,6 @@ describe("runFramesPipeline phase-level caching", () => {
     expect(visionSecond.classifyCalls).toHaveLength(0);
   });
 
-  it("invalidates cached classifier verdicts when classifierModel changes", async () => {
-    const visionA = stubVision({ classifierModel: "model-a" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
-    wipeSuccessCache();
-
-    const visionB = stubVision({ classifierModel: "model-b" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
-    expect(visionB.classifyCalls.length).toBeGreaterThan(0);
-  });
-
   it("reuses cached vision descriptions and only calls describe for missing frames", async () => {
     const visionFirst = stubVision();
     await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionFirst }));
@@ -399,38 +408,16 @@ describe("runFramesPipeline phase-level caching", () => {
     expect(visionSecond.describeCalls).toHaveLength(0);
   });
 
-  it("invalidates cached vision descriptions when visionModel changes", async () => {
-    const visionA = stubVision({ visionModel: "model-a" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
-    wipeSuccessCache();
-
-    const visionB = stubVision({ visionModel: "model-b" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
-    expect(visionB.describeCalls.length).toBeGreaterThan(0);
-  });
-
-  it("bypasses the success cache (augmented.txt) when classifierModel changes", async () => {
-    const visionA = stubVision({ classifierModel: "model-a" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
-
-    const visionB = stubVision({ classifierModel: "model-b" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
-    expect(visionB.classifyCalls.length).toBeGreaterThan(0);
-  });
-
-  it("bypasses the success cache (augmented.txt) when visionModel changes", async () => {
-    const visionA = stubVision({ visionModel: "model-a" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionA }));
-
-    const visionB = stubVision({ visionModel: "model-b" });
-    await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionB }));
-    expect(visionB.describeCalls.length).toBeGreaterThan(0);
-  });
+  // Model-invalidation tests removed: the gateway architecture means the CLI
+  // doesn't know which model the server will use until the first response,
+  // so model-keyed cache invalidation can't fire. Cache is best-effort; users
+  // who want to force a re-run after a server-side model swap can delete the
+  // workDir. See `docs/architecture/llm-gateway.md`.
 
   it("does not bill cached tokens to the current run's input/outputTokens", async () => {
     const visionFirst = stubVision({
-      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },
-      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80 },
+      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1, model: "stub-classifier" },
+      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80, model: "stub-vision" },
     });
     const firstResult = await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionFirst }));
     expect(firstResult.kind).toBe("included");
@@ -440,8 +427,8 @@ describe("runFramesPipeline phase-level caching", () => {
     wipeSuccessCache();
 
     const visionSecond = stubVision({
-      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1 },
-      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80 },
+      classifyResult: { verdict: "yes", inputTokens: 100, outputTokens: 1, model: "stub-classifier" },
+      describeResult: { description: "stub", mode: "summary", inputTokens: 500, outputTokens: 80, model: "stub-vision" },
     });
     const result = await runFramesPipeline(buildOpts(), buildAdapters({ vision: visionSecond }));
     expect(result.kind).toBe("included");
