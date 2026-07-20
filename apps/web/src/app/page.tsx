@@ -36,7 +36,7 @@ function LandingPage() {
             </h1>
 
             <p className="text-lg md:text-xl text-[var(--color-text-secondary)] max-w-2xl mx-auto mb-4">
-              AI summaries help you decide if it you should watch it now,
+              AI summaries help you decide if you should watch it now,
               later, or never. Timestamped chapters let you jump to what
               matters.
             </p>
