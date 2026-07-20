@@ -41,3 +41,7 @@ Chosen: YouTube only, transcript first, briefs always generated server-side, fai
 Leftovers, open to change: every brief kept forever with equal standing, briefs carrying no verdict or state, access by allowlist, keys hosted and paid centrally, the schema still saying `digests`.
 
 The allowlist is worth naming plainly: it exists because the maintainer pays for the API keys, not because Brief is meant to stay private. Public access is the intent, most likely metered and then bring-your-own-key.
+
+## The feel
+
+Not yet written. Until it is, do not infer an aesthetic stance from the current UI; ask.
