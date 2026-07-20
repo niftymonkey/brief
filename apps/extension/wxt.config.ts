@@ -8,7 +8,7 @@ export default defineConfig({
     permissions: ["activeTab", "storage", "notifications", "cookies"],
     host_permissions: [
       "https://brief.niftymonkey.dev/*",
-      "http://localhost:3000/*",
+      "http://localhost:3100/*",
       "*://*.youtube.com/*",
     ],
     icons: {

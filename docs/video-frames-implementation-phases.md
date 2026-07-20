@@ -47,7 +47,7 @@ Companion docs: `docs/video-frames-plan.md` (high-level), `docs/architecture/vid
 **Verification:**
 1. Run `pnpm --filter @brief/web dev` to start the local web server.
 2. In another terminal: `pnpm cli:local generate https://www.youtube.com/watch?v=Bgxsx8slDEA --with-frames`.
-3. Expect: progress lines for `Fetching transcript...`, `Extracting frames...`, `Generating brief on the server...`, then a `http://localhost:3000/brief/<id>` URL on stdout.
+3. Expect: progress lines for `Fetching transcript...`, `Extracting frames...`, `Generating brief on the server...`, then a `http://localhost:3100/brief/<id>` URL on stdout.
 4. Open the brief URL; verify the brief content references visible-but-not-spoken content from the test video (the spike's A/B comparison documented these — pricing tables, config files, brainstorm names, etc.).
 5. If the brief looks transcript-only despite frames being extracted, the prompt-handling path (in `generateBrief`) isn't using the augmented content — debug there before declaring victory.
 
@@ -168,7 +168,7 @@ Companion docs: `docs/video-frames-plan.md` (high-level), `docs/architecture/vid
 
 1. Local web server: `pnpm --filter @brief/web dev` (port 3000).
 2. Local CLI in dev mode: `pnpm cli:local generate https://www.youtube.com/watch?v=Bgxsx8slDEA --with-frames`.
-3. Expected: progress on stderr, brief URL on stdout pointing at `http://localhost:3000/brief/<id>`.
+3. Expected: progress on stderr, brief URL on stdout pointing at `http://localhost:3100/brief/<id>`.
 4. Open the URL in a browser. Brief should contain references to on-screen content (pricing tables, config files, brainstorm names) from the test video.
 5. Check `~/.config/brief/credentials.json` is intact and `brief whoami` still works against local.
 6. Optional: `pnpm --filter @brief/core test` — confirms nothing pre-existing broke.

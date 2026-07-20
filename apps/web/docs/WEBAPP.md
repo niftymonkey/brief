@@ -19,7 +19,7 @@ pnpm dev
 | `WORKOS_API_KEY` | WorkOS API key |
 | `WORKOS_CLIENT_ID` | WorkOS client ID |
 | `WORKOS_COOKIE_PASSWORD` | 32+ character secret for session encryption |
-| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | OAuth callback URL (e.g., `http://localhost:3000/callback`) |
+| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | OAuth callback URL (e.g., `http://localhost:3100/callback`) |
 | `SUPADATA_API_KEY` | For transcript fetching in cloud deployments (optional locally) |
 
 ### Local Development
@@ -31,7 +31,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/youtube_digest
 WORKOS_API_KEY=sk_test_...
 WORKOS_CLIENT_ID=client_...
 WORKOS_COOKIE_PASSWORD=your-32-character-secret-here...
-NEXT_PUBLIC_WORKOS_REDIRECT_URI=http://localhost:3000/callback
+NEXT_PUBLIC_WORKOS_REDIRECT_URI=http://localhost:3100/callback
 # SUPADATA_API_KEY not needed - uses youtube-transcript-plus locally
 ```
 

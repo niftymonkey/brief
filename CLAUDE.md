@@ -35,7 +35,7 @@ Parses every migration in `apps/web/migrations/` to derive the expected schema (
 
 ## Local CLI iteration
 
-`pnpm cli:local` runs `apps/cli` against `http://localhost:3000`, sourcing `apps/web/.env.local` first so env-driven settings (OpenRouter key, WorkOS client ID, etc.) match the web server.
+`pnpm cli:local` runs `apps/cli` against `http://localhost:3100`, sourcing `apps/web/.env.local` first so env-driven settings (OpenRouter key, WorkOS client ID, etc.) match the web server.
 
 ```sh
 pnpm cli:local generate <url> --with-frames        # full augmented brief end-to-end
