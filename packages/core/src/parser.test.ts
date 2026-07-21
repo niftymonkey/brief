@@ -133,4 +133,64 @@ describe("extractVideoId", () => {
       ).toBeNull();
     });
   });
+
+  describe("case sensitivity and ID boundaries", () => {
+    it("matches an uppercase scheme and host", () => {
+      expect(
+        extractVideoId("HTTPS://WWW.YOUTUBE.COM/watch?v=dQw4w9WgXcQ")
+      ).toBe("dQw4w9WgXcQ");
+    });
+
+    it("preserves the id's original case even when the host is uppercase", () => {
+      expect(
+        extractVideoId("HTTPS://WWW.YOUTUBE.COM/watch?v=dqw4w9wgxcq")
+      ).toBe("dqw4w9wgxcq");
+    });
+
+    it("tolerates a trailing slash after a youtu.be id", () => {
+      expect(extractVideoId("https://youtu.be/dQw4w9WgXcQ/")).toBe(
+        "dQw4w9WgXcQ"
+      );
+    });
+
+    it("tolerates a trailing slash after a shorts id", () => {
+      expect(
+        extractVideoId("https://www.youtube.com/shorts/dQw4w9WgXcQ/")
+      ).toBe("dQw4w9WgXcQ");
+    });
+
+    it("rejects a 12-character id in a watch URL", () => {
+      expect(
+        extractVideoId("https://www.youtube.com/watch?v=dQw4w9WgXcQQ")
+      ).toBeNull();
+    });
+
+    it("rejects an 11-character id immediately followed by more id-like characters", () => {
+      expect(extractVideoId("https://youtu.be/dQw4w9WgXcQabc")).toBeNull();
+    });
+
+    it("rejects an arbitrary path suffix after a youtu.be id", () => {
+      expect(
+        extractVideoId("https://youtu.be/dQw4w9WgXcQ/extra")
+      ).toBeNull();
+    });
+
+    it("rejects an arbitrary path suffix after a shorts id", () => {
+      expect(
+        extractVideoId("https://www.youtube.com/shorts/dQw4w9WgXcQ/extra")
+      ).toBeNull();
+    });
+
+    it("rejects an arbitrary path suffix after an embed id", () => {
+      expect(
+        extractVideoId("https://www.youtube.com/embed/dQw4w9WgXcQ/x")
+      ).toBeNull();
+    });
+
+    it("rejects an arbitrary path suffix after a watch id", () => {
+      expect(
+        extractVideoId("https://www.youtube.com/watch?v=dQw4w9WgXcQ/extra")
+      ).toBeNull();
+    });
+  });
 });

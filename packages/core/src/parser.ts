@@ -1,11 +1,11 @@
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 
 const URL_PATTERNS: RegExp[] = [
-  /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/watch\?(?:[^#]*&)?v=([^&\n?#]+)/,
-  /^(?:https?:\/\/)?youtu\.be\/([^&\n?#]+)/,
-  /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/embed\/([^&\n?#]+)/,
-  /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/shorts\/([^&\n?#]+)/,
-  /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/live\/([^&\n?#]+)/,
+  /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/watch\?(?:[^#]*&)?v=([a-zA-Z0-9_-]{11})(?=[&#]|$)/i,
+  /^(?:https?:\/\/)?youtu\.be\/([a-zA-Z0-9_-]{11})(?=\/?(?:[?#]|$))/i,
+  /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})(?=\/?(?:[?#]|$))/i,
+  /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})(?=\/?(?:[?#]|$))/i,
+  /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/live\/([a-zA-Z0-9_-]{11})(?=\/?(?:[?#]|$))/i,
 ];
 
 export function extractVideoId(input: string): string | null {
