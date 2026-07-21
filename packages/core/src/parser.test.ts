@@ -27,6 +27,54 @@ describe("extractVideoId", () => {
       ).toBe("dQw4w9WgXcQ");
     });
 
+    it("extracts from a www.youtube.com/shorts URL", () => {
+      expect(
+        extractVideoId("https://www.youtube.com/shorts/dQw4w9WgXcQ")
+      ).toBe("dQw4w9WgXcQ");
+    });
+
+    it("extracts from a youtube.com/shorts URL", () => {
+      expect(extractVideoId("https://youtube.com/shorts/dQw4w9WgXcQ")).toBe(
+        "dQw4w9WgXcQ"
+      );
+    });
+
+    it("extracts from an m.youtube.com/shorts URL", () => {
+      expect(
+        extractVideoId("https://m.youtube.com/shorts/dQw4w9WgXcQ")
+      ).toBe("dQw4w9WgXcQ");
+    });
+
+    it("ignores query params after a shorts id", () => {
+      expect(
+        extractVideoId("https://www.youtube.com/shorts/dQw4w9WgXcQ?feature=share")
+      ).toBe("dQw4w9WgXcQ");
+    });
+
+    it("extracts from a live URL", () => {
+      expect(extractVideoId("https://www.youtube.com/live/dQw4w9WgXcQ")).toBe(
+        "dQw4w9WgXcQ"
+      );
+    });
+
+    it("rejects a lookalike host", () => {
+      expect(
+        extractVideoId("https://notyoutube.com/watch?v=dQw4w9WgXcQ")
+      ).toBeNull();
+    });
+
+    it("rejects a youtube URL embedded in another URL", () => {
+      expect(
+        extractVideoId(
+          "https://evil.com/?u=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        )
+      ).toBeNull();
+    });
+
+    it("rejects a lookalike youtu.be host", () => {
+      expect(extractVideoId("https://fakeyoutu.be/dQw4w9WgXcQ")).toBeNull();
+    });
+
     it("ignores query params after the id (&t=)", () => {
       expect(
         extractVideoId(
