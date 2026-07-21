@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { z } from "zod";
-import { deleteCollectionItem, updateCollectionItem } from "@/lib/collections";
+import { InvalidClipRangeError, deleteCollectionItem, updateCollectionItem } from "@/lib/collections";
 
 // Mirrors the video-id shape in @brief/core's parser (`/^[a-zA-Z0-9_-]{11}$/`).
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
@@ -29,15 +29,15 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
-  const { user } = await withAuth();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id, itemId } = await params;
-
   try {
+    const { user } = await withAuth();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id, itemId } = await params;
+
     let json: unknown;
     try {
       json = await request.json();
@@ -56,6 +56,9 @@ export async function PATCH(
     }
     return NextResponse.json(item);
   } catch (error) {
+    if (error instanceof InvalidClipRangeError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("[UPDATE COLLECTION ITEM] Error:", error);
     return NextResponse.json({ error: "Failed to update collection item" }, { status: 500 });
   }
@@ -65,15 +68,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
-  const { user } = await withAuth();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id, itemId } = await params;
-
   try {
+    const { user } = await withAuth();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id, itemId } = await params;
+
     const deleted = await deleteCollectionItem(user.id, id, itemId);
     if (!deleted) {
       return NextResponse.json({ error: "Collection item not found" }, { status: 404 });

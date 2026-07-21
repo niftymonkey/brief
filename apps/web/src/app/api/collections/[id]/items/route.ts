@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { z } from "zod";
-import { addCollectionItem } from "@/lib/collections";
+import { InvalidClipRangeError, addCollectionItem } from "@/lib/collections";
 
 // Mirrors the video-id shape in @brief/core's parser (`/^[a-zA-Z0-9_-]{11}$/`).
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
@@ -25,15 +25,15 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user } = await withAuth();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
   try {
+    const { user } = await withAuth();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
     let json: unknown;
     try {
       json = await request.json();
@@ -52,6 +52,9 @@ export async function POST(
     }
     return NextResponse.json(item);
   } catch (error) {
+    if (error instanceof InvalidClipRangeError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("[ADD COLLECTION ITEM] Error:", error);
     return NextResponse.json({ error: "Failed to add collection item" }, { status: 500 });
   }

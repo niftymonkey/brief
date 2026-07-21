@@ -7,24 +7,24 @@ import {
   updateCollection,
 } from "@/lib/collections";
 
-const updateCollectionSchema = z.object({
+export const updateCollectionSchema = z.object({
   title: z.string().trim().min(1).optional(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
 });
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user } = await withAuth();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
   try {
+    const { user } = await withAuth();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
     const collection = await getCollectionWithItems(user.id, id);
     if (!collection) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
@@ -40,15 +40,15 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user } = await withAuth();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
   try {
+    const { user } = await withAuth();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
     let json: unknown;
     try {
       json = await request.json();
@@ -76,15 +76,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user } = await withAuth();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
   try {
+    const { user } = await withAuth();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
     const deleted = await deleteCollection(user.id, id);
     if (!deleted) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });

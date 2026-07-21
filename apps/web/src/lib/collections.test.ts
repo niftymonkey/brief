@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { sql } from "@vercel/postgres";
 import {
   type CollectionItem,
+  InvalidClipRangeError,
   addCollectionItem,
   chooseCollectionSlug,
   createCollection,
@@ -202,14 +203,59 @@ describe("collections db lifecycle", () => {
     });
 
     const startEdited = expectCollectionItem(
-      await updateCollectionItem(userId, collection.id, item.id, { startSec: 42 }),
+      await updateCollectionItem(userId, collection.id, item.id, { startSec: 10 }),
     );
     expect(startEdited).toMatchObject({
-      startSec: 42,
+      startSec: 10,
       endSec: 15,
       summary: null,
       summaryStatus: "pending",
     });
+  });
+
+  it("rejects a partial update that would leave startSec after the existing endSec", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Invalid partial range" });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "iiiiiiiiiii",
+      startSec: 5,
+      endSec: 15,
+    }));
+
+    await expect(
+      updateCollectionItem(userId, collection.id, item.id, { startSec: 42 }),
+    ).rejects.toThrow(InvalidClipRangeError);
+
+    const unchanged = await getCollectionWithItems(userId, collection.id);
+    expect(unchanged?.items.find((i) => i.id === item.id)).toMatchObject({
+      startSec: 5,
+      endSec: 15,
+    });
+  });
+
+  it("rejects adding an item with startSec after endSec and creates no row", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Invalid add range" });
+    cleanupCollectionIds.push(collection.id);
+
+    await expect(
+      addCollectionItem(userId, collection.id, {
+        videoId: "jjjjjjjjjjj",
+        startSec: 20,
+        endSec: 10,
+      }),
+    ).rejects.toThrow(InvalidClipRangeError);
+
+    const afterRejectedAdd = await getCollectionWithItems(userId, collection.id);
+    expect(afterRejectedAdd?.items).toEqual([]);
   });
 
   it("retains unmodified collection fields on a partial update", async () => {
@@ -277,6 +323,27 @@ describe("collections db lifecycle", () => {
       await updateCollectionItem(userId, collection.id, item.id, { summary: "back to text" }),
     );
     expect(retext).toMatchObject({ summary: "back to text", summaryStatus: "ready" });
+  });
+
+  it("breaks position ties deterministically by id", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Tie-break ordering" });
+    cleanupCollectionIds.push(collection.id);
+
+    const tiedRows = await sql<{ id: string }>`
+      INSERT INTO collection_items (collection_id, video_id, position)
+      VALUES
+        (${collection.id}, 'tiedvideoaa', 1),
+        (${collection.id}, 'tiedvideobb', 1)
+      RETURNING id
+    `;
+    const expectedIds = tiedRows.rows.map((row) => row.id).sort();
+
+    const listed = await getCollectionWithItems(userId, collection.id);
+    expect(listed?.items.map((item) => item.id)).toEqual(expectedIds);
   });
 
   it("appends a random suffix when sharing collides with an existing slug", async () => {

@@ -88,6 +88,42 @@ function defaultRandomSuffix(): string {
   return randomBytes(2).toString("hex");
 }
 
+/**
+ * Thrown when a collection item add or update would leave startSec/endSec
+ * violating the collection_items_start_sec_check, collection_items_end_sec_check,
+ * or collection_items_end_after_start_check constraints. Callers should map
+ * this to a 400 rather than let the underlying Postgres error surface as a 500.
+ */
+export class InvalidClipRangeError extends Error {
+  constructor(message = "startSec must be less than or equal to endSec") {
+    super(message);
+    this.name = "InvalidClipRangeError";
+  }
+}
+
+/**
+ * Validates a clip's startSec/endSec bounds before any query runs, so a bad
+ * request fails fast with a typed error instead of a raw constraint violation
+ * from the database.
+ */
+function validateClipRange(startSec: number | null | undefined, endSec: number | null | undefined): void {
+  if (startSec !== undefined && startSec !== null && startSec < 0) {
+    throw new InvalidClipRangeError("startSec must be greater than or equal to 0");
+  }
+  if (endSec !== undefined && endSec !== null && endSec < 0) {
+    throw new InvalidClipRangeError("endSec must be greater than or equal to 0");
+  }
+  if (
+    startSec !== undefined &&
+    startSec !== null &&
+    endSec !== undefined &&
+    endSec !== null &&
+    startSec > endSec
+  ) {
+    throw new InvalidClipRangeError();
+  }
+}
+
 const PG_UNIQUE_VIOLATION = "23505";
 
 function isUniqueViolation(error: unknown): boolean {
@@ -255,7 +291,7 @@ export async function getCollectionWithItems(
       position
     FROM collection_items
     WHERE collection_id = ${collectionId}
-    ORDER BY position ASC, created_at ASC
+    ORDER BY position ASC, id ASC
   `;
 
   return { ...collection, items: items.rows.map(toCollectionItem) };
@@ -366,7 +402,7 @@ export async function getSharedCollectionBySlug(
       position
     FROM collection_items
     WHERE collection_id = ${collection.id}
-    ORDER BY position ASC, created_at ASC
+    ORDER BY position ASC, id ASC
   `;
   return { ...collection, items: itemsResult.rows.map(toCollectionItem) };
 }
@@ -376,6 +412,8 @@ export async function addCollectionItem(
   collectionId: string,
   input: AddCollectionItemInput,
 ): Promise<CollectionItem | null> {
+  validateClipRange(input.startSec, input.endSec);
+
   const videoTitle = await getSnapshotVideoTitle(userId, input.videoId);
   const summaryStatus: SummaryStatus =
     input.summary === undefined || input.summary === null ? "pending" : "ready";
@@ -490,6 +528,13 @@ export async function updateCollectionItem(
       await client.sql`ROLLBACK`;
       return null;
     }
+
+    // A partial update (e.g. startSec only) still needs validating against
+    // whichever bound isn't being changed, otherwise a single-field PATCH
+    // can leave the row violating collection_items_end_after_start_check.
+    const finalStartSec = updateStart ? input.startSec ?? null : current.startSec;
+    const finalEndSec = updateEnd ? input.endSec ?? null : current.endSec;
+    validateClipRange(finalStartSec, finalEndSec);
 
     let position = current.position;
     if (reorders) {

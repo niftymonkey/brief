@@ -10,13 +10,13 @@ const createCollectionSchema = z.object({
 });
 
 export async function GET() {
-  const { user } = await withAuth();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { user } = await withAuth();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const collections = await listCollections(user.id);
     return NextResponse.json(collections);
   } catch (error) {
@@ -26,17 +26,17 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { user } = await withAuth();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isEmailAllowed(user.email)) {
-    return NextResponse.json({ error: "Access restricted" }, { status: 403 });
-  }
-
   try {
+    const { user } = await withAuth();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!isEmailAllowed(user.email)) {
+      return NextResponse.json({ error: "Access restricted" }, { status: 403 });
+    }
+
     let json: unknown;
     try {
       json = await request.json();
