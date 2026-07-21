@@ -7,7 +7,7 @@ import {
   updateCollection,
 } from "@/lib/collections";
 
-export const updateCollectionSchema = z.object({
+const updateCollectionSchema = z.object({
   title: z.string().trim().min(1).optional(),
   description: z.string().nullable().optional(),
 });

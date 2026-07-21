@@ -98,21 +98,23 @@ function SidebarNav() {
 
   useEffect(() => {
     let active = true;
+    let generation = 0;
 
     const load = () => {
+      const current = ++generation;
       fetch("/api/collections")
         .then((res) => {
           if (!res.ok) throw new Error(`Request failed: ${res.status}`);
           return res.json();
         })
         .then((data) => {
-          if (!active || !Array.isArray(data)) return;
+          if (!active || current !== generation || !Array.isArray(data)) return;
           setCollections(data);
           setLoadFailed(false);
         })
         .catch(() => {
           // Preserve whatever was last loaded; surface a quiet failure instead.
-          if (active) setLoadFailed(true);
+          if (active && current === generation) setLoadFailed(true);
         });
     };
 

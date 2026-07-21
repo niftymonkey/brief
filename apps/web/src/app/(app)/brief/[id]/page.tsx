@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { BriefViewer } from "@/components/brief-viewer";
+import { AddToCollectionButton } from "@/components/collections/add-to-collection-button";
 import { DeleteBriefButton } from "@/components/delete-brief-button";
 import { RegenerateBriefButton } from "@/components/regenerate-brief-button";
 import { ShareButton } from "@/components/share-button";
@@ -107,6 +108,7 @@ export default async function BriefPage({ params }: PageProps) {
               Back to library
             </Link>
             <div className="flex items-center gap-2">
+              <AddToCollectionButton videoId={brief.videoId} sections={brief.sections} />
               <ShareButton briefId={id} isShared={brief.isShared} slug={brief.slug} title={brief.title} />
               {canRegenerate && <RegenerateBriefButton briefId={id} videoId={brief.videoId} />}
               <DeleteBriefButton briefId={id} />
