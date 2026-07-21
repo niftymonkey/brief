@@ -192,5 +192,15 @@ describe("extractVideoId", () => {
         extractVideoId("https://www.youtube.com/watch?v=dQw4w9WgXcQ/extra")
       ).toBeNull();
     });
+
+    it("rejects a bare id with a trailing newline", () => {
+      expect(extractVideoId("dQw4w9WgXcQ\n")).toBeNull();
+    });
+
+    it("rejects a watch-URL id with a trailing newline", () => {
+      expect(
+        extractVideoId("https://www.youtube.com/watch?v=dQw4w9WgXcQ\n")
+      ).toBeNull();
+    });
   });
 });

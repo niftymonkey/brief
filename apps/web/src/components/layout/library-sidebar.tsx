@@ -1,9 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Layers, Library } from "lucide-react";
 import { useLayout } from "./layout-context";
 import { useSidebarEnabled } from "@/hooks/use-sidebar-enabled";
 import { cn } from "@/lib/utils";
+import { COLLECTIONS_CHANGED_EVENT } from "@/lib/collections-events";
+import type { Collection } from "@/lib/collections";
 
 export function LibrarySidebar() {
   const { sidebarOpen, sidebarWidth, setSidebarWidth, isMobile } = useLayout();
@@ -67,10 +72,8 @@ export function LibrarySidebar() {
         )}
         style={{ width: sidebarWidth }}
       >
-        <div className="flex-1 p-4">
-          <p className="text-sm text-[var(--color-text-tertiary)]">
-            Filters and collections coming soon
-          </p>
+        <div className="flex-1 p-4 overflow-y-auto">
+          <SidebarNav />
         </div>
 
         {/* Resize handle */}
@@ -85,5 +88,87 @@ export function LibrarySidebar() {
         />
       </aside>
     </div>
+  );
+}
+
+function SidebarNav() {
+  const pathname = usePathname();
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const load = () => {
+      fetch("/api/collections")
+        .then((res) => {
+          if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+          return res.json();
+        })
+        .then((data) => {
+          if (!active || !Array.isArray(data)) return;
+          setCollections(data);
+          setLoadFailed(false);
+        })
+        .catch(() => {
+          // Preserve whatever was last loaded; surface a quiet failure instead.
+          if (active) setLoadFailed(true);
+        });
+    };
+
+    load();
+    window.addEventListener(COLLECTIONS_CHANGED_EVENT, load);
+    return () => {
+      active = false;
+      window.removeEventListener(COLLECTIONS_CHANGED_EVENT, load);
+    };
+  }, [pathname]);
+
+  const linkClass = (active: boolean) =>
+    cn(
+      "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors truncate",
+      active
+        ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] font-medium"
+        : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
+    );
+
+  return (
+    <nav className="flex flex-col gap-4">
+      <div className="flex flex-col gap-0.5">
+        <Link href="/" className={linkClass(pathname === "/")}>
+          <Library className="w-4 h-4 shrink-0" />
+          Your Library
+        </Link>
+      </div>
+
+      <div className="flex flex-col gap-0.5">
+        <Link
+          href="/collections"
+          className={linkClass(pathname === "/collections")}
+        >
+          <Layers className="w-4 h-4 shrink-0" />
+          Collections
+        </Link>
+        {collections.length === 0 ? (
+          <p className="pl-8 pr-2 py-1.5 text-sm text-[var(--color-text-tertiary)]">
+            {loadFailed ? "Couldn't load collections" : "None yet"}
+          </p>
+        ) : (
+          collections.map((collection) => (
+            <Link
+              key={collection.id}
+              href={`/collections/${collection.id}`}
+              className={cn(linkClass(pathname === `/collections/${collection.id}`), "pl-8")}
+              title={collection.title}
+            >
+              <span className="truncate">{collection.title}</span>
+              <span className="ml-auto shrink-0 text-xs text-[var(--color-text-tertiary)]">
+                {collection.itemCount}
+              </span>
+            </Link>
+          ))
+        )}
+      </div>
+    </nav>
   );
 }

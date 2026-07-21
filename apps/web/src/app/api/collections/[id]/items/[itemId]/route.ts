@@ -3,14 +3,27 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import { z } from "zod";
 import { deleteCollectionItem, updateCollectionItem } from "@/lib/collections";
 
-const updateItemSchema = z.object({
-  summary: z.string().nullable().optional(),
-  videoId: z.string().min(1).optional(),
-  startSec: z.number().int().nullable().optional(),
-  endSec: z.number().int().nullable().optional(),
-  beforeItemId: z.string().nullable().optional(),
-  afterItemId: z.string().nullable().optional(),
-});
+// Mirrors the video-id shape in @brief/core's parser (`/^[a-zA-Z0-9_-]{11}$/`).
+const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
+
+const updateItemSchema = z
+  .object({
+    summary: z.string().nullable().optional(),
+    videoId: z.string().regex(VIDEO_ID).optional(),
+    startSec: z.number().int().nonnegative().nullable().optional(),
+    endSec: z.number().int().nonnegative().nullable().optional(),
+    beforeItemId: z.string().nullable().optional(),
+    afterItemId: z.string().nullable().optional(),
+  })
+  .refine(
+    (data) =>
+      data.startSec === undefined ||
+      data.startSec === null ||
+      data.endSec === undefined ||
+      data.endSec === null ||
+      data.startSec <= data.endSec,
+    { message: "startSec must be less than or equal to endSec", path: ["endSec"] },
+  );
 
 export async function PATCH(
   request: NextRequest,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { z } from "zod";
 import { createCollection, listCollections } from "@/lib/collections";
+import { isEmailAllowed } from "@/lib/access";
 
 const createCollectionSchema = z.object({
   title: z.string().trim().min(1),
@@ -29,6 +30,10 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isEmailAllowed(user.email)) {
+    return NextResponse.json({ error: "Access restricted" }, { status: 403 });
   }
 
   try {

@@ -107,6 +107,14 @@ const urls: Array<{ input: string; expected: string | null }> = [
     input: "https://www.youtube.com/watch?v=dQw4w9WgXcQ/extra",
     expected: null,
   },
+  {
+    input: "dQw4w9WgXcQ\n",
+    expected: null,
+  },
+  {
+    input: "https://www.youtube.com/watch?v=dQw4w9WgXcQ\n",
+    expected: null,
+  },
 ];
 
 describe("extractVideoId", () => {
