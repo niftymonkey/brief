@@ -53,6 +53,20 @@ export function CollectionDetail({ collection, editable }: CollectionDetailProps
     router.refresh();
   };
 
+  const summarizeItem = async (itemId: string) => {
+    try {
+      const updated = await requestJson<CollectionItem>(
+        `/api/collections/${collectionId}/items/${itemId}/summarize`,
+        { method: "POST" },
+      );
+      setItems((prev) =>
+        sortByPosition(prev.map((item) => (item.id === updated.id ? updated : item))),
+      );
+    } catch {
+      // Leave the row 'pending'; a retry affordance on the row handles recovery.
+    }
+  };
+
   const handleAddItem = async (
     videoId: string,
     startSec: number | null,
@@ -73,6 +87,12 @@ export function CollectionDetail({ collection, editable }: CollectionDetailProps
     setItems((prev) => sortByPosition([...prev, item]));
     notifyCollectionsChanged();
     router.refresh();
+    // Client-driven async summary: the row renders 'pending' immediately, then
+    // updates in place when generation resolves. Fire-and-forget so the add
+    // returns without blocking on the LLM call.
+    if (item.summaryStatus !== "ready") {
+      void summarizeItem(item.id);
+    }
   };
 
   const handleReorder = async (index: number, direction: "up" | "down") => {
@@ -207,6 +227,7 @@ export function CollectionDetail({ collection, editable }: CollectionDetailProps
               onReorder={(direction) => handleReorder(index, direction)}
               onRemove={() => handleRemove(item.id)}
               onSummarySave={(summary) => handleSummarySave(item.id, summary)}
+              onRetrySummary={() => summarizeItem(item.id)}
               onSwap={(videoId, startSec, endSec) =>
                 handleSwap(item.id, videoId, startSec, endSec)
               }

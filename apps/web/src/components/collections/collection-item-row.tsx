@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Loader2,
   Pencil,
+  RotateCw,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ interface CollectionItemRowProps {
   onReorder: (direction: "up" | "down") => Promise<void>;
   onRemove: () => Promise<void>;
   onSummarySave: (summary: string) => Promise<void>;
+  onRetrySummary: () => Promise<void>;
   onSwap: (videoId: string, startSec: number | null, endSec: number | null) => Promise<void>;
 }
 
@@ -44,6 +46,7 @@ export function CollectionItemRow({
   onReorder,
   onRemove,
   onSummarySave,
+  onRetrySummary,
   onSwap,
 }: CollectionItemRowProps) {
   const [isEditingSummary, setIsEditingSummary] = useState(false);
@@ -51,10 +54,25 @@ export function CollectionItemRow({
   const [isSavingSummary, setIsSavingSummary] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const range = formatRange(item.startSec, item.endSec);
   const hasSummary = item.summary !== null && item.summary.trim().length > 0;
+  const isGenerating = item.summaryStatus === "pending" && !hasSummary;
+  const generationFailed = item.summaryStatus === "failed" && !hasSummary;
+
+  const handleRetrySummary = async () => {
+    setError(null);
+    setIsRetrying(true);
+    try {
+      await onRetrySummary();
+    } catch {
+      setError("Could not generate a summary. Please try again.");
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   const handleReorder = async (direction: "up" | "down") => {
     setError(null);
@@ -240,6 +258,38 @@ export function CollectionItemRow({
                   Edit summary
                 </button>
               )}
+            </div>
+          ) : editable && isGenerating ? (
+            <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Generating summary…
+            </p>
+          ) : editable && generationFailed ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-[var(--color-text-tertiary)] italic">
+                Couldn&apos;t generate a summary.
+              </span>
+              <button
+                type="button"
+                onClick={handleRetrySummary}
+                disabled={isRetrying}
+                className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isRetrying ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RotateCw className="w-3.5 h-3.5" />
+                )}
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={startEditingSummary}
+                className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Write one
+              </button>
             </div>
           ) : editable ? (
             <button

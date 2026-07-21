@@ -476,6 +476,126 @@ export async function addCollectionItem(
   }
 }
 
+/**
+ * Fetches a single item within a collection the user owns. Returns null when
+ * the collection is not the user's or the item does not exist, so callers can
+ * map both cases to a 404 without leaking whether the collection exists.
+ */
+export async function getCollectionItem(
+  userId: string,
+  collectionId: string,
+  itemId: string,
+): Promise<CollectionItem | null> {
+  const result = await sql<CollectionItemRow>`
+    SELECT
+      ci.id,
+      ci.video_id as "videoId",
+      ci.start_sec as "startSec",
+      ci.end_sec as "endSec",
+      ci.video_title as "videoTitle",
+      ci.summary,
+      ci.summary_status as "summaryStatus",
+      ci.position
+    FROM collection_items ci
+    JOIN collections c ON c.id = ci.collection_id
+    WHERE c.id = ${collectionId} AND c.user_id = ${userId} AND ci.id = ${itemId}
+  `;
+  return result.rows[0] ? toCollectionItem(result.rows[0]) : null;
+}
+
+/**
+ * Outcome of the async per-item summary generation path: either the generated
+ * summary text (status 'ready') or a generation failure (status 'failed').
+ */
+export type GeneratedSummaryOutcome =
+  | { status: "ready"; summary: string }
+  | { status: "failed" };
+
+/**
+ * Persists the result of the async generation path onto an item, with one hard
+ * invariant: a summary whose status is already 'ready' is never overwritten.
+ * That protects an author's hand-edited summary from being clobbered by a
+ * generation call that completes late (or a retry racing an edit). A 'ready'
+ * summary is always the authoritative one, whether machine- or hand-written.
+ *
+ * Pending and failed items are advanced normally, so a retry off a 'failed'
+ * item can still land a summary. Returns the item's resulting state (unchanged
+ * when the guard blocked the write), or null when the item is not the user's.
+ */
+export async function writeGeneratedSummary(
+  userId: string,
+  collectionId: string,
+  itemId: string,
+  outcome: GeneratedSummaryOutcome,
+): Promise<CollectionItem | null> {
+  const client = await sql.connect();
+  try {
+    await client.sql`BEGIN`;
+
+    const owned = await client.sql`
+      SELECT id FROM collections
+      WHERE id = ${collectionId} AND user_id = ${userId}
+      FOR UPDATE
+    `;
+    if (owned.rows.length === 0) {
+      await client.sql`ROLLBACK`;
+      return null;
+    }
+
+    const nextStatus: SummaryStatus = outcome.status;
+    const nextSummary = outcome.status === "ready" ? outcome.summary : null;
+    const writesSummary = outcome.status === "ready";
+
+    const updated = await client.sql<CollectionItemRow>`
+      UPDATE collection_items ci
+      SET
+        summary = CASE WHEN ${writesSummary}::boolean THEN ${nextSummary}::text ELSE ci.summary END,
+        summary_status = ${nextStatus},
+        updated_at = NOW()
+      WHERE ci.collection_id = ${collectionId}
+        AND ci.id = ${itemId}
+        AND ci.summary_status <> 'ready'
+      RETURNING
+        ci.id,
+        ci.video_id as "videoId",
+        ci.start_sec as "startSec",
+        ci.end_sec as "endSec",
+        ci.video_title as "videoTitle",
+        ci.summary,
+        ci.summary_status as "summaryStatus",
+        ci.position
+    `;
+
+    if (updated.rows.length > 0) {
+      await client.sql`COMMIT`;
+      return toCollectionItem(updated.rows[0]);
+    }
+
+    // No row updated: either the item is already 'ready' (guard held) or it
+    // does not exist. Re-read within the transaction to return the true state.
+    const current = await client.sql<CollectionItemRow>`
+      SELECT
+        ci.id,
+        ci.video_id as "videoId",
+        ci.start_sec as "startSec",
+        ci.end_sec as "endSec",
+        ci.video_title as "videoTitle",
+        ci.summary,
+        ci.summary_status as "summaryStatus",
+        ci.position
+      FROM collection_items ci
+      WHERE ci.collection_id = ${collectionId} AND ci.id = ${itemId}
+    `;
+    await client.sql`COMMIT`;
+    return current.rows[0] ? toCollectionItem(current.rows[0]) : null;
+  } catch (error) {
+    await client.sql`ROLLBACK`;
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function updateCollectionItem(
   userId: string,
   collectionId: string,

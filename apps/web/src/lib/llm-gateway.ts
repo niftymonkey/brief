@@ -16,6 +16,7 @@
 
 import {
   CLASSIFY_MODEL,
+  DIGEST_MODEL,
   VISION_MODEL,
   type ClassifyResult,
   type ClassifyVerdict,
@@ -25,6 +26,7 @@ import {
 } from "@brief/core";
 import type { OpenRouterClient } from "./openrouter-client";
 import type { UsageLedger } from "./usage-ledger";
+import { buildSummaryPrompt } from "./summary-prompt";
 
 // Mirrored from `packages/core/src/frames/vision.ts` for Phase 2. The CLI
 // keeps its copy until Phase 4 routes the frames pipeline through this
@@ -79,9 +81,34 @@ export interface ClassifyInput {
 
 export type DescribeInput = ClassifyInput;
 
+/**
+ * One clip's summarization request. `transcriptText` is the transcript already
+ * sliced to the clip's range; `rangeSeconds` is the range length (null for a
+ * whole-Short item) and drives prompt proportionality.
+ */
+export interface SummarizeInput {
+  userId: string;
+  transcriptText: string;
+  rangeSeconds: number | null;
+  videoTitle?: string;
+  signal?: AbortSignal;
+}
+
+export type SummarizeResult =
+  | {
+      kind: "ok";
+      summary: string;
+      inputTokens: number;
+      outputTokens: number;
+      ledgerId: string;
+      model: string;
+    }
+  | { kind: "failed"; reason: LlmFailReason; message: string };
+
 export interface ServerLlmGateway {
   classify(input: ClassifyInput): Promise<ClassifyResult>;
   describe(input: DescribeInput): Promise<VisionDescribeResult>;
+  summarize(input: SummarizeInput): Promise<SummarizeResult>;
 }
 
 export interface ServerLlmGatewayOptions {
@@ -89,6 +116,7 @@ export interface ServerLlmGatewayOptions {
   openrouter: OpenRouterClient;
   classifyModel?: string;
   visionModel?: string;
+  summaryModel?: string;
 }
 
 export function createServerLlmGateway(
@@ -96,6 +124,7 @@ export function createServerLlmGateway(
 ): ServerLlmGateway {
   const classifyModel = opts.classifyModel ?? CLASSIFY_MODEL;
   const visionModel = opts.visionModel ?? VISION_MODEL;
+  const summaryModel = opts.summaryModel ?? DIGEST_MODEL;
 
   return {
     async classify(input) {
@@ -224,6 +253,79 @@ export function createServerLlmGateway(
         outputTokens,
         ledgerId,
         model: visionModel,
+      };
+    },
+
+    async summarize(input) {
+      const { system, user, tier } = buildSummaryPrompt({
+        rangeSeconds: input.rangeSeconds,
+        transcriptText: input.transcriptText,
+        ...(input.videoTitle ? { videoTitle: input.videoTitle } : {}),
+      });
+
+      const start = Date.now();
+      let result;
+      try {
+        result = await opts.openrouter.generateText({
+          model: summaryModel,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          maxOutputTokens: tier.maxOutputTokens,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+      } catch (err) {
+        return {
+          kind: "failed",
+          reason: mapLlmError(err),
+          message: errMessage(err),
+        };
+      }
+      const latencyMs = Date.now() - start;
+
+      const summary = result.text.trim();
+      if (summary.length === 0) {
+        // An empty completion is not a usable summary. Treat it as bad-input so
+        // the item lands in 'failed' and the author is prompted to hand-write
+        // one, rather than persisting an empty 'ready' summary.
+        return {
+          kind: "failed",
+          reason: "bad-input",
+          message: "summary model returned empty text",
+        };
+      }
+
+      const { inputTokens, outputTokens } = result.usage;
+
+      let ledgerId: string;
+      try {
+        ledgerId = await opts.ledger.record({
+          userId: input.userId,
+          op: "summarize",
+          model: summaryModel,
+          inputTokens,
+          outputTokens,
+          latencyMs,
+        });
+      } catch (err) {
+        // Same invariant as classify/describe: the LLM call already spent
+        // tokens, but without an audit row we must not hand back a result the
+        // caller can persist. Drop it; the caller retries.
+        return {
+          kind: "failed",
+          reason: "transient",
+          message: `ledger write failed: ${errMessage(err)}`,
+        };
+      }
+
+      return {
+        kind: "ok",
+        summary,
+        inputTokens,
+        outputTokens,
+        ledgerId,
+        model: summaryModel,
       };
     },
   };

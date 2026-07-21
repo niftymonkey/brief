@@ -8,6 +8,7 @@ import {
   createCollection,
   deleteCollection,
   deleteCollectionItem,
+  getCollectionItem,
   getCollectionWithItems,
   getSharedCollectionBySlug,
   listCollections,
@@ -15,6 +16,7 @@ import {
   setCollectionShared,
   updateCollection,
   updateCollectionItem,
+  writeGeneratedSummary,
 } from "./collections";
 
 function expectCollectionItem(item: CollectionItem | null): CollectionItem {
@@ -344,6 +346,117 @@ describe("collections db lifecycle", () => {
 
     const listed = await getCollectionWithItems(userId, collection.id);
     expect(listed?.items.map((item) => item.id)).toEqual(expectedIds);
+  });
+
+  it("writeGeneratedSummary advances a pending item to ready with the generated text", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Generate pending" });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "genpendingx",
+      startSec: 5,
+      endSec: 20,
+    }));
+    expect(item.summaryStatus).toBe("pending");
+
+    const generated = expectCollectionItem(
+      await writeGeneratedSummary(userId, collection.id, item.id, {
+        status: "ready",
+        summary: "auto generated summary",
+      }),
+    );
+    expect(generated).toMatchObject({
+      summary: "auto generated summary",
+      summaryStatus: "ready",
+    });
+  });
+
+  it("writeGeneratedSummary never overwrites a ready (hand-edited) summary", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Protect ready" });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "genreadyxxx",
+      summary: "hand written summary",
+    }));
+    expect(item.summaryStatus).toBe("ready");
+
+    // Generation completing late must not clobber the author's edit.
+    const afterGen = expectCollectionItem(
+      await writeGeneratedSummary(userId, collection.id, item.id, {
+        status: "ready",
+        summary: "machine summary that should be ignored",
+      }),
+    );
+    expect(afterGen).toMatchObject({
+      summary: "hand written summary",
+      summaryStatus: "ready",
+    });
+
+    // A late failure outcome must likewise leave the ready summary intact.
+    const afterFail = expectCollectionItem(
+      await writeGeneratedSummary(userId, collection.id, item.id, { status: "failed" }),
+    );
+    expect(afterFail).toMatchObject({
+      summary: "hand written summary",
+      summaryStatus: "ready",
+    });
+  });
+
+  it("writeGeneratedSummary marks a pending item failed without writing a summary", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Generate failed" });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "genfailedxx",
+    }));
+
+    const failed = expectCollectionItem(
+      await writeGeneratedSummary(userId, collection.id, item.id, { status: "failed" }),
+    );
+    expect(failed).toMatchObject({ summary: null, summaryStatus: "failed" });
+
+    // Retry can still succeed off a failed item.
+    const retried = expectCollectionItem(
+      await writeGeneratedSummary(userId, collection.id, item.id, {
+        status: "ready",
+        summary: "recovered summary",
+      }),
+    );
+    expect(retried).toMatchObject({ summary: "recovered summary", summaryStatus: "ready" });
+  });
+
+  it("getCollectionItem returns the item for its owner and null for a stranger", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Fetch single item" });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "fetchsingle",
+      startSec: 3,
+      endSec: 9,
+    }));
+
+    const fetched = await getCollectionItem(userId, collection.id, item.id);
+    expect(fetched).toMatchObject({ id: item.id, videoId: "fetchsingle", startSec: 3, endSec: 9 });
+
+    const stranger = await getCollectionItem("vitest-stranger", collection.id, item.id);
+    expect(stranger).toBeNull();
   });
 
   it("appends a random suffix when sharing collides with an existing slug", async () => {

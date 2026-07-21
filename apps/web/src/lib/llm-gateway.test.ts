@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CLASSIFY_MODEL, VISION_MODEL } from "@brief/core";
+import { CLASSIFY_MODEL, DIGEST_MODEL, VISION_MODEL } from "@brief/core";
 import { createInMemoryOpenRouterClient } from "./openrouter-client";
 import {
   createInMemoryUsageLedger,
@@ -379,5 +379,133 @@ describe("createServerLlmGateway.describe", () => {
     await gateway.describe(baseInput);
 
     expect(openrouter.calls()[0]?.model).toBe(overrideModel);
+  });
+});
+
+describe("createServerLlmGateway.summarize", () => {
+  const summarizeInput = {
+    userId: "user_01",
+    transcriptText: "the speaker walks through setting up a vector store",
+    rangeSeconds: 45,
+    videoTitle: "Intro to RAG",
+  };
+
+  it("returns ok with the trimmed summary text and the digest model", async () => {
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({
+          text: "  A quick walkthrough of wiring up a vector store.  ",
+          usage: { inputTokens: 120, outputTokens: 18 },
+        }),
+      }),
+    });
+
+    const result = await gateway.summarize(summarizeInput);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.summary).toBe("A quick walkthrough of wiring up a vector store.");
+      expect(result.inputTokens).toBe(120);
+      expect(result.outputTokens).toBe(18);
+      expect(typeof result.ledgerId).toBe("string");
+      expect(result.model).toBe(DIGEST_MODEL);
+    }
+  });
+
+  it("sends a system+user message pair and scales max output tokens to the range", async () => {
+    const openrouter = createInMemoryOpenRouterClient({
+      respond: () => ({ text: "ok", usage: { inputTokens: 10, outputTokens: 2 } }),
+    });
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter,
+    });
+
+    await gateway.summarize({ ...summarizeInput, rangeSeconds: 20 });
+    await gateway.summarize({ ...summarizeInput, rangeSeconds: 1200 });
+
+    const calls = openrouter.calls();
+    expect(calls[0]?.messages.map((m) => m.role)).toEqual(["system", "user"]);
+    // A 20s clip must be capped lower than a 20-minute excerpt.
+    expect(calls[0]?.maxOutputTokens).toBeLessThan(calls[1]!.maxOutputTokens);
+  });
+
+  it("records one ledger row with op=summarize keyed by userId", async () => {
+    const ledger = createInMemoryUsageLedger();
+    const gateway = createServerLlmGateway({
+      ledger,
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({ text: "summary", usage: { inputTokens: 90, outputTokens: 12 } }),
+      }),
+    });
+
+    const result = await gateway.summarize(summarizeInput);
+    if (result.kind !== "ok") throw new Error("expected ok");
+
+    const rows = ledger.rows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: result.ledgerId,
+      userId: "user_01",
+      op: "summarize",
+      model: DIGEST_MODEL,
+      inputTokens: 90,
+      outputTokens: 12,
+    });
+  });
+
+  it("returns kind=failed with reason=transient when the upstream LLM throws", async () => {
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter: {
+        async generateText() {
+          throw new Error("upstream is down");
+        },
+      },
+    });
+
+    const result = await gateway.summarize(summarizeInput);
+    expect(result.kind).toBe("failed");
+    if (result.kind === "failed") {
+      expect(result.reason).toBe("transient");
+      expect(result.message).toMatch(/upstream is down/);
+    }
+  });
+
+  it("returns kind=failed and writes no summary when the ledger write fails", async () => {
+    const brokenLedger: UsageLedger = {
+      async record() {
+        throw new Error("DB unavailable");
+      },
+      async summarize() {
+        return { inputTokens: 0, outputTokens: 0, costUsd: 0, calls: 0 };
+      },
+    };
+    const gateway = createServerLlmGateway({
+      ledger: brokenLedger,
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({ text: "summary", usage: { inputTokens: 90, outputTokens: 12 } }),
+      }),
+    });
+
+    const result = await gateway.summarize(summarizeInput);
+    expect(result.kind).toBe("failed");
+    if (result.kind === "failed") {
+      expect(result.reason).toBe("transient");
+      expect(result.message).toMatch(/ledger/i);
+    }
+  });
+
+  it("returns kind=failed with bad-input when the model returns empty text", async () => {
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter: createInMemoryOpenRouterClient({
+        respond: () => ({ text: "   ", usage: { inputTokens: 90, outputTokens: 0 } }),
+      }),
+    });
+
+    const result = await gateway.summarize(summarizeInput);
+    expect(result.kind).toBe("failed");
   });
 });
