@@ -233,6 +233,52 @@ describe("collections db lifecycle", () => {
     expect(cleared).toMatchObject({ title: "New title", description: null });
   });
 
+  it("treats an explicit null summary on add as pending", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Add null summary" });
+    cleanupCollectionIds.push(collection.id);
+
+    const withNull = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "fffffffffff",
+      summary: null,
+    }));
+    expect(withNull).toMatchObject({ summary: null, summaryStatus: "pending" });
+
+    const withText = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "ggggggggggg",
+      summary: "has text",
+    }));
+    expect(withText).toMatchObject({ summary: "has text", summaryStatus: "ready" });
+  });
+
+  it("clears the summary and returns to pending when updated to explicit null", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Update summary to null" });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "hhhhhhhhhhh",
+      summary: "initial summary",
+    }));
+    expect(item.summaryStatus).toBe("ready");
+
+    const cleared = expectCollectionItem(
+      await updateCollectionItem(userId, collection.id, item.id, { summary: null }),
+    );
+    expect(cleared).toMatchObject({ summary: null, summaryStatus: "pending" });
+
+    const retext = expectCollectionItem(
+      await updateCollectionItem(userId, collection.id, item.id, { summary: "back to text" }),
+    );
+    expect(retext).toMatchObject({ summary: "back to text", summaryStatus: "ready" });
+  });
+
   it("appends a random suffix when sharing collides with an existing slug", async () => {
     if (!process.env.POSTGRES_URL) {
       throw new Error("POSTGRES_URL is required for collections db integration tests");

@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { sql } from "@vercel/postgres";
+import { sql, type VercelPoolClient } from "@vercel/postgres";
 
 export type SummaryStatus = "pending" | "ready" | "failed";
 
@@ -170,16 +170,15 @@ async function getSnapshotVideoTitle(userId: string, videoId: string): Promise<s
   return result.rows[0]?.title ?? null;
 }
 
-async function getItemPosition(
-  userId: string,
+async function lockedItemPosition(
+  client: VercelPoolClient,
   collectionId: string,
   itemId: string,
 ): Promise<number | null> {
-  const result = await sql<{ position: number }>`
-    SELECT ci.position
-    FROM collection_items ci
-    JOIN collections c ON c.id = ci.collection_id
-    WHERE c.id = ${collectionId} AND c.user_id = ${userId} AND ci.id = ${itemId}
+  const result = await client.sql<{ position: number }>`
+    SELECT position
+    FROM collection_items
+    WHERE collection_id = ${collectionId} AND id = ${itemId}
   `;
   return result.rows[0]?.position ?? null;
 }
@@ -378,7 +377,8 @@ export async function addCollectionItem(
   input: AddCollectionItemInput,
 ): Promise<CollectionItem | null> {
   const videoTitle = await getSnapshotVideoTitle(userId, input.videoId);
-  const summaryStatus: SummaryStatus = input.summary === undefined ? "pending" : "ready";
+  const summaryStatus: SummaryStatus =
+    input.summary === undefined || input.summary === null ? "pending" : "ready";
 
   const client = await sql.connect();
   try {
@@ -444,51 +444,15 @@ export async function updateCollectionItem(
   itemId: string,
   input: UpdateCollectionItemInput,
 ): Promise<CollectionItem | null> {
-  const currentResult = await sql<CollectionItemRow>`
-    SELECT
-      ci.id,
-      ci.video_id as "videoId",
-      ci.start_sec as "startSec",
-      ci.end_sec as "endSec",
-      ci.video_title as "videoTitle",
-      ci.summary,
-      ci.summary_status as "summaryStatus",
-      ci.position
-    FROM collection_items ci
-    JOIN collections c ON c.id = ci.collection_id
-    WHERE c.id = ${collectionId} AND c.user_id = ${userId} AND ci.id = ${itemId}
-  `;
-  const current = currentResult.rows[0] ? toCollectionItem(currentResult.rows[0]) : null;
-  if (!current) return null;
-
   const changesPointer =
     input.videoId !== undefined ||
     input.startSec !== undefined ||
     input.endSec !== undefined;
   const changesSummary = input.summary !== undefined;
+  const summaryIsText = changesSummary && input.summary !== null;
   const reorders =
     input.beforeItemId !== undefined ||
     input.afterItemId !== undefined;
-
-  let position = current.position;
-  if (reorders) {
-    const afterPosition = input.afterItemId
-      ? await getItemPosition(userId, collectionId, input.afterItemId)
-      : null;
-    const beforePosition = input.beforeItemId
-      ? await getItemPosition(userId, collectionId, input.beforeItemId)
-      : null;
-
-    if ((input.afterItemId && afterPosition === null) || (input.beforeItemId && beforePosition === null)) {
-      return null;
-    }
-
-    position = midpointPosition(afterPosition, beforePosition);
-  }
-
-  const newVideoTitle = changesPointer
-    ? await getSnapshotVideoTitle(userId, input.videoId ?? current.videoId)
-    : null;
 
   const updateVideoId = input.videoId !== undefined;
   const updateStart = input.startSec !== undefined;
@@ -497,6 +461,56 @@ export async function updateCollectionItem(
   const client = await sql.connect();
   try {
     await client.sql`BEGIN`;
+
+    const owned = await client.sql`
+      SELECT id FROM collections
+      WHERE id = ${collectionId} AND user_id = ${userId}
+      FOR UPDATE
+    `;
+    if (owned.rows.length === 0) {
+      await client.sql`ROLLBACK`;
+      return null;
+    }
+
+    const currentResult = await client.sql<CollectionItemRow>`
+      SELECT
+        ci.id,
+        ci.video_id as "videoId",
+        ci.start_sec as "startSec",
+        ci.end_sec as "endSec",
+        ci.video_title as "videoTitle",
+        ci.summary,
+        ci.summary_status as "summaryStatus",
+        ci.position
+      FROM collection_items ci
+      WHERE ci.collection_id = ${collectionId} AND ci.id = ${itemId}
+    `;
+    const current = currentResult.rows[0] ? toCollectionItem(currentResult.rows[0]) : null;
+    if (!current) {
+      await client.sql`ROLLBACK`;
+      return null;
+    }
+
+    let position = current.position;
+    if (reorders) {
+      const afterPosition = input.afterItemId
+        ? await lockedItemPosition(client, collectionId, input.afterItemId)
+        : null;
+      const beforePosition = input.beforeItemId
+        ? await lockedItemPosition(client, collectionId, input.beforeItemId)
+        : null;
+
+      if ((input.afterItemId && afterPosition === null) || (input.beforeItemId && beforePosition === null)) {
+        await client.sql`ROLLBACK`;
+        return null;
+      }
+
+      position = midpointPosition(afterPosition, beforePosition);
+    }
+
+    const newVideoTitle = changesPointer
+      ? await getSnapshotVideoTitle(userId, input.videoId ?? current.videoId)
+      : null;
 
     const result = await client.sql<CollectionItemRow>`
       UPDATE collection_items ci
@@ -512,7 +526,8 @@ export async function updateCollectionItem(
         END,
         summary_status = CASE
           WHEN ${changesPointer}::boolean THEN 'pending'
-          WHEN ${changesSummary}::boolean THEN 'ready'
+          WHEN ${summaryIsText}::boolean THEN 'ready'
+          WHEN ${changesSummary}::boolean THEN 'pending'
           ELSE ci.summary_status
         END,
         position = CASE WHEN ${reorders}::boolean THEN ${position}::double precision ELSE ci.position END,
