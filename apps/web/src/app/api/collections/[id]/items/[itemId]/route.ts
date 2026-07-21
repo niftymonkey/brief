@@ -1,0 +1,73 @@
+import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@workos-inc/authkit-nextjs";
+import { z } from "zod";
+import { deleteCollectionItem, updateCollectionItem } from "@/lib/collections";
+
+const updateItemSchema = z.object({
+  summary: z.string().nullable().optional(),
+  videoId: z.string().min(1).optional(),
+  startSec: z.number().int().nullable().optional(),
+  endSec: z.number().int().nullable().optional(),
+  beforeItemId: z.string().nullable().optional(),
+  afterItemId: z.string().nullable().optional(),
+});
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; itemId: string }> },
+) {
+  const { user } = await withAuth();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id, itemId } = await params;
+
+  try {
+    let json: unknown;
+    try {
+      json = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid collection item" }, { status: 400 });
+    }
+
+    const body = updateItemSchema.safeParse(json);
+    if (!body.success) {
+      return NextResponse.json({ error: "Invalid collection item" }, { status: 400 });
+    }
+
+    const item = await updateCollectionItem(user.id, id, itemId, body.data);
+    if (!item) {
+      return NextResponse.json({ error: "Collection item not found" }, { status: 404 });
+    }
+    return NextResponse.json(item);
+  } catch (error) {
+    console.error("[UPDATE COLLECTION ITEM] Error:", error);
+    return NextResponse.json({ error: "Failed to update collection item" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; itemId: string }> },
+) {
+  const { user } = await withAuth();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id, itemId } = await params;
+
+  try {
+    const deleted = await deleteCollectionItem(user.id, id, itemId);
+    if (!deleted) {
+      return NextResponse.json({ error: "Collection item not found" }, { status: 404 });
+    }
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[DELETE COLLECTION ITEM] Error:", error);
+    return NextResponse.json({ error: "Failed to delete collection item" }, { status: 500 });
+  }
+}
