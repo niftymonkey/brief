@@ -214,6 +214,19 @@ function toCollectionItem(row: CollectionItemRow): CollectionItem {
   };
 }
 
+function toVideoFacts(rows: VideoFactsRow[]): Record<string, EntryVideoFacts> {
+  const facts: Record<string, EntryVideoFacts> = {};
+  for (const row of rows) {
+    const durationSec = row.duration ? parseDurationToSeconds(row.duration) : 0;
+    facts[row.videoId] = {
+      title: row.title,
+      channelName: row.channelName,
+      durationSec: durationSec > 0 ? durationSec : null,
+    };
+  }
+  return facts;
+}
+
 async function collectionSlugExists(slug: string): Promise<boolean> {
   const result = await sql<{ exists: boolean }>`
     SELECT EXISTS(SELECT 1 FROM collections WHERE slug = ${slug}) as exists
@@ -476,16 +489,53 @@ export async function getCollectionVideoFacts(
     [userId, ...unique],
   );
 
-  const facts: Record<string, EntryVideoFacts> = {};
-  for (const row of result.rows) {
-    const durationSec = row.duration ? parseDurationToSeconds(row.duration) : 0;
-    facts[row.videoId] = {
-      title: row.title,
-      channelName: row.channelName,
-      durationSec: durationSec > 0 ? durationSec : null,
-    };
-  }
-  return facts;
+  return toVideoFacts(result.rows);
+}
+
+/**
+ * What a shared collection's own curator knows about the videos it points at,
+ * keyed by video id, for readers who have no briefs of their own. Resolved
+ * through the collection's owner so a public reader sees the same titles,
+ * channels and lengths the curator does.
+ *
+ * Two gates make this safe to reach from an unauthenticated page: the
+ * collection must be shared, and each video must be an entry of that very
+ * collection. Both live in the SQL, so the caller's `videoIds` only ever
+ * narrows the result and can never widen it into the owner's wider library.
+ */
+export async function getSharedCollectionVideoFacts(
+  collectionId: string,
+  videoIds: string[],
+): Promise<Record<string, EntryVideoFacts>> {
+  const unique = [...new Set(videoIds)];
+  if (unique.length === 0) return {};
+
+  const placeholders = unique.map((_, index) => `$${index + 2}`).join(", ");
+  const result = await sql.query<VideoFactsRow>(
+    `
+    SELECT DISTINCT ON (d.video_id)
+      d.video_id as "videoId",
+      d.title,
+      d.channel_name as "channelName",
+      d.duration
+    FROM digests d
+    JOIN collections c ON c.user_id = d.user_id
+    WHERE c.id = $1
+      AND c.is_shared = TRUE
+      AND d.status = 'completed'
+      AND EXISTS (
+        SELECT 1
+        FROM collection_items ci
+        WHERE ci.collection_id = c.id
+          AND ci.video_id = d.video_id
+      )
+      AND d.video_id IN (${placeholders})
+    ORDER BY d.video_id, d.created_at DESC
+    `,
+    [collectionId, ...unique],
+  );
+
+  return toVideoFacts(result.rows);
 }
 
 export async function updateCollection(

@@ -18,19 +18,29 @@ import { formatSeconds } from "@/lib/collection-item-input";
 import type { CollectionEntry } from "@/lib/collection-entries";
 import type { CollectionItem } from "@/lib/collections";
 
-interface CollectionItemRowProps {
-  item: CollectionItem;
-  /** The same item read as one entry of the sitting: its place, title and links. */
-  entry: CollectionEntry;
-  isFirst: boolean;
-  isLast: boolean;
-  editable: boolean;
+/**
+ * Everything a curator can do to one entry. Held as a single object so a row
+ * rendered without it has no way to reach a mutation at all, rather than relying
+ * on a flag to keep the controls hidden.
+ */
+export interface CollectionItemRowControls {
+  /** True while any entry in the collection is mid-reorder. */
   reorderPending: boolean;
   onReorder: (direction: "up" | "down") => Promise<void>;
   onRemove: () => Promise<void>;
   onSummarySave: (summary: string) => Promise<void>;
   onRetrySummary: () => Promise<void>;
   onSwap: (videoId: string, startSec: number | null, endSec: number | null) => Promise<void>;
+}
+
+interface CollectionItemRowProps {
+  item: CollectionItem;
+  /** The same item read as one entry of the sitting: its place, title and links. */
+  entry: CollectionEntry;
+  isFirst: boolean;
+  isLast: boolean;
+  /** The curator's controls. Omitted for a reader, whose entry is strictly read-only. */
+  controls?: CollectionItemRowControls;
 }
 
 const controlClass =
@@ -46,13 +56,7 @@ export function CollectionItemRow({
   entry,
   isFirst,
   isLast,
-  editable,
-  reorderPending,
-  onReorder,
-  onRemove,
-  onSummarySave,
-  onRetrySummary,
-  onSwap,
+  controls,
 }: CollectionItemRowProps) {
   const [isEditingSummary, setIsEditingSummary] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState(item.summary ?? "");
@@ -72,10 +76,11 @@ export function CollectionItemRow({
   const generationFailed = item.summaryStatus === "failed" && !hasSummary;
 
   const handleRetrySummary = async () => {
+    if (!controls) return;
     setError(null);
     setIsRetrying(true);
     try {
-      await onRetrySummary();
+      await controls.onRetrySummary();
     } catch {
       setError("Could not generate a note. Please try again.");
     } finally {
@@ -84,10 +89,11 @@ export function CollectionItemRow({
   };
 
   const handleReorder = async (direction: "up" | "down") => {
+    if (!controls) return;
     setError(null);
     setIsReordering(true);
     try {
-      await onReorder(direction);
+      await controls.onReorder(direction);
     } catch {
       setError("Could not reorder this entry. Please try again.");
     } finally {
@@ -96,10 +102,11 @@ export function CollectionItemRow({
   };
 
   const handleRemove = async () => {
+    if (!controls) return;
     setError(null);
     setIsRemoving(true);
     try {
-      await onRemove();
+      await controls.onRemove();
     } catch {
       setError("Could not remove this entry. Please try again.");
     } finally {
@@ -113,10 +120,11 @@ export function CollectionItemRow({
   };
 
   const handleSummarySave = async () => {
+    if (!controls) return;
     setError(null);
     setIsSavingSummary(true);
     try {
-      await onSummarySave(summaryDraft.trim());
+      await controls.onSummarySave(summaryDraft.trim());
       setIsEditingSummary(false);
     } catch {
       setError("Could not save the note. Please try again.");
@@ -160,13 +168,13 @@ export function CollectionItemRow({
             </a>
           </h3>
 
-          {editable && (
+          {controls && (
             <div className="flex items-center gap-1 shrink-0">
               <Button
                 variant="outline"
                 size="icon-sm"
                 onClick={() => handleReorder("up")}
-                disabled={isFirst || isReordering || reorderPending}
+                disabled={isFirst || isReordering || controls.reorderPending}
                 className={controlClass}
                 title="Move up"
                 aria-label="Move up"
@@ -177,7 +185,7 @@ export function CollectionItemRow({
                 variant="outline"
                 size="icon-sm"
                 onClick={() => handleReorder("down")}
-                disabled={isLast || isReordering || reorderPending}
+                disabled={isLast || isReordering || controls.reorderPending}
                 className={controlClass}
                 title="Move down"
                 aria-label="Move down"
@@ -188,7 +196,7 @@ export function CollectionItemRow({
                 initialVideoId={item.videoId}
                 initialStartSec={item.startSec}
                 initialEndSec={item.endSec}
-                onSubmit={onSwap}
+                onSubmit={controls.onSwap}
               >
                 <Button
                   variant="outline"
@@ -300,7 +308,7 @@ export function CollectionItemRow({
               <p className="text-base min-[621px]:text-[1.0625rem] leading-[1.7] text-[var(--color-text-secondary)] whitespace-pre-wrap">
                 {item.summary}
               </p>
-              {editable && (
+              {controls && (
                 <button
                   type="button"
                   onClick={startEditingSummary}
@@ -311,12 +319,12 @@ export function CollectionItemRow({
                 </button>
               )}
             </div>
-          ) : editable && isGenerating ? (
+          ) : controls && isGenerating ? (
             <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               Writing a note...
             </p>
-          ) : editable && generationFailed ? (
+          ) : controls && generationFailed ? (
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-[var(--color-text-tertiary)] italic">
                 Couldn&apos;t write a note.
@@ -343,7 +351,7 @@ export function CollectionItemRow({
                 Write one
               </button>
             </div>
-          ) : editable ? (
+          ) : controls ? (
             <button
               type="button"
               onClick={startEditingSummary}

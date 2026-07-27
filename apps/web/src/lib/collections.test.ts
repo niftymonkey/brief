@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "@vercel/postgres";
 import {
   type CollectionItem,
@@ -14,6 +14,7 @@ import {
   getCollectionItem,
   getCollectionWithItems,
   getSharedCollectionBySlug,
+  getSharedCollectionVideoFacts,
   listCollections,
   midpointPosition,
   resolveCollectionVideoFacts,
@@ -952,5 +953,86 @@ describe("collection item video facts", () => {
       description: "Clips that argue the same point from different angles",
     });
     expect(await getCollection("vitest-stranger", collection.id)).toBeNull();
+  });
+});
+
+describe("getSharedCollectionVideoFacts", () => {
+  const userId = `vitest-shared-facts-${Date.now()}`;
+  const sharedVideoId = "sharedfact1";
+  const privateVideoId = "privatefac1";
+  const cleanupCollectionIds: string[] = [];
+
+  async function seedCompletedBrief(
+    videoId: string,
+    title: string,
+    channelName: string,
+    duration: string,
+  ): Promise<void> {
+    await sql`
+      INSERT INTO digests (
+        user_id, video_id, title, channel_name, channel_slug, duration,
+        summary, sections, related_links, other_links, status
+      ) VALUES (
+        ${userId}, ${videoId}, ${title}, ${channelName}, ${channelName.toLowerCase()}, ${duration},
+        'seeded summary', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, 'completed'
+      )
+    `;
+  }
+
+  beforeAll(async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    await seedCompletedBrief(sharedVideoId, "A published entry", "Published Channel", "PT5M");
+    await seedCompletedBrief(privateVideoId, "A secret title", "Secret Channel", "PT7M");
+  });
+
+  afterAll(async () => {
+    for (const id of cleanupCollectionIds) {
+      await sql`DELETE FROM collections WHERE id = ${id}`;
+    }
+    await sql`DELETE FROM digests WHERE user_id = ${userId}`;
+  });
+
+  it("resolves facts only for videos the shared collection actually holds", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    // The reader under test answers from the seeded briefs, so every add here
+    // injects `noFacts` purely to keep the add path off the network.
+    const shared = await createCollection(userId, { title: "Published sitting" });
+    cleanupCollectionIds.push(shared.id);
+    await addCollectionItem(userId, shared.id, { videoId: sharedVideoId }, noFacts);
+    await setCollectionShared(userId, shared.id, true);
+
+    const unshared = await createCollection(userId, { title: "Private sitting" });
+    cleanupCollectionIds.push(unshared.id);
+    await addCollectionItem(userId, unshared.id, { videoId: privateVideoId }, noFacts);
+
+    // A caller asking about a video outside the shared collection learns nothing
+    // about the owner's other briefs, however the video id was guessed.
+    const facts = await getSharedCollectionVideoFacts(shared.id, [sharedVideoId, privateVideoId]);
+
+    expect(facts).toEqual({
+      [sharedVideoId]: {
+        title: "A published entry",
+        channelName: "Published Channel",
+        durationSec: 300,
+      },
+    });
+  });
+
+  it("stays silent for a collection that is no longer shared", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Withdrawn sitting" });
+    cleanupCollectionIds.push(collection.id);
+    await addCollectionItem(userId, collection.id, { videoId: sharedVideoId }, noFacts);
+
+    expect(await getSharedCollectionVideoFacts(collection.id, [sharedVideoId])).toEqual({});
   });
 });

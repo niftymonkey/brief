@@ -11,12 +11,13 @@ interface CollectionClosingProps {
   entryCount: number;
   canPlay: boolean;
   onPlay: () => void;
-  share: CollectionShareState;
+  /** The share link and its state. Omitted where sharing is not the viewer's to see. */
+  share?: CollectionShareState;
 }
 
 /**
- * The closing block under the reading: what the sitting adds up to, and the two
- * things left to do with it.
+ * The closing block under the reading: what the sitting adds up to, and what is
+ * left to do with it.
  */
 export function CollectionClosing({
   totalRuntimeSec,
@@ -27,7 +28,10 @@ export function CollectionClosing({
 }: CollectionClosingProps) {
   const [copied, setCopied] = useState(false);
 
+  const canShare = share !== undefined && (share.isShared || share.canManage);
+
   const handleShare = async () => {
+    if (!share) return;
     if (share.isShared && share.shareUrl) {
       try {
         await navigator.clipboard.writeText(share.shareUrl);
@@ -53,7 +57,9 @@ export function CollectionClosing({
           {headline}
         </div>
         <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary)] max-w-[26rem]">
-          Plays in order. Start over from the top, or share it.
+          {canShare
+            ? "Plays in order. Start over from the top, or share it."
+            : "Plays in order. Start over from the top."}
         </p>
       </div>
       <div className="flex flex-wrap gap-2.5">
@@ -65,7 +71,7 @@ export function CollectionClosing({
           <Play className="w-4 h-4 fill-current" />
           Play from the top
         </Button>
-        {(share.isShared || share.canManage) && (
+        {canShare && (
           <Button
             variant="outline"
             onClick={handleShare}

@@ -14,7 +14,8 @@ interface CollectionTransportProps {
   canPlay: boolean;
   activeEntryId: string | null;
   onPlay: () => void;
-  share: CollectionShareState;
+  /** The share link and its state. Omitted where sharing is not the viewer's to see. */
+  share?: CollectionShareState;
   /** Owner-only controls, sitting opposite the heading. */
   actions?: ReactNode;
 }
@@ -25,7 +26,8 @@ function entryCountLabel(count: number): string {
 
 /**
  * The transport hero: one play control for the whole sitting, its total runtime,
- * a proportional track of the entries, and the share link, all above the reading.
+ * a proportional track of the entries, and, where the viewer is entitled to it,
+ * the share link, all above the reading.
  */
 export function CollectionTransport({
   title,
@@ -128,7 +130,7 @@ export function CollectionTransport({
         />
       )}
 
-      <CollectionShareRow share={share} />
+      {share && <CollectionShareRow share={share} />}
     </section>
   );
 }

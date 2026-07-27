@@ -311,14 +311,18 @@ export function CollectionDetail({
               entry={entry}
               isFirst={index === 0}
               isLast={index === entryCount - 1}
-              editable={editable}
-              reorderPending={reorderPending}
-              onReorder={(direction) => handleReorder(index, direction)}
-              onRemove={() => handleRemove(entry.id)}
-              onSummarySave={(summary) => handleSummarySave(entry.id, summary)}
-              onRetrySummary={() => summarizeItem(entry.id)}
-              onSwap={(videoId, startSec, endSec) =>
-                handleSwap(entry.id, videoId, startSec, endSec)
+              controls={
+                editable
+                  ? {
+                      reorderPending,
+                      onReorder: (direction) => handleReorder(index, direction),
+                      onRemove: () => handleRemove(entry.id),
+                      onSummarySave: (summary) => handleSummarySave(entry.id, summary),
+                      onRetrySummary: () => summarizeItem(entry.id),
+                      onSwap: (videoId, startSec, endSec) =>
+                        handleSwap(entry.id, videoId, startSec, endSec),
+                    }
+                  : undefined
               }
             />
           ))}
