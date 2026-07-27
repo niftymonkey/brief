@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Youtube } from "lucide-react";
 import { Button, type buttonVariants } from "@/components/ui/button";
 import {
@@ -22,24 +22,15 @@ interface NewBriefDialogProps {
 
 export function NewBriefDialog({ variant = "default" }: NewBriefDialogProps) {
   const [open, setOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isNavigating, startNavigation] = useTransition();
   const router = useRouter();
-  const pathname = usePathname();
-
-  // Close the progress modal when the route changes after navigation
-  useEffect(() => {
-    if (isLoading && currentStep === "redirecting") {
-      setIsLoading(false);
-      setCurrentStep(null);
-      setError(null);
-    }
-  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLoadingStart = () => {
     setOpen(false);
-    setIsLoading(true);
+    setIsCreating(true);
   };
 
   const handleStepChange = (step: Step | null) => {
@@ -50,14 +41,27 @@ export function NewBriefDialog({ variant = "default" }: NewBriefDialogProps) {
     setError(err);
   };
 
+  /**
+   * Hands the finished brief to the router. The navigation runs inside a
+   * transition, so `isNavigating` stays true until the brief page has rendered,
+   * and the state updates inside it are deferred to that same commit. Together
+   * they hold the progress modal on screen, still showing "Redirecting", until
+   * the user is actually on the brief. Clearing the run-scoped step and error
+   * in that commit closes the modal with no state left over for the next run.
+   */
   const handleBriefComplete = (briefId: string) => {
     setCurrentStep("redirecting");
-    router.push(`/brief/${briefId}`);
-    router.refresh();
+    startNavigation(() => {
+      setIsCreating(false);
+      setCurrentStep(null);
+      setError(null);
+      router.push(`/brief/${briefId}`);
+      router.refresh();
+    });
   };
 
   const handleProgressClose = () => {
-    setIsLoading(false);
+    setIsCreating(false);
     setCurrentStep(null);
     setError(null);
   };
@@ -65,7 +69,7 @@ export function NewBriefDialog({ variant = "default" }: NewBriefDialogProps) {
   return (
     <>
       <ProgressModal
-        isOpen={isLoading}
+        isOpen={isCreating || isNavigating}
         title="Creating Brief"
         errorTitle="Failed to Create Brief"
         icon={Youtube}

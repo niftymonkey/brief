@@ -2,12 +2,7 @@
 
 import { PanelLeft } from "lucide-react";
 import { BriefSearch } from "@/components/brief-search";
-import {
-  TagFilter,
-  DateFilter,
-  InlineTagFilter,
-  InlineDateFilter,
-} from "@/components/filters";
+import { InlineTagFilter, InlineDateFilter } from "@/components/filters";
 import { useLayout } from "./layout-context";
 import { useSidebarEnabled } from "@/hooks/use-sidebar-enabled";
 import {

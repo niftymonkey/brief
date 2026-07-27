@@ -16,6 +16,7 @@ import { sql } from "@vercel/postgres";
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+import { errorMessage } from "../src/lib/errors";
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -171,8 +172,8 @@ async function runMigration() {
         try {
           await sql.query(statement + ";");
           console.log(`  Done\n`);
-        } catch (error: any) {
-          if (error.message?.includes("already exists")) {
+        } catch (error: unknown) {
+          if (errorMessage(error).includes("already exists")) {
             console.log(`  Already exists (skipping)\n`);
           } else {
             throw error;

@@ -116,6 +116,9 @@ export function ProgressModal({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // Mount gate: the portal target only exists in the browser, so rendering
+    // is deferred until after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 

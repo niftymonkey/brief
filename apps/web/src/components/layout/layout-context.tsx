@@ -44,6 +44,9 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       if (storedWidth) {
         const width = parseInt(storedWidth, 10);
         if (!isNaN(width) && width >= SIDEBAR_MIN_WIDTH && width <= SIDEBAR_MAX_WIDTH) {
+          // Mount gate: localStorage is browser-only, so the persisted width is
+          // adopted after hydration and `mounted` marks the value as trustworthy.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setSidebarWidthState(width);
         }
       }

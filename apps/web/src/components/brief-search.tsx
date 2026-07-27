@@ -22,10 +22,14 @@ export function BriefSearch() {
   // Local state for immediate input responsiveness
   const [inputValue, setInputValue] = useState(search ?? "");
 
-  // Sync local state when URL changes (e.g., browser back/forward)
-  useEffect(() => {
+  // Mirror the query param into the input during render, so a search value
+  // arriving from outside the input (browser back/forward) is already on screen
+  // in the first frame that carries it.
+  const [prevSearch, setPrevSearch] = useState(search);
+  if (search !== prevSearch) {
+    setPrevSearch(search);
     setInputValue(search ?? "");
-  }, [search]);
+  }
 
   // Debounce: only update URL after user stops typing
   useEffect(() => {

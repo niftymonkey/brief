@@ -12,6 +12,7 @@ import type {
   TranscriptEntry,
   VideoMetadata,
 } from "./types";
+import { errorMessage } from "./errors";
 import { combineUrls } from "./url-extractor";
 import { systemPrompt, buildUserPrompt, buildChapterUserPrompt } from "./prompts";
 
@@ -161,6 +162,81 @@ function createBriefSchema(keyPointsMin: number, keyPointsMax: number) {
 }
 
 /**
+ * Upper bound on the detail text embedded in the error `generateBrief`
+ * surfaces. The route streams that message straight to the browser, so the
+ * budget is what a person can read in an error banner, not what a thrown value
+ * can hold: 2000 characters fits a complete provider error payload (OpenRouter
+ * and OpenAI bodies run to a few hundred) with room to spare, while keeping a
+ * runaway value from pushing megabytes down the SSE stream.
+ */
+const MAX_DETAIL_LENGTH = 2000;
+
+/**
+ * Bounds text destined for a user-facing error message, marking any cut and
+ * reporting how long the original was. Cuts on a code point boundary so the
+ * result never ends in an orphaned surrogate, which renders as a replacement
+ * character and is invalid UTF-16 for anything that re-encodes it downstream.
+ */
+function truncateDetail(text: string): string {
+  if (text.length <= MAX_DETAIL_LENGTH) return text;
+
+  const finalUnit = text.charCodeAt(MAX_DETAIL_LENGTH - 1);
+  const cutsSurrogatePair = finalUnit >= 0xd800 && finalUnit <= 0xdbff;
+  const end = cutsSurrogatePair ? MAX_DETAIL_LENGTH - 1 : MAX_DETAIL_LENGTH;
+
+  return `${text.slice(0, end)}... [truncated from ${text.length} characters]`;
+}
+
+/**
+ * Renders an unknown thrown value as bounded text for an error message. JSON
+ * carries the most detail but rejects circular structures and BigInt, and
+ * returns `undefined` for functions; `String` covers those but itself throws on
+ * null-prototype objects. Both attempts are guarded so this can be called from
+ * inside a catch block without replacing the original failure.
+ */
+function describeThrown(value: unknown): string {
+  let rendered: string;
+
+  try {
+    rendered = JSON.stringify(value) ?? String(value);
+  } catch {
+    try {
+      rendered = String(value);
+    } catch {
+      return "[unserializable value]";
+    }
+  }
+
+  return truncateDetail(rendered);
+}
+
+/**
+ * Maps a failure from the model call onto the error `generateBrief` surfaces.
+ * Provider messages are matched case-insensitively because providers are
+ * inconsistent about capitalisation ("Rate limit exceeded", "rate limit").
+ */
+export function briefGenerationError(error: unknown): Error {
+  const message = errorMessage(error);
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("401") || normalized.includes("authentication")) {
+    return new Error(
+      "Invalid OpenRouter API key. Get a key at: https://openrouter.ai/keys"
+    );
+  }
+
+  if (normalized.includes("rate limit")) {
+    return new Error(
+      "OpenRouter rate limit exceeded. Please wait and try again."
+    );
+  }
+
+  return new Error(
+    `Failed to generate brief: ${truncateDetail(message) || describeThrown(error)}`
+  );
+}
+
+/**
  * Generates a structured AI-powered brief of a video transcript.
  *
  * Model choice is driven by `DIGEST_MODEL` from `@brief/core` and routed
@@ -272,19 +348,7 @@ export async function generateBrief(
     };
 
     return { brief: finalBrief, metrics };
-  } catch (error: any) {
-    if (error.message?.includes("401") || error.message?.includes("authentication")) {
-      throw new Error(
-        "Invalid OpenRouter API key. Get a key at: https://openrouter.ai/keys"
-      );
-    }
-
-    if (error.message?.includes("rate limit")) {
-      throw new Error(
-        "OpenRouter rate limit exceeded. Please wait and try again."
-      );
-    }
-
-    throw new Error(`Failed to generate brief: ${error.message || JSON.stringify(error)}`);
+  } catch (error: unknown) {
+    throw briefGenerationError(error);
   }
 }

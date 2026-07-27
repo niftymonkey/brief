@@ -1,26 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+
+function getServerSnapshot(): boolean {
+  return false;
+}
 
 /**
- * SSR-safe hook for detecting media query matches
+ * SSR-safe hook for detecting media query matches.
+ *
+ * Subscribes to the `MediaQueryList` directly, so the first client render
+ * already reflects the real viewport and the value stays in sync as the
+ * viewport changes. Server rendering and hydration both report `false`,
+ * after which React resynchronises with the live match before paint.
+ *
  * @param query - Media query string (e.g., "(min-width: 768px)")
  * @returns boolean indicating if the query matches
  */
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const mediaQuery = window.matchMedia(query);
+      mediaQuery.addEventListener("change", onStoreChange);
+      return () => mediaQuery.removeEventListener("change", onStoreChange);
+    },
+    [query]
+  );
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia(query);
-    setMatches(mediaQuery.matches);
+  const getSnapshot = useCallback(() => window.matchMedia(query).matches, [query]);
 
-    const handler = (event: MediaQueryListEvent) => {
-      setMatches(event.matches);
-    };
-
-    mediaQuery.addEventListener("change", handler);
-    return () => mediaQuery.removeEventListener("change", handler);
-  }, [query]);
-
-  return matches;
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

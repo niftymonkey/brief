@@ -8,8 +8,11 @@ export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  // Avoid hydration mismatch
   useEffect(() => {
+    // Mount gate: the resolved theme is only known in the browser, so the
+    // themed icon is rendered after hydration to keep server and client markup
+    // identical.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 

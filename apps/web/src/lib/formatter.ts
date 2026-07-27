@@ -2,19 +2,6 @@ import * as fs from "fs";
 import * as path from "path";
 import type { VideoMetadata, StructuredBrief, KeyPoint } from "./types";
 
-/**
- * Parses a timestamp string (MM:SS or H:MM:SS) to seconds
- */
-function parseTimestamp(timestamp: string): number {
-  const parts = timestamp.split(":").map(Number);
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1];
-  } else if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-  return 0;
-}
-
 function isKeyPointArray(keyPoints: KeyPoint[] | string[]): keyPoints is KeyPoint[] {
   return keyPoints.length > 0 && typeof keyPoints[0] === "object";
 }

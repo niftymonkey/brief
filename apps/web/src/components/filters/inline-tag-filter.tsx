@@ -45,6 +45,9 @@ export function InlineTagFilter({ availableTags }: InlineTagFilterProps) {
   // Measure how many tags fit by reading the outer wrapper's actual width
   useLayoutEffect(() => {
     if (!measureRef.current || !outerRef.current || availableTags.length === 0) {
+      // Layout measurement: this pass reads rendered element widths, so it can
+      // only run after commit, and the resulting count must apply before paint.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVisibleCount(availableTags.length);
       return;
     }

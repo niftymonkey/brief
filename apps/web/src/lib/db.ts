@@ -5,7 +5,6 @@ import type {
   DbBrief,
   FramesMetrics,
   FramesStatus,
-  Link,
   StoredTranscript,
   StructuredBrief,
   Tag,
