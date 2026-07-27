@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { AddItemForm } from "@/components/collections/add-item-form";
 import { CollectionClosing } from "@/components/collections/collection-closing";
 import { CollectionItemRow } from "@/components/collections/collection-item-row";
-import { CollectionPlayerSlot } from "@/components/collections/collection-player-slot";
+import {
+  CollectionPlayer,
+  type ActiveSitting,
+} from "@/components/collections/collection-player";
 import { CollectionTransport } from "@/components/collections/collection-transport";
 import { DeleteCollectionButton } from "@/components/collections/delete-collection-button";
 import { EditCollectionDialog } from "@/components/collections/edit-collection-dialog";
@@ -63,7 +66,7 @@ export function CollectionDetail({
   const [slug, setSlug] = useState(collection.slug);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
-  const [playerOpen, setPlayerOpen] = useState(false);
+  const [activeSitting, setActiveSitting] = useState<ActiveSitting | null>(null);
   const [playingItemId, setPlayingItemId] = useState<string | null>(null);
 
   const collectionId = collection.id;
@@ -72,8 +75,14 @@ export function CollectionDetail({
     setPlayingItemId(itemId);
   }, []);
 
+  /** Opens a run of the collection, from the top, on the entries as they stand now. */
+  const startSitting = useCallback(() => {
+    setPlayingItemId(null);
+    setActiveSitting((previous) => ({ key: (previous?.key ?? 0) + 1, items: [...items] }));
+  }, [items]);
+
   const closePlayer = useCallback(() => {
-    setPlayerOpen(false);
+    setActiveSitting(null);
     setPlayingItemId(null);
   }, []);
 
@@ -227,6 +236,20 @@ export function CollectionDetail({
     }
   };
 
+  /**
+   * The sitting the player is mounted on, which is the active one for exactly as long
+   * as the collection under it still holds entries. Reading the live list here, rather
+   * than the run's own frozen copy, is what takes the player off screen the moment the
+   * collection empties, however many removals were in flight when it happened. Letting
+   * go of the sitting in the same breath is what keeps a later add from putting the
+   * finished run back on screen over a collection the curator has just refilled.
+   */
+  const openSitting = activeSitting !== null && items.length > 0 ? activeSitting : null;
+  if (activeSitting !== null && openSitting === null) {
+    setActiveSitting(null);
+    setPlayingItemId(null);
+  }
+
   const sitting = buildSitting(items, videoFacts);
   const entryCount = sitting.entries.length;
   const canPlay = entryCount > 0;
@@ -251,7 +274,7 @@ export function CollectionDetail({
         sitting={sitting}
         canPlay={canPlay}
         activeEntryId={activeEntryId}
-        onPlay={() => setPlayerOpen(true)}
+        onPlay={startSitting}
         share={share}
         actions={
           editable ? (
@@ -277,11 +300,12 @@ export function CollectionDetail({
         }
       />
 
-      {playerOpen && items.length > 0 && (
-        <CollectionPlayerSlot
-          items={items}
+      {openSitting && (
+        <CollectionPlayer
+          key={openSitting.key}
+          items={openSitting.items}
           onClose={closePlayer}
-          onPlayingItemChange={handlePlayingItemChange}
+          onCurrentItemChange={handlePlayingItemChange}
         />
       )}
 
@@ -311,6 +335,7 @@ export function CollectionDetail({
               entry={entry}
               isFirst={index === 0}
               isLast={index === entryCount - 1}
+              isActive={entry.id === activeEntryId}
               controls={
                 editable
                   ? {
@@ -340,7 +365,7 @@ export function CollectionDetail({
           totalRuntimeSec={sitting.totalRuntimeSec}
           entryCount={entryCount}
           canPlay={canPlay}
-          onPlay={() => setPlayerOpen(true)}
+          onPlay={startSitting}
           share={share}
         />
       )}

@@ -39,6 +39,8 @@ interface CollectionItemRowProps {
   entry: CollectionEntry;
   isFirst: boolean;
   isLast: boolean;
+  /** True while the player is on this entry, so the list says where the sitting is. */
+  isActive: boolean;
   /** The curator's controls. Omitted for a reader, whose entry is strictly read-only. */
   controls?: CollectionItemRowControls;
 }
@@ -56,6 +58,7 @@ export function CollectionItemRow({
   entry,
   isFirst,
   isLast,
+  isActive,
   controls,
 }: CollectionItemRowProps) {
   const [isEditingSummary, setIsEditingSummary] = useState(false);
@@ -136,10 +139,18 @@ export function CollectionItemRow({
   return (
     <section
       id={entry.anchorId}
+      aria-current={isActive ? "true" : undefined}
       className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3.5 py-7.5 min-[621px]:grid-cols-[4.25rem_minmax(0,1fr)] min-[621px]:gap-6 min-[621px]:py-9 border-b border-[var(--color-border)] last:border-b-0 scroll-mt-20"
     >
       <div className="flex flex-col items-start pt-0.5">
-        <span className="font-heading text-xl min-[621px]:text-2xl font-light leading-[1.2] tabular-nums text-[var(--color-text-tertiary)]">
+        <span
+          className={cn(
+            "font-heading text-xl min-[621px]:text-2xl font-light leading-[1.2] tabular-nums",
+            isActive
+              ? "text-[var(--color-accent)]"
+              : "text-[var(--color-text-tertiary)]",
+          )}
+        >
           {String(entry.ordinal).padStart(2, "0")}
         </span>
         {entry.offsetSec !== null && (

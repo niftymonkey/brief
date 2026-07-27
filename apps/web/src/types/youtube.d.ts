@@ -4,8 +4,28 @@ declare namespace YT {
     seekTo(seconds: number, allowSeekAhead: boolean): void;
     destroy(): void;
     getPlayerState(): PlayerState;
+    getCurrentTime(): number;
+    /** The loaded video's length in seconds, or 0 before its metadata arrives. */
+    getDuration(): number;
+    getVideoData(): VideoData;
+    loadVideoById(options: LoadVideoOptions): void;
+    cueVideoById(options: LoadVideoOptions): void;
     playVideo(): void;
     pauseVideo(): void;
+    stopVideo(): void;
+    mute(): void;
+    unMute(): void;
+  }
+
+  interface VideoData {
+    video_id?: string;
+    title?: string;
+  }
+
+  interface LoadVideoOptions {
+    videoId: string;
+    startSeconds?: number;
+    endSeconds?: number;
   }
 
   interface PlayerOptions {
@@ -21,6 +41,8 @@ declare namespace YT {
     controls?: 0 | 1;
     enablejsapi?: 0 | 1;
     modestbranding?: 0 | 1;
+    mute?: 0 | 1;
+    playsinline?: 0 | 1;
     rel?: 0 | 1;
     origin?: string;
   }
@@ -29,6 +51,7 @@ declare namespace YT {
     onReady?: (event: PlayerEvent) => void;
     onStateChange?: (event: OnStateChangeEvent) => void;
     onError?: (event: OnErrorEvent) => void;
+    onAutoplayBlocked?: (event: PlayerEvent) => void;
   }
 
   interface PlayerEvent {

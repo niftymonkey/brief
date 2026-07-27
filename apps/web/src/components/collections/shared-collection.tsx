@@ -3,7 +3,10 @@
 import { useCallback, useState } from "react";
 import { CollectionClosing } from "@/components/collections/collection-closing";
 import { CollectionItemRow } from "@/components/collections/collection-item-row";
-import { CollectionPlayerSlot } from "@/components/collections/collection-player-slot";
+import {
+  CollectionPlayer,
+  type ActiveSitting,
+} from "@/components/collections/collection-player";
 import { CollectionTransport } from "@/components/collections/collection-transport";
 import {
   buildSitting,
@@ -33,19 +36,26 @@ export function SharedCollection({
   videoFacts,
   updatedLabel,
 }: SharedCollectionProps) {
-  const [playerOpen, setPlayerOpen] = useState(false);
+  const [activeSitting, setActiveSitting] = useState<ActiveSitting | null>(null);
   const [playingItemId, setPlayingItemId] = useState<string | null>(null);
+
+  const items = collection.items;
 
   const handlePlayingItemChange = useCallback((itemId: string | null) => {
     setPlayingItemId(itemId);
   }, []);
 
+  /** Opens a run of the collection from the top, which is also what restarts one. */
+  const startSitting = useCallback(() => {
+    setPlayingItemId(null);
+    setActiveSitting((previous) => ({ key: (previous?.key ?? 0) + 1, items: [...items] }));
+  }, [items]);
+
   const closePlayer = useCallback(() => {
-    setPlayerOpen(false);
+    setActiveSitting(null);
     setPlayingItemId(null);
   }, []);
 
-  const items = collection.items;
   const sitting = buildSitting(items, videoFacts);
   const entryCount = sitting.entries.length;
   const canPlay = entryCount > 0;
@@ -61,14 +71,15 @@ export function SharedCollection({
         sitting={sitting}
         canPlay={canPlay}
         activeEntryId={activeEntryId}
-        onPlay={() => setPlayerOpen(true)}
+        onPlay={startSitting}
       />
 
-      {playerOpen && items.length > 0 && (
-        <CollectionPlayerSlot
-          items={items}
+      {activeSitting && activeSitting.items.length > 0 && (
+        <CollectionPlayer
+          key={activeSitting.key}
+          items={activeSitting.items}
           onClose={closePlayer}
-          onPlayingItemChange={handlePlayingItemChange}
+          onCurrentItemChange={handlePlayingItemChange}
         />
       )}
 
@@ -96,6 +107,7 @@ export function SharedCollection({
               entry={entry}
               isFirst={index === 0}
               isLast={index === entryCount - 1}
+              isActive={entry.id === activeEntryId}
             />
           ))}
         </div>
@@ -106,7 +118,7 @@ export function SharedCollection({
           totalRuntimeSec={sitting.totalRuntimeSec}
           entryCount={entryCount}
           canPlay={canPlay}
-          onPlay={() => setPlayerOpen(true)}
+          onPlay={startSitting}
         />
       )}
     </div>
