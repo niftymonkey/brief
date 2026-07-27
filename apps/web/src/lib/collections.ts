@@ -3,6 +3,7 @@ import { sql, type VercelPoolClient } from "@vercel/postgres";
 import { parseDurationToSeconds } from "./chapters";
 import { fetchYouTubeVideoFacts } from "./video-facts";
 import { storableVideoFacts } from "./storable-video-facts";
+import type { EntryVideoFacts } from "./collection-entries";
 
 export type SummaryStatus = "pending" | "ready" | "failed";
 
@@ -34,6 +35,8 @@ export interface Collection {
 }
 
 export interface CollectionWithItems extends Collection {
+  /** ISO timestamp of the last change to the collection or its items. */
+  updatedAt: string;
   items: CollectionItem[];
 }
 
@@ -70,6 +73,17 @@ interface CollectionRow {
   isShared: boolean;
   slug: string | null;
   itemCount: number;
+}
+
+interface CollectionDetailRow extends CollectionRow {
+  updatedAt: Date;
+}
+
+interface VideoFactsRow {
+  videoId: string;
+  title: string | null;
+  channelName: string | null;
+  duration: string | null;
 }
 
 interface CollectionItemRow {
@@ -395,8 +409,23 @@ export async function getCollectionWithItems(
   userId: string,
   collectionId: string,
 ): Promise<CollectionWithItems | null> {
-  const collection = await getCollectionBase(userId, collectionId);
-  if (!collection) return null;
+  const collectionResult = await sql<CollectionDetailRow>`
+    SELECT
+      c.id,
+      c.title,
+      c.description,
+      c.is_shared as "isShared",
+      c.slug,
+      c.updated_at as "updatedAt",
+      COUNT(ci.id)::int as "itemCount"
+    FROM collections c
+    LEFT JOIN collection_items ci ON ci.collection_id = c.id
+    WHERE c.id = ${collectionId} AND c.user_id = ${userId}
+    GROUP BY c.id
+  `;
+  const row = collectionResult.rows[0];
+  if (!row) return null;
+  const collection = { ...toCollection(row), updatedAt: new Date(row.updatedAt).toISOString() };
 
   const items = await sql<CollectionItemRow>`
     SELECT
@@ -415,6 +444,48 @@ export async function getCollectionWithItems(
   `;
 
   return { ...collection, items: items.rows.map(toCollectionItem) };
+}
+
+/**
+ * What the viewer's own briefs know about the videos a collection points at,
+ * keyed by video id. A collection may hold videos that were never briefed, so a
+ * video with no completed brief is simply absent from the result rather than
+ * carrying empty fields.
+ */
+export async function getCollectionVideoFacts(
+  userId: string,
+  videoIds: string[],
+): Promise<Record<string, EntryVideoFacts>> {
+  const unique = [...new Set(videoIds)];
+  if (unique.length === 0) return {};
+
+  const placeholders = unique.map((_, index) => `$${index + 2}`).join(", ");
+  const result = await sql.query<VideoFactsRow>(
+    `
+    SELECT DISTINCT ON (video_id)
+      video_id as "videoId",
+      title,
+      channel_name as "channelName",
+      duration
+    FROM digests
+    WHERE user_id = $1
+      AND status = 'completed'
+      AND video_id IN (${placeholders})
+    ORDER BY video_id, created_at DESC
+    `,
+    [userId, ...unique],
+  );
+
+  const facts: Record<string, EntryVideoFacts> = {};
+  for (const row of result.rows) {
+    const durationSec = row.duration ? parseDurationToSeconds(row.duration) : 0;
+    facts[row.videoId] = {
+      title: row.title,
+      channelName: row.channelName,
+      durationSec: durationSec > 0 ? durationSec : null,
+    };
+  }
+  return facts;
 }
 
 export async function updateCollection(
@@ -494,21 +565,23 @@ export async function setCollectionShared(
 export async function getSharedCollectionBySlug(
   slug: string,
 ): Promise<CollectionWithItems | null> {
-  const collectionResult = await sql<CollectionRow>`
+  const collectionResult = await sql<CollectionDetailRow>`
     SELECT
       c.id,
       c.title,
       c.description,
       c.is_shared as "isShared",
       c.slug,
+      c.updated_at as "updatedAt",
       COUNT(ci.id)::int as "itemCount"
     FROM collections c
     LEFT JOIN collection_items ci ON ci.collection_id = c.id
     WHERE c.slug = ${slug} AND c.is_shared = TRUE
     GROUP BY c.id
   `;
-  const collection = collectionResult.rows[0] ? toCollection(collectionResult.rows[0]) : null;
-  if (!collection) return null;
+  const row = collectionResult.rows[0];
+  if (!row) return null;
+  const collection = { ...toCollection(row), updatedAt: new Date(row.updatedAt).toISOString() };
 
   const itemsResult = await sql<CollectionItemRow>`
     SELECT

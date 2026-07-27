@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Layers } from "lucide-react";
 import { withAuth, signOut } from "@workos-inc/authkit-nextjs";
 import { isEmailAllowed } from "@/lib/access";
 import { NewBriefDialog } from "./new-brief-dialog";
@@ -16,7 +18,19 @@ export async function Header() {
 
   return (
     <header className="sticky top-0 z-50 px-4 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--color-bg-primary)]/80">
-      <HeaderContent>
+      <HeaderContent
+        nav={
+          user && (
+            <Link
+              href="/collections"
+              className="ml-1 inline-flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              <Layers className="w-4 h-4 shrink-0" />
+              <span className="sr-only min-[420px]:not-sr-only">Collections</span>
+            </Link>
+          )
+        }
+      >
         {user && hasAccess && <NewBriefDialog />}
         {user && (
           <UserMenu
