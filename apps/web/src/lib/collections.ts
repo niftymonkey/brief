@@ -1,5 +1,8 @@
 import { randomBytes } from "crypto";
 import { sql, type VercelPoolClient } from "@vercel/postgres";
+import { parseDurationToSeconds } from "./chapters";
+import { fetchYouTubeVideoFacts } from "./video-facts";
+import { storableVideoFacts } from "./storable-video-facts";
 
 export type SummaryStatus = "pending" | "ready" | "failed";
 
@@ -9,6 +12,13 @@ export interface CollectionItem {
   startSec: number | null;
   endSec: number | null;
   videoTitle: string | null;
+  /**
+   * Runtime of the whole source video in seconds, independent of the clip's
+   * own bounds. `null` when it has never been established (a lookup failed, or
+   * the video has no fixed length). Readers that total, position, or scale
+   * entries against each other need it and must handle its absence.
+   */
+  durationSec: number | null;
   summary: string | null;
   summaryStatus: SummaryStatus;
   position: number;
@@ -68,6 +78,7 @@ interface CollectionItemRow {
   startSec: number | null;
   endSec: number | null;
   videoTitle: string | null;
+  durationSec: number | null;
   summary: string | null;
   summaryStatus: SummaryStatus;
   position: number;
@@ -182,6 +193,7 @@ function toCollectionItem(row: CollectionItemRow): CollectionItem {
     startSec: row.startSec,
     endSec: row.endSec,
     videoTitle: row.videoTitle,
+    durationSec: row.durationSec,
     summary: row.summary,
     summaryStatus: row.summaryStatus,
     position: row.position,
@@ -195,15 +207,111 @@ async function collectionSlugExists(slug: string): Promise<boolean> {
   return result.rows[0]?.exists ?? false;
 }
 
-async function getSnapshotVideoTitle(userId: string, videoId: string): Promise<string | null> {
-  const result = await sql<{ title: string }>`
-    SELECT title
+/**
+ * What a collection item records about the video it points at, beyond the ID
+ * itself. Fields are independently nullable and stored verbatim, so a partial
+ * answer still saves the row.
+ */
+export interface ResolvedVideoFacts {
+  title: string | null;
+  durationSec: number | null;
+}
+
+/**
+ * Resolves the stored facts for a video a collection item points at. Every
+ * field it cannot establish comes back `null`, which the item stores as-is so
+ * the row still saves.
+ */
+export type VideoFactsResolver = (userId: string, videoId: string) => Promise<ResolvedVideoFacts>;
+
+const NO_VIDEO_FACTS: ResolvedVideoFacts = { title: null, durationSec: null };
+
+/**
+ * Facts drawn from the user's most recent completed brief for this video, if
+ * they have ever briefed it. Only a fallback: a brief is a snapshot from
+ * whenever it was generated, so its title can be stale if the video has since
+ * been retitled. `digests.duration` holds YouTube's ISO 8601 string, which is
+ * parsed here so both sources speak seconds.
+ */
+async function getBriefedVideoFacts(userId: string, videoId: string): Promise<ResolvedVideoFacts> {
+  const result = await sql<{ title: string; duration: string | null }>`
+    SELECT title, duration
     FROM digests
     WHERE user_id = ${userId} AND video_id = ${videoId} AND status = 'completed'
     ORDER BY created_at DESC
     LIMIT 1
   `;
-  return result.rows[0]?.title ?? null;
+  const brief = result.rows[0];
+  if (!brief) return NO_VIDEO_FACTS;
+
+  const durationSec = brief.duration ? parseDurationToSeconds(brief.duration) : 0;
+  return {
+    title: brief.title ?? null,
+    durationSec: durationSec > 0 ? durationSec : null,
+  };
+}
+
+/**
+ * The metadata source for collection items. YouTube is authoritative:
+ * collections accept any video, briefed or not, so asking YouTube is the only
+ * source that answers for the ordinary case. The user's own brief for the same
+ * video is a fallback for when YouTube cannot answer (no API key, quota
+ * exhausted, network fault), since possibly-stale facts still beat showing a
+ * raw video ID with no runtime.
+ *
+ * Title and runtime arrive together from one `fetchMetadata` call, so asking
+ * for both costs no more than asking for the title alone. That call is not
+ * free: it issues a `videos.list` request and then waits on a
+ * `commentThreads.list` request for a pinned comment nothing here reads, so it
+ * spends two quota units where the brief-table lookup it replaced spent none.
+ * The fallback query only runs when that call left a field unanswered, and
+ * fills the missing fields individually.
+ */
+export const resolveCollectionVideoFacts: VideoFactsResolver = async (userId, videoId) => {
+  const live = await fetchYouTubeVideoFacts(videoId);
+  if (live.title !== null && live.durationSec !== null) return live;
+
+  const briefed = await getBriefedVideoFacts(userId, videoId);
+  return {
+    title: live.title ?? briefed.title,
+    durationSec: live.durationSec ?? briefed.durationSec,
+  };
+};
+
+/**
+ * Runs a facts resolver such that no answer of any shape can reach the caller
+ * as a failure. Storing the facts is a nicety; adding or editing the clip is
+ * the user's actual intent, so a metadata fault degrades every field to `null`
+ * and never unwinds the write.
+ *
+ * That covers a resolver that throws and a resolver that returns a value the
+ * columns cannot store. `VideoFactsResolver` is an injectable seam, so its
+ * numeric and textual domain is a promise made by whoever supplies it, not a
+ * guarantee: the persistence boundary enforces it here instead of trusting it.
+ */
+async function resolveVideoFactsSafely(
+  resolve: VideoFactsResolver,
+  userId: string,
+  videoId: string,
+): Promise<ResolvedVideoFacts> {
+  try {
+    return storableVideoFacts(await resolve(userId, videoId));
+  } catch (error) {
+    console.error("[COLLECTIONS] video facts lookup failed:", error);
+    return NO_VIDEO_FACTS;
+  }
+}
+
+/**
+ * Whether this collection is this user's, read without a lock and without the
+ * item join. Cheap enough to run ahead of work that must not be reachable by a
+ * stranger, and never a substitute for the locked check that authorizes a write.
+ */
+async function ownsCollection(userId: string, collectionId: string): Promise<boolean> {
+  const result = await sql<{ id: string }>`
+    SELECT id FROM collections WHERE id = ${collectionId} AND user_id = ${userId}
+  `;
+  return result.rows.length > 0;
 }
 
 async function lockedItemPosition(
@@ -234,6 +342,17 @@ async function getCollectionBase(userId: string, collectionId: string): Promise<
     GROUP BY c.id
   `;
   return result.rows[0] ? toCollection(result.rows[0]) : null;
+}
+
+/**
+ * Fetches one collection the user owns, without its items. Returns null when
+ * the collection does not exist or belongs to someone else.
+ */
+export async function getCollection(
+  userId: string,
+  collectionId: string,
+): Promise<Collection | null> {
+  return getCollectionBase(userId, collectionId);
 }
 
 export async function createCollection(
@@ -286,6 +405,7 @@ export async function getCollectionWithItems(
       start_sec as "startSec",
       end_sec as "endSec",
       video_title as "videoTitle",
+      duration_sec as "durationSec",
       summary,
       summary_status as "summaryStatus",
       position
@@ -397,6 +517,7 @@ export async function getSharedCollectionBySlug(
       start_sec as "startSec",
       end_sec as "endSec",
       video_title as "videoTitle",
+      duration_sec as "durationSec",
       summary,
       summary_status as "summaryStatus",
       position
@@ -411,10 +532,20 @@ export async function addCollectionItem(
   userId: string,
   collectionId: string,
   input: AddCollectionItemInput,
+  resolveVideoFacts: VideoFactsResolver = resolveCollectionVideoFacts,
 ): Promise<CollectionItem | null> {
   validateClipRange(input.startSec, input.endSec);
 
-  const videoTitle = await getSnapshotVideoTitle(userId, input.videoId);
+  // Ownership is checked twice, and both checks earn their place. The locked one
+  // below is the authority on the write. This unlocked one runs first only so a
+  // stranger cannot reach the lookup underneath it: that lookup spends two units
+  // of the YouTube quota the whole app shares, and every signed-in user can name
+  // any collection id. A miss here is a 404 the same as a miss under the lock.
+  if (!(await ownsCollection(userId, collectionId))) return null;
+
+  // Resolved before the transaction opens so the network round trip never runs
+  // while the collection row is locked FOR UPDATE.
+  const facts = await resolveVideoFactsSafely(resolveVideoFacts, userId, input.videoId);
   const summaryStatus: SummaryStatus =
     input.summary === undefined || input.summary === null ? "pending" : "ready";
 
@@ -439,6 +570,7 @@ export async function addCollectionItem(
         start_sec,
         end_sec,
         video_title,
+        duration_sec,
         summary,
         summary_status,
         position
@@ -448,7 +580,8 @@ export async function addCollectionItem(
         ${input.videoId},
         ${input.startSec ?? null},
         ${input.endSec ?? null},
-        ${videoTitle},
+        ${facts.title},
+        ${facts.durationSec},
         ${input.summary ?? null},
         ${summaryStatus},
         COALESCE(MAX(position), 0) + 1
@@ -460,6 +593,7 @@ export async function addCollectionItem(
         start_sec as "startSec",
         end_sec as "endSec",
         video_title as "videoTitle",
+        duration_sec as "durationSec",
         summary,
         summary_status as "summaryStatus",
         position
@@ -493,6 +627,7 @@ export async function getCollectionItem(
       ci.start_sec as "startSec",
       ci.end_sec as "endSec",
       ci.video_title as "videoTitle",
+      ci.duration_sec as "durationSec",
       ci.summary,
       ci.summary_status as "summaryStatus",
       ci.position
@@ -561,6 +696,7 @@ export async function writeGeneratedSummary(
         ci.start_sec as "startSec",
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
+        ci.duration_sec as "durationSec",
         ci.summary,
         ci.summary_status as "summaryStatus",
         ci.position
@@ -580,6 +716,7 @@ export async function writeGeneratedSummary(
         ci.start_sec as "startSec",
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
+        ci.duration_sec as "durationSec",
         ci.summary,
         ci.summary_status as "summaryStatus",
         ci.position
@@ -601,6 +738,7 @@ export async function updateCollectionItem(
   collectionId: string,
   itemId: string,
   input: UpdateCollectionItemInput,
+  resolveVideoFacts: VideoFactsResolver = resolveCollectionVideoFacts,
 ): Promise<CollectionItem | null> {
   const changesPointer =
     input.videoId !== undefined ||
@@ -615,6 +753,37 @@ export async function updateCollectionItem(
   const updateVideoId = input.videoId !== undefined;
   const updateStart = input.startSec !== undefined;
   const updateEnd = input.endSec !== undefined;
+
+  // Resolved before the transaction opens, so the network round trip never runs
+  // while the collection row is locked FOR UPDATE and every other write to the
+  // collection (add, reorder, edit) waits behind it.
+  //
+  // The stored facts describe the video the item points at, so a lookup is only
+  // worth spending when that video actually changes. The edit dialog resends the
+  // current videoId whenever the author touches the clip's bounds, so gating on
+  // `input.videoId !== undefined` alone would re-resolve (and on a failed
+  // lookup, erase) good facts on every bounds edit. This unlocked read decides
+  // only whether to spend the lookup; the locked row below decides whether to
+  // apply it.
+  let replacementFacts: ResolvedVideoFacts | null = null;
+  if (input.videoId !== undefined) {
+    const existing = await getCollectionItem(userId, collectionId, itemId);
+    if (existing) {
+      // The bounds a partial edit would leave behind, checked here as well as
+      // under the lock below. A single-field edit passes request validation with
+      // nothing to compare against, so the stored bound is what makes it valid
+      // or not, and this row already carries it. Failing now costs a scoped
+      // local read; failing under the lock costs the lookup first.
+      validateClipRange(
+        updateStart ? input.startSec ?? null : existing.startSec,
+        updateEnd ? input.endSec ?? null : existing.endSec,
+      );
+
+      if (existing.videoId !== input.videoId) {
+        replacementFacts = await resolveVideoFactsSafely(resolveVideoFacts, userId, input.videoId);
+      }
+    }
+  }
 
   const client = await sql.connect();
   try {
@@ -637,6 +806,7 @@ export async function updateCollectionItem(
         ci.start_sec as "startSec",
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
+        ci.duration_sec as "durationSec",
         ci.summary,
         ci.summary_status as "summaryStatus",
         ci.position
@@ -673,9 +843,13 @@ export async function updateCollectionItem(
       position = midpointPosition(afterPosition, beforePosition);
     }
 
-    const newVideoTitle = changesPointer
-      ? await getSnapshotVideoTitle(userId, input.videoId ?? current.videoId)
-      : null;
+    // The locked row is the authority on whether the video is really changing,
+    // so the pre-resolved facts are applied only when it agrees. When it does
+    // not (another writer moved this item between the unlocked read and the
+    // lock), `replacementFacts` describes a different video than the one being
+    // stored, and no facts is the honest record rather than that writer's.
+    const refreshesFacts = input.videoId !== undefined && input.videoId !== current.videoId;
+    const newFacts = refreshesFacts ? (replacementFacts ?? NO_VIDEO_FACTS) : NO_VIDEO_FACTS;
 
     const result = await client.sql<CollectionItemRow>`
       UPDATE collection_items ci
@@ -683,7 +857,8 @@ export async function updateCollectionItem(
         video_id = CASE WHEN ${updateVideoId}::boolean THEN ${input.videoId ?? null}::varchar ELSE ci.video_id END,
         start_sec = CASE WHEN ${updateStart}::boolean THEN ${input.startSec ?? null}::int ELSE ci.start_sec END,
         end_sec = CASE WHEN ${updateEnd}::boolean THEN ${input.endSec ?? null}::int ELSE ci.end_sec END,
-        video_title = CASE WHEN ${changesPointer}::boolean THEN ${newVideoTitle}::text ELSE ci.video_title END,
+        video_title = CASE WHEN ${refreshesFacts}::boolean THEN ${newFacts.title}::text ELSE ci.video_title END,
+        duration_sec = CASE WHEN ${refreshesFacts}::boolean THEN ${newFacts.durationSec}::int ELSE ci.duration_sec END,
         summary = CASE
           WHEN ${changesPointer}::boolean THEN NULL
           WHEN ${changesSummary}::boolean THEN ${input.summary ?? null}::text
@@ -708,6 +883,7 @@ export async function updateCollectionItem(
         ci.start_sec as "startSec",
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
+        ci.duration_sec as "durationSec",
         ci.summary,
         ci.summary_status as "summaryStatus",
         ci.position

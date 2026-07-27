@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import {
+  getCollection,
   getCollectionItem,
   writeGeneratedSummary,
   type CollectionItem,
@@ -53,8 +54,13 @@ export async function POST(
 
     const { id, itemId } = await params;
 
-    const item = await getCollectionItem(user.id, id, itemId);
-    if (!item) {
+    // The collection's own title and description are prompt context, not a
+    // permission check, so both reads run together rather than in sequence.
+    const [item, collection] = await Promise.all([
+      getCollectionItem(user.id, id, itemId),
+      getCollection(user.id, id),
+    ]);
+    if (!item || !collection) {
       return NextResponse.json({ error: "Collection item not found" }, { status: 404 });
     }
 
@@ -97,6 +103,7 @@ export async function POST(
         transcriptText,
         rangeSeconds,
         ...(item.videoTitle ? { videoTitle: item.videoTitle } : {}),
+        collection: { title: collection.title, description: collection.description },
       });
     } catch (error) {
       console.error("[SUMMARIZE ITEM] gateway threw:", error);

@@ -26,7 +26,7 @@ import {
 } from "@brief/core";
 import type { OpenRouterClient } from "./openrouter-client";
 import type { UsageLedger } from "./usage-ledger";
-import { buildSummaryPrompt } from "./summary-prompt";
+import { buildSummaryPrompt, type SummaryCollectionContext } from "./summary-prompt";
 
 // Mirrored from `packages/core/src/frames/vision.ts` for Phase 2. The CLI
 // keeps its copy until Phase 4 routes the frames pipeline through this
@@ -84,13 +84,16 @@ export type DescribeInput = ClassifyInput;
 /**
  * One clip's summarization request. `transcriptText` is the transcript already
  * sliced to the clip's range; `rangeSeconds` is the range length (null for a
- * whole-Short item) and drives prompt proportionality.
+ * whole-Short item) and drives prompt proportionality. `collection` carries the
+ * owner's own title and description for the collection the clip sits in, which
+ * is what lets the note say why the clip belongs there.
  */
 export interface SummarizeInput {
   userId: string;
   transcriptText: string;
   rangeSeconds: number | null;
   videoTitle?: string;
+  collection?: SummaryCollectionContext;
   signal?: AbortSignal;
 }
 
@@ -261,6 +264,7 @@ export function createServerLlmGateway(
         rangeSeconds: input.rangeSeconds,
         transcriptText: input.transcriptText,
         ...(input.videoTitle ? { videoTitle: input.videoTitle } : {}),
+        ...(input.collection ? { collection: input.collection } : {}),
       });
 
       const start = Date.now();

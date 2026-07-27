@@ -413,6 +413,49 @@ describe("createServerLlmGateway.summarize", () => {
     }
   });
 
+  it("threads the collection's title and description into the prompt", async () => {
+    const openrouter = createInMemoryOpenRouterClient({
+      respond: () => ({ text: "note", usage: { inputTokens: 10, outputTokens: 2 } }),
+    });
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter,
+    });
+
+    await gateway.summarize({
+      ...summarizeInput,
+      collection: {
+        title: "Retrieval, end to end",
+        description: "The clips I send people who ask how RAG actually works",
+      },
+    });
+
+    // First-party context rides in the system message, out of reach of the
+    // untrusted video title and transcript the user message carries.
+    const systemMessage = openrouter.calls()[0]?.messages.find((m) => m.role === "system");
+    const text = typeof systemMessage?.content === "string" ? systemMessage.content : "";
+    expect(text).toContain("Retrieval, end to end");
+    expect(text).toContain("The clips I send people who ask how RAG actually works");
+  });
+
+  it("omits the collection block when the caller has no collection context", async () => {
+    const openrouter = createInMemoryOpenRouterClient({
+      respond: () => ({ text: "note", usage: { inputTokens: 10, outputTokens: 2 } }),
+    });
+    const gateway = createServerLlmGateway({
+      ledger: createInMemoryUsageLedger(),
+      openrouter,
+    });
+
+    await gateway.summarize(summarizeInput);
+
+    const messages = openrouter.calls()[0]?.messages ?? [];
+    for (const message of messages) {
+      const text = typeof message.content === "string" ? message.content : "";
+      expect(text).not.toContain("Collection title:");
+    }
+  });
+
   it("sends a system+user message pair and scales max output tokens to the range", async () => {
     const openrouter = createInMemoryOpenRouterClient({
       respond: () => ({ text: "ok", usage: { inputTokens: 10, outputTokens: 2 } }),

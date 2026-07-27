@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "migrate": "tsx scripts/migrate.ts",
     "backfill-search": "tsx scripts/backfill-search.ts",
+    "backfill-video-facts": "tsx scripts/backfill-video-facts.ts",
     "query": "tsx scripts/query.ts",
     "inspect-schema": "tsx scripts/inspect-schema.ts",
     "security": "pnpm security:code && pnpm security:secrets",
