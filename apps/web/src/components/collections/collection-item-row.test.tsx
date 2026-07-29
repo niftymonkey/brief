@@ -8,7 +8,7 @@ import type { CollectionItem } from "@/lib/collections";
 
 const VERTICAL = 0.5625;
 
-function renderRow(aspectRatio: number | null, isActive = false): void {
+function renderRow(aspectRatio: number | null, isActive = false, isLast = true): void {
   const item: CollectionItem = {
     id: "item-a",
     videoId: "vid",
@@ -25,7 +25,21 @@ function renderRow(aspectRatio: number | null, isActive = false): void {
     vid: { title: null, channelName: null, durationSec: 90 },
   }).entries;
 
-  render(<CollectionItemRow item={item} entry={entry} isFirst isLast isActive={isActive} />);
+  render(
+    <CollectionItemRow item={item} entry={entry} isFirst isLast={isLast} isActive={isActive} />,
+  );
+}
+
+function marker(): Element | undefined {
+  return [...document.querySelectorAll("span")].find(
+    (node) => node.textContent === "01" && node.className.includes("rounded-full"),
+  );
+}
+
+function rail(): Element | undefined {
+  return [...document.querySelectorAll("span")].find(
+    (node) => node.className.includes("w-px") && node.className.includes("absolute"),
+  );
 }
 
 function thumbnailSrc(): string | null {
@@ -134,31 +148,32 @@ describe("CollectionItemRow active entry", () => {
   });
 
   it("fills the ordinal marker and lights its rail while the sitting is here", () => {
-    renderRow(null, true);
+    renderRow(null, true, false);
 
-    const marker = [...document.querySelectorAll("span")].find(
-      (node) => node.textContent === "01",
-    );
-    expect(marker?.className).toContain("bg-[var(--color-playing)]");
-    expect(marker?.className).toContain("rounded-full");
-
-    const rail = [...document.querySelectorAll("span")].find(
-      (node) => node.className.includes("w-px") && node.className.includes("absolute"),
-    );
-    expect(rail?.className).toContain("bg-[var(--color-playing)]");
+    expect(marker()?.className).toContain("bg-[var(--color-playing)]");
+    expect(marker()?.className).toContain("rounded-full");
+    expect(rail()?.className).toContain("bg-[var(--color-playing)]");
   });
 
   it("leaves the marker and rail unlit on a row the sitting is not on", () => {
-    renderRow(null);
+    renderRow(null, false, false);
 
-    const marker = [...document.querySelectorAll("span")].find(
-      (node) => node.textContent === "01",
-    );
-    expect(marker?.className).toContain("bg-[var(--color-bg-secondary)]");
+    expect(marker()?.className).toContain("bg-[var(--color-bg-secondary)]");
+    expect(rail()?.className).toContain("bg-[var(--color-border)]");
+  });
 
-    const rail = [...document.querySelectorAll("span")].find(
-      (node) => node.className.includes("w-px") && node.className.includes("absolute"),
-    );
-    expect(rail?.className).toContain("bg-[var(--color-border)]");
+  it("hangs the rail below its own marker, so the next one is never lit by it", () => {
+    renderRow(null, true, false);
+
+    // Starts at the marker's lower edge and ends where the next marker begins.
+    expect(rail()?.className).toContain("top-8");
+    expect(rail()?.className).toContain("-bottom-11");
+  });
+
+  it("gives the last row no rail, which is what ends the line", () => {
+    renderRow(null, true, true);
+
+    expect(marker()?.className).toContain("bg-[var(--color-playing)]");
+    expect(rail()).toBeUndefined();
   });
 });

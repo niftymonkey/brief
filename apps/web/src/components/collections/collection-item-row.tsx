@@ -182,34 +182,42 @@ export function CollectionItemRow({
       {/* The ordinal column is the first thing a phone gives up: the list is short
           enough to read in order without it, and the width buys the title a line. */}
       <div className="relative hidden sm:flex flex-col items-start">
-        {/* One rail down the whole list rather than a border per row. It runs
-            through the row's padding into its neighbours, and the marker's own
-            background is what breaks it, so the seam never lands on a boundary.
-            The first and last rows stop it at their marker's centre. */}
-        <span
-          aria-hidden="true"
-          className={cn(
-            "absolute left-[0.875rem] w-px -top-5 -bottom-5 transition-colors duration-300",
-            isActive ? "bg-[var(--color-playing)]" : "bg-[var(--color-border)]",
-            isFirst && "top-3.5",
-            isLast && "bottom-[calc(100%-0.875rem)]",
-          )}
-        />
-        <span
-          className={cn(
-            "relative flex items-center justify-center size-7 rounded-full border",
-            "font-mono text-[0.6875rem] tabular-nums transition-colors duration-300",
-            isActive
-              ? "border-[var(--color-playing)] bg-[var(--color-playing)] text-[var(--color-bg-secondary)]"
-              : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]",
-          )}
-        >
-          {String(entry.ordinal).padStart(2, "0")}
+        {/* Each row owns the rail below its own marker, reaching down through
+            both rows' padding to where the next marker starts. Read end to end
+            they are one line down the list; lit, one is exactly the entry being
+            played, and the next marker stays unlit. The last row owns nothing,
+            which is what ends the line. */}
+        {!isLast && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "absolute left-[0.875rem] w-px top-8 -bottom-11 transition-colors duration-300",
+              isActive ? "bg-[var(--color-playing)]" : "bg-[var(--color-border)]",
+            )}
+          />
+        )}
+        {/* The marker rides the same band as the title and the controls, so the
+            rail's breaks land level with the row they belong to. */}
+        <span className="flex items-center min-h-9">
+          <span
+            className={cn(
+              "relative flex items-center justify-center size-7 rounded-full border",
+              "font-mono text-[0.6875rem] tabular-nums transition-colors duration-300",
+              isActive
+                ? "border-[var(--color-playing)] bg-[var(--color-playing)] text-[var(--color-bg-secondary)]"
+                : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]",
+            )}
+          >
+            {String(entry.ordinal).padStart(2, "0")}
+          </span>
         </span>
       </div>
 
       <div>
-        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        {/* The controls are the tallest thing here, so the row is given their
+            height and everything centres on it. Top-aligning instead leaves the
+            title sitting visibly above its own marker and buttons. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:min-h-9">
           <h3 className="basis-full sm:basis-auto sm:grow min-w-0 font-heading text-base sm:text-[1.0625rem] font-semibold leading-[1.35] tracking-tight text-[var(--color-text-primary)]">
             <a
               href={entry.watchUrl}
