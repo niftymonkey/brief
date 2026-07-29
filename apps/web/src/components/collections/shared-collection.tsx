@@ -106,7 +106,6 @@ export function SharedCollection({
                 key={entry.id}
                 item={items[index]}
                 entry={entry}
-                isFirst={index === 0}
                 isLast={index === entryCount - 1}
                 isActive={entry.id === activeEntryId}
               />

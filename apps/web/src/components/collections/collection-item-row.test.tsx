@@ -26,7 +26,7 @@ function renderRow(aspectRatio: number | null, isActive = false, isLast = true):
   }).entries;
 
   render(
-    <CollectionItemRow item={item} entry={entry} isFirst isLast={isLast} isActive={isActive} />,
+    <CollectionItemRow item={item} entry={entry} isLast={isLast} isActive={isActive} />,
   );
 }
 
