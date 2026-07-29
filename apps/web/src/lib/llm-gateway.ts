@@ -26,7 +26,11 @@ import {
 } from "@brief/core";
 import type { OpenRouterClient } from "./openrouter-client";
 import type { UsageLedger } from "./usage-ledger";
-import { buildSummaryPrompt, type SummaryCollectionContext } from "./summary-prompt";
+import {
+  buildSummaryPrompt,
+  SUMMARY_MAX_OUTPUT_TOKENS,
+  type SummaryCollectionContext,
+} from "./summary-prompt";
 
 // Mirrored from `packages/core/src/frames/vision.ts` for Phase 2. The CLI
 // keeps its copy until Phase 4 routes the frames pipeline through this
@@ -260,7 +264,7 @@ export function createServerLlmGateway(
     },
 
     async summarize(input) {
-      const { system, user, tier } = buildSummaryPrompt({
+      const { system, user } = buildSummaryPrompt({
         rangeSeconds: input.rangeSeconds,
         transcriptText: input.transcriptText,
         ...(input.videoTitle ? { videoTitle: input.videoTitle } : {}),
@@ -276,7 +280,7 @@ export function createServerLlmGateway(
             { role: "system", content: system },
             { role: "user", content: user },
           ],
-          maxOutputTokens: tier.maxOutputTokens,
+          maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
           ...(input.signal ? { signal: input.signal } : {}),
         });
       } catch (err) {

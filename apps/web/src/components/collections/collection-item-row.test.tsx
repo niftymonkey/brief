@@ -8,7 +8,7 @@ import type { CollectionItem } from "@/lib/collections";
 
 const VERTICAL = 0.5625;
 
-function renderRow(aspectRatio: number | null): void {
+function renderRow(aspectRatio: number | null, isActive = false): void {
   const item: CollectionItem = {
     id: "item-a",
     videoId: "vid",
@@ -21,13 +21,28 @@ function renderRow(aspectRatio: number | null): void {
     summaryStatus: "ready",
     position: 0,
   };
-  const [entry] = buildSitting([item], {}).entries;
+  const [entry] = buildSitting([item], {
+    vid: { title: null, channelName: null, durationSec: 90 },
+  }).entries;
 
-  render(<CollectionItemRow item={item} entry={entry} isFirst isLast isActive={false} />);
+  render(<CollectionItemRow item={item} entry={entry} isFirst isLast isActive={isActive} />);
 }
 
 function thumbnailSrc(): string | null {
   return document.querySelector("img")?.getAttribute("src") ?? null;
+}
+
+/** The fixed-width slot the still is centred in, whatever shape the still is. */
+function thumbnailSlot(): HTMLElement {
+  const slot = document.querySelector<HTMLElement>("[style*='--thumb-aspect']");
+  if (!slot) throw new Error("The row is showing no thumbnail slot");
+  return slot;
+}
+
+function thumbnailLink(): HTMLElement {
+  const link = thumbnailSlot().querySelector<HTMLElement>("a");
+  if (!link) throw new Error("The slot is holding no thumbnail");
+  return link;
 }
 
 function failThumbnail(): void {
@@ -68,5 +83,82 @@ describe("CollectionItemRow thumbnail", () => {
 
     failThumbnail();
     expect(document.querySelector("img")).toBeNull();
+  });
+});
+
+// Media queries do not resolve in jsdom, so the phone and desktop sizes are asserted
+// as the classes that carry them.
+describe("CollectionItemRow thumbnail slot", () => {
+  afterEach(cleanup);
+
+  it("gives both shapes the same slot, so the note wraps at the same x", () => {
+    renderRow(VERTICAL);
+    const verticalSlot = thumbnailSlot().className;
+    const verticalStill = thumbnailLink().className;
+    cleanup();
+
+    renderRow(null);
+    const landscapeSlot = thumbnailSlot().className;
+
+    expect(verticalSlot).toBe(landscapeSlot);
+    expect(verticalSlot).toContain("w-19");
+    expect(verticalSlot).toContain("sm:w-26");
+    // Only the still inside the slot changes shape, and it is centred in it.
+    expect(verticalStill).toContain("mx-auto");
+    expect(verticalStill).toContain("w-[calc(3.5rem*var(--thumb-aspect))]");
+    expect(verticalStill).toContain("sm:w-[calc(4.75rem*var(--thumb-aspect))]");
+    expect(thumbnailLink().className).toContain("w-full");
+  });
+});
+
+describe("CollectionItemRow active entry", () => {
+  afterEach(cleanup);
+
+  it("says which entry is playing, and hides the words where they would crush the title", () => {
+    renderRow(null, true);
+
+    const marker = [...document.querySelectorAll("span")].find(
+      (node) => node.textContent === "now playing",
+    );
+    expect(marker).toBeTruthy();
+    expect(marker?.className).toContain("hidden");
+    expect(marker?.className).toContain("sm:inline");
+    expect(document.querySelector('[aria-current="true"]')).toBeTruthy();
+  });
+
+  it("shows the entry's runtime where an inactive row has nothing to announce", () => {
+    renderRow(null);
+
+    expect(document.body.textContent).toContain("1:30");
+    expect(document.body.textContent).not.toContain("now playing");
+  });
+
+  it("fills the ordinal marker and lights its rail while the sitting is here", () => {
+    renderRow(null, true);
+
+    const marker = [...document.querySelectorAll("span")].find(
+      (node) => node.textContent === "01",
+    );
+    expect(marker?.className).toContain("bg-[var(--color-playing)]");
+    expect(marker?.className).toContain("rounded-full");
+
+    const rail = [...document.querySelectorAll("span")].find(
+      (node) => node.className.includes("w-px") && node.className.includes("absolute"),
+    );
+    expect(rail?.className).toContain("bg-[var(--color-playing)]");
+  });
+
+  it("leaves the marker and rail unlit on a row the sitting is not on", () => {
+    renderRow(null);
+
+    const marker = [...document.querySelectorAll("span")].find(
+      (node) => node.textContent === "01",
+    );
+    expect(marker?.className).toContain("bg-[var(--color-bg-secondary)]");
+
+    const rail = [...document.querySelectorAll("span")].find(
+      (node) => node.className.includes("w-px") && node.className.includes("absolute"),
+    );
+    expect(rail?.className).toContain("bg-[var(--color-border)]");
   });
 });

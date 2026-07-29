@@ -50,13 +50,13 @@ describe("SharedCollection playback", () => {
     await settle();
 
     await playFor(12);
-    expect(screen.getByText("Playing 2 of 3")).toBeTruthy();
+    expect(screen.getByText("2 of 3")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Play from the top" }));
     await settle();
     await settle();
 
-    expect(screen.getByText("Playing 1 of 3")).toBeTruthy();
+    expect(screen.getByText("1 of 3")).toBeTruthy();
     expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_A, toSec: 0 }]);
     expect(FakeYouTubePlayer.instances).toHaveLength(2);
   });

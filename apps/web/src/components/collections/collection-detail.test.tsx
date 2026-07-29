@@ -193,14 +193,82 @@ describe("CollectionDetail playback while the collection is edited", () => {
     await startSitting();
 
     await playFor(12);
-    expect(screen.getByText("Playing 2 of 3")).toBeTruthy();
+    expect(screen.getByText("2 of 3")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Play from the top" }));
     await settle();
     await settle();
 
-    expect(screen.getByText("Playing 1 of 3")).toBeTruthy();
+    expect(screen.getByText("1 of 3")).toBeTruthy();
     expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_A, toSec: 0 }]);
     expect(FakeYouTubePlayer.instances).toHaveLength(2);
+  });
+});
+
+describe("CollectionDetail header controls", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ success: true }), { status: 200 }),
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("offers the run's controls beside the collection's own, and only while it runs", async () => {
+    renderDetail();
+
+    expect(screen.queryByRole("button", { name: "Next entry" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Share collection" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit collection" })).toBeTruthy();
+
+    await startSitting();
+
+    expect(screen.getByRole("button", { name: "Stop playback" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Previous entry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next entry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit collection" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete collection" })).toBeTruthy();
+  });
+
+  it("steers the run from the header rather than from the player", async () => {
+    renderDetail();
+    await startSitting();
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next entry" }));
+    await settle();
+    expect(screen.getByText("2 of 3")).toBeTruthy();
+    // The same player carried the sitting across, exactly as an entry boundary would.
+    expect(FakeYouTubePlayer.instances).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous entry" }));
+    await settle();
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+    expect(livePlayer().loads).toEqual([
+      { kind: "load", videoId: VIDEO_A, toSec: 0 },
+      { kind: "load", videoId: VIDEO_B, toSec: 0 },
+      { kind: "load", videoId: VIDEO_A, toSec: 0 },
+    ]);
+  });
+
+  it("takes the player down from the one control that started it", async () => {
+    renderDetail();
+    await startSitting();
+    expect(playerOnScreen()).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop playback" }));
+    await settle();
+
+    expect(playerOnScreen()).toBe(false);
+    expect(FakeYouTubePlayer.instances.every((player) => player.destroyed)).toBe(true);
+    expect(screen.getByRole("button", { name: /Play the whole collection/ })).toBeTruthy();
+    expect(document.querySelectorAll('[aria-current="true"]')).toHaveLength(0);
   });
 });
