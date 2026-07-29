@@ -11,6 +11,7 @@ import {
 interface StoredRow {
   videoTitle: string | null;
   durationSec: number | null;
+  aspectRatio: number | null;
   updatedAt: string;
 }
 
@@ -39,19 +40,28 @@ describe("repairVideoFactsForVideo", () => {
 
   async function seedItem(
     videoId: string,
-    fields: { videoTitle: string | null; durationSec: number | null },
+    fields: { videoTitle: string | null; durationSec: number | null; aspectRatio?: number | null },
   ): Promise<void> {
     const collection = await createCollection(userId, { title: `Backfill ${videoId}` });
     cleanupCollectionIds.push(collection.id);
     await sql`
-      INSERT INTO collection_items (collection_id, video_id, position, video_title, duration_sec)
-      VALUES (${collection.id}, ${videoId}, 1, ${fields.videoTitle}, ${fields.durationSec})
+      INSERT INTO collection_items (
+        collection_id, video_id, position, video_title, duration_sec, aspect_ratio
+      )
+      VALUES (
+        ${collection.id}, ${videoId}, 1, ${fields.videoTitle}, ${fields.durationSec},
+        ${fields.aspectRatio ?? null}
+      )
     `;
   }
 
   async function readItem(videoId: string): Promise<StoredRow> {
     const result = await sql<StoredRow>`
-      SELECT video_title as "videoTitle", duration_sec as "durationSec", updated_at as "updatedAt"
+      SELECT
+        video_title as "videoTitle",
+        duration_sec as "durationSec",
+        aspect_ratio as "aspectRatio",
+        updated_at as "updatedAt"
       FROM collection_items
       WHERE video_id = ${videoId}
     `;
@@ -73,11 +83,17 @@ describe("repairVideoFactsForVideo", () => {
     const videoId = videoIdFor("repairs");
     await seedItem(videoId, { videoTitle: null, durationSec: null });
 
-    expect(await repairVideoFactsForVideo(videoId, { title: "Found Title", durationSec: 300 }))
-      .toBe(1);
+    expect(
+      await repairVideoFactsForVideo(videoId, {
+        title: "Found Title",
+        durationSec: 300,
+        aspectRatio: 1.7778,
+      }),
+    ).toBe(1);
     expect(await readItem(videoId)).toMatchObject({
       videoTitle: "Found Title",
       durationSec: 300,
+      aspectRatio: 1.7778,
     });
   });
 
@@ -87,19 +103,35 @@ describe("repairVideoFactsForVideo", () => {
     const videoId = videoIdFor("half");
     await seedItem(videoId, { videoTitle: null, durationSec: null });
 
-    expect(await repairVideoFactsForVideo(videoId, { title: null, durationSec: 600 })).toBe(1);
-    expect(await readItem(videoId)).toMatchObject({ videoTitle: null, durationSec: 600 });
+    expect(
+      await repairVideoFactsForVideo(videoId, {
+        title: null,
+        durationSec: 600,
+        aspectRatio: null,
+      }),
+    ).toBe(1);
+    expect(await readItem(videoId)).toMatchObject({
+      videoTitle: null,
+      durationSec: 600,
+      aspectRatio: null,
+    });
   });
 
   it("reports no repair and leaves the row untouched when it cannot fill the open gap", async () => {
     requireDb();
 
     const videoId = videoIdFor("nofill");
-    await seedItem(videoId, { videoTitle: null, durationSec: 600 });
+    await seedItem(videoId, { videoTitle: null, durationSec: 600, aspectRatio: 1.7778 });
     const before = await readItem(videoId);
 
     // The row's only gap is its title, which this lookup could not name.
-    expect(await repairVideoFactsForVideo(videoId, { title: null, durationSec: 600 })).toBe(0);
+    expect(
+      await repairVideoFactsForVideo(videoId, {
+        title: null,
+        durationSec: 600,
+        aspectRatio: null,
+      }),
+    ).toBe(0);
 
     const after = await readItem(videoId);
     expect(after).toMatchObject({ videoTitle: null, durationSec: 600 });
@@ -112,11 +144,17 @@ describe("repairVideoFactsForVideo", () => {
     const videoId = videoIdFor("noclobber");
     await seedItem(videoId, { videoTitle: "Already Named", durationSec: null });
 
-    expect(await repairVideoFactsForVideo(videoId, { title: "Later Title", durationSec: 120 }))
-      .toBe(1);
+    expect(
+      await repairVideoFactsForVideo(videoId, {
+        title: "Later Title",
+        durationSec: 120,
+        aspectRatio: 0.5625,
+      }),
+    ).toBe(1);
     expect(await readItem(videoId)).toMatchObject({
       videoTitle: "Already Named",
       durationSec: 120,
+      aspectRatio: 0.5625,
     });
   });
 
@@ -132,6 +170,7 @@ describe("repairVideoFactsForVideo", () => {
       await repairVideoFactsForVideo(videoId, {
         title: "Huge Runtime",
         durationSec: 3_599_999_996_400,
+        aspectRatio: 1.7778,
       }),
     ).toBe(1);
     expect(await readItem(videoId)).toMatchObject({
@@ -147,7 +186,11 @@ describe("repairVideoFactsForVideo", () => {
     await seedItem(videoId, { videoTitle: null, durationSec: null });
 
     expect(
-      await repairVideoFactsForVideo(videoId, { title: null, durationSec: 3_599_999_996_400 }),
+      await repairVideoFactsForVideo(videoId, {
+        title: null,
+        durationSec: 3_599_999_996_400,
+        aspectRatio: null,
+      }),
     ).toBe(0);
     expect(await readItem(videoId)).toMatchObject({ videoTitle: null, durationSec: null });
   });
@@ -159,7 +202,11 @@ describe("repairVideoFactsForVideo", () => {
     await seedItem(videoId, { videoTitle: null, durationSec: null });
 
     expect(
-      await repairVideoFactsForVideo(videoId, { title: "Bad\u0000Title", durationSec: 90 }),
+      await repairVideoFactsForVideo(videoId, {
+        title: "Bad\u0000Title",
+        durationSec: 90,
+        aspectRatio: null,
+      }),
     ).toBe(1);
     expect(await readItem(videoId)).toMatchObject({ videoTitle: "BadTitle", durationSec: 90 });
   });
@@ -173,7 +220,99 @@ describe("repairVideoFactsForVideo", () => {
 
     // Two rows carry this video, but the lookup can only name it, and one row
     // is already named: only the other one has a gap this answer can fill.
-    const facts = { title: "Found Title", durationSec: null };
+    const facts = { title: "Found Title", durationSec: null, aspectRatio: null };
+    expect(await countRepairableRows(videoId, facts)).toBe(1);
+    expect(await repairVideoFactsForVideo(videoId, facts)).toBe(1);
+  });
+
+  it("fills a frame shape the lookup answered, on a row that has nothing else missing", async () => {
+    requireDb();
+
+    const videoId = videoIdFor("shape");
+    await seedItem(videoId, { videoTitle: "Named", durationSec: 300, aspectRatio: null });
+
+    expect(
+      await repairVideoFactsForVideo(videoId, {
+        title: null,
+        durationSec: null,
+        aspectRatio: 0.5625,
+      }),
+    ).toBe(1);
+    expect(await readItem(videoId)).toMatchObject({
+      videoTitle: "Named",
+      durationSec: 300,
+      aspectRatio: 0.5625,
+    });
+  });
+
+  it("never overwrites a frame shape another writer already filled", async () => {
+    requireDb();
+
+    const videoId = videoIdFor("shapekeep");
+    await seedItem(videoId, { videoTitle: null, durationSec: null, aspectRatio: 1.3333 });
+
+    expect(
+      await repairVideoFactsForVideo(videoId, {
+        title: "Later Title",
+        durationSec: null,
+        aspectRatio: 1.7778,
+      }),
+    ).toBe(1);
+    expect(await readItem(videoId)).toMatchObject({
+      videoTitle: "Later Title",
+      aspectRatio: 1.3333,
+    });
+  });
+
+  it("reports no repair when the row's only gap is a frame shape the lookup could not answer", async () => {
+    requireDb();
+
+    const videoId = videoIdFor("shapenone");
+    await seedItem(videoId, { videoTitle: "Named", durationSec: 300, aspectRatio: null });
+    const before = await readItem(videoId);
+
+    expect(
+      await repairVideoFactsForVideo(videoId, {
+        title: "Named",
+        durationSec: 300,
+        aspectRatio: null,
+      }),
+    ).toBe(0);
+
+    const after = await readItem(videoId);
+    expect(after).toMatchObject({ aspectRatio: null });
+    expect(after.updatedAt).toEqual(before.updatedAt);
+  });
+
+  it("drops a frame shape the column cannot hold instead of failing the write", async () => {
+    requireDb();
+
+    const videoId = videoIdFor("badshape");
+    await seedItem(videoId, { videoTitle: null, durationSec: null, aspectRatio: null });
+
+    // A ratio divided out of a zero height. The check constraint rejects it and
+    // would take the whole statement down with it.
+    expect(
+      await repairVideoFactsForVideo(videoId, {
+        title: "Kept Title",
+        durationSec: null,
+        aspectRatio: Number.POSITIVE_INFINITY,
+      }),
+    ).toBe(1);
+    expect(await readItem(videoId)).toMatchObject({
+      videoTitle: "Kept Title",
+      aspectRatio: null,
+    });
+  });
+
+  it("counts a frame shape gap the same way the repair fills it", async () => {
+    requireDb();
+
+    const videoId = videoIdFor("shapecount");
+    await seedItem(videoId, { videoTitle: "Named", durationSec: 300, aspectRatio: null });
+    await seedItem(videoId, { videoTitle: "Named", durationSec: 300, aspectRatio: 1.7778 });
+
+    const facts = { title: null, durationSec: null, aspectRatio: 0.5625 };
     expect(await countRepairableRows(videoId, facts)).toBe(1);
     expect(await repairVideoFactsForVideo(videoId, facts)).toBe(1);
   });
@@ -203,11 +342,17 @@ describe("parseArgs", () => {
 });
 
 describe("repairOneVideo", () => {
-  const video = { videoId: "onevideoxx", rowCount: 2, missingTitles: 2, missingDurations: 2 };
+  const video = {
+    videoId: "onevideoxx",
+    rowCount: 2,
+    missingTitles: 2,
+    missingDurations: 2,
+    missingAspectRatios: 2,
+  };
 
   it("returns the rows the write changed", async () => {
     const outcome = await repairOneVideo(video, false, {
-      resolve: async () => ({ facts: { title: "Named", durationSec: 120 } }),
+      resolve: async () => ({ facts: { title: "Named", durationSec: 120, aspectRatio: 1.7778 } }),
       count: async () => {
         throw new Error("the counter belongs to the dry run only");
       },
@@ -215,14 +360,14 @@ describe("repairOneVideo", () => {
     });
     expect(outcome).toEqual({
       kind: "repaired",
-      facts: { title: "Named", durationSec: 120 },
+      facts: { title: "Named", durationSec: 120, aspectRatio: 1.7778 },
       rowsUpdated: 2,
     });
   });
 
   it("turns a failed write into an unresolved video instead of ending the run", async () => {
     const outcome = await repairOneVideo(video, false, {
-      resolve: async () => ({ facts: { title: "Named", durationSec: 120 } }),
+      resolve: async () => ({ facts: { title: "Named", durationSec: 120, aspectRatio: 1.7778 } }),
       count: async () => {
         throw new Error("the counter belongs to the dry run only");
       },
@@ -237,7 +382,7 @@ describe("repairOneVideo", () => {
   it("does not write at all in a dry run", async () => {
     let writes = 0;
     const outcome = await repairOneVideo(video, true, {
-      resolve: async () => ({ facts: { title: "Named", durationSec: 120 } }),
+      resolve: async () => ({ facts: { title: "Named", durationSec: 120, aspectRatio: 1.7778 } }),
       count: async () => 2,
       write: async () => {
         writes += 1;
@@ -247,7 +392,7 @@ describe("repairOneVideo", () => {
     expect(writes).toBe(0);
     expect(outcome).toEqual({
       kind: "repaired",
-      facts: { title: "Named", durationSec: 120 },
+      facts: { title: "Named", durationSec: 120, aspectRatio: 1.7778 },
       rowsUpdated: 2,
     });
   });
@@ -255,7 +400,7 @@ describe("repairOneVideo", () => {
   it("reports the counted rows in a dry run, not every row for the video", async () => {
     let writes = 0;
     const outcome = await repairOneVideo(video, true, {
-      resolve: async () => ({ facts: { title: "Named", durationSec: null } }),
+      resolve: async () => ({ facts: { title: "Named", durationSec: null, aspectRatio: null } }),
       count: async () => 1,
       write: async () => {
         writes += 1;
@@ -265,14 +410,14 @@ describe("repairOneVideo", () => {
     expect(writes).toBe(0);
     expect(outcome).toEqual({
       kind: "repaired",
-      facts: { title: "Named", durationSec: null },
+      facts: { title: "Named", durationSec: null, aspectRatio: null },
       rowsUpdated: 1,
     });
   });
 
   it("turns a failed count into an unresolved video instead of ending the dry run", async () => {
     const outcome = await repairOneVideo(video, true, {
-      resolve: async () => ({ facts: { title: "Named", durationSec: 120 } }),
+      resolve: async () => ({ facts: { title: "Named", durationSec: 120, aspectRatio: 1.7778 } }),
       count: async () => {
         throw new Error("terminating connection due to administrator command");
       },

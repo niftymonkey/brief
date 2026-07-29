@@ -2,16 +2,16 @@
 /**
  * Collection Item Video Facts Repair
  *
- * Fills in `collection_items.video_title` and `collection_items.duration_sec`
- * for rows that still have none, by reading each video's current title and
- * runtime from YouTube.
+ * Fills in `collection_items.video_title`, `collection_items.duration_sec` and
+ * `collection_items.aspect_ratio` for rows that still have none, by reading each
+ * video's current title, runtime and frame shape from YouTube.
  *
- * One tool for both fields because one YouTube response carries both: splitting
- * the repair in two would double the cost of learning the same facts. That cost
- * is two quota units per video, not one, because the shared `fetchMetadata` also
- * requests a pinned comment this repair never reads. Each field is repaired
- * independently, so a video that answers with a runtime but no title still heals
- * half the row.
+ * One tool for all three fields because one YouTube response carries all three:
+ * splitting the repair up would multiply the cost of learning the same facts.
+ * That cost is two quota units per video, not one, because the shared
+ * `fetchMetadata` also requests a pinned comment this repair never reads. Each
+ * field is repaired independently, so a video that answers with a runtime but no
+ * title still heals part of the row.
  *
  * This is a standing repair tool, not a one-shot migration. Facts are only
  * resolved when an item is created or its video changes, so any lookup that
@@ -42,6 +42,7 @@ export interface PendingVideo {
   rowCount: number;
   missingTitles: number;
   missingDurations: number;
+  missingAspectRatios: number;
 }
 
 interface RepairedVideo extends PendingVideo {
@@ -56,6 +57,7 @@ interface UnresolvedVideo extends PendingVideo {
 interface RemainingGaps {
   missingTitles: number;
   missingDurations: number;
+  missingAspectRatios: number;
 }
 
 export type ParsedArgs = { ok: true; isDryRun: boolean } | { ok: false; error: string };
@@ -98,10 +100,10 @@ async function resolveFacts(
 ): Promise<{ facts: YouTubeVideoFacts } | { reason: string }> {
   try {
     const facts = storableVideoFacts(await fetchYouTubeVideoFacts(videoId));
-    if (facts.title === null && facts.durationSec === null) {
+    if (facts.title === null && facts.durationSec === null && facts.aspectRatio === null) {
       return {
         reason:
-          "YouTube returned no storable title and no storable runtime (video may be private, deleted, live, or the API refused the request)",
+          "YouTube returned no storable title, runtime or frame shape (video may be private, deleted, live, or the API refused the request)",
       };
     }
     return { facts };
@@ -141,11 +143,16 @@ export async function repairVideoFactsForVideo(
           WHEN duration_sec IS NULL THEN ${facts.durationSec}::int
           ELSE duration_sec
         END,
+        aspect_ratio = CASE
+          WHEN aspect_ratio IS NULL THEN ${facts.aspectRatio}::double precision
+          ELSE aspect_ratio
+        END,
         updated_at = NOW()
     WHERE video_id = ${videoId}
       AND (
         (video_title IS NULL AND ${facts.title}::text IS NOT NULL)
         OR (duration_sec IS NULL AND ${facts.durationSec}::int IS NOT NULL)
+        OR (aspect_ratio IS NULL AND ${facts.aspectRatio}::double precision IS NOT NULL)
       )
   `;
   return result.rowCount ?? 0;
@@ -158,9 +165,10 @@ export async function repairVideoFactsForVideo(
  * The predicate is the repair's own WHERE clause, and the facts are reduced the
  * same way before it runs, so the number is the write's number rather than an
  * estimate. Neither the video's row count nor any arithmetic over
- * `missingTitles` and `missingDurations` can stand in for it: a lookup that can
- * only fill one of the two fields leaves every row whose gap is the other one
- * untouched, and the overlap between the two gap counts is not known here.
+ * `missingTitles`, `missingDurations` and `missingAspectRatios` can stand in for
+ * it: a lookup that can only fill some of the fields leaves every row whose gaps
+ * are the others untouched, and the overlap between the gap counts is not known
+ * here.
  */
 export async function countRepairableRows(
   videoId: string,
@@ -174,6 +182,7 @@ export async function countRepairableRows(
       AND (
         (video_title IS NULL AND ${facts.title}::text IS NOT NULL)
         OR (duration_sec IS NULL AND ${facts.durationSec}::int IS NOT NULL)
+        OR (aspect_ratio IS NULL AND ${facts.aspectRatio}::double precision IS NOT NULL)
       )
   `;
   return result.rows[0]?.count ?? 0;
@@ -239,6 +248,7 @@ function describeFacts(facts: YouTubeVideoFacts): string {
   const parts: string[] = [];
   parts.push(facts.title === null ? "no title" : `title "${facts.title}"`);
   parts.push(facts.durationSec === null ? "no runtime" : `runtime ${facts.durationSec}s`);
+  parts.push(facts.aspectRatio === null ? "no frame shape" : `frame shape ${facts.aspectRatio}`);
   return parts.join(", ");
 }
 
@@ -246,10 +256,11 @@ async function countRemainingGaps(): Promise<RemainingGaps> {
   const result = await sql<RemainingGaps>`
     SELECT
       COUNT(*) FILTER (WHERE video_title IS NULL)::int as "missingTitles",
-      COUNT(*) FILTER (WHERE duration_sec IS NULL)::int as "missingDurations"
+      COUNT(*) FILTER (WHERE duration_sec IS NULL)::int as "missingDurations",
+      COUNT(*) FILTER (WHERE aspect_ratio IS NULL)::int as "missingAspectRatios"
     FROM collection_items
   `;
-  return result.rows[0] ?? { missingTitles: 0, missingDurations: 0 };
+  return result.rows[0] ?? { missingTitles: 0, missingDurations: 0, missingAspectRatios: 0 };
 }
 
 async function runBackfill() {
@@ -303,9 +314,10 @@ async function runBackfill() {
         video_id as "videoId",
         COUNT(*)::int as "rowCount",
         COUNT(*) FILTER (WHERE video_title IS NULL)::int as "missingTitles",
-        COUNT(*) FILTER (WHERE duration_sec IS NULL)::int as "missingDurations"
+        COUNT(*) FILTER (WHERE duration_sec IS NULL)::int as "missingDurations",
+        COUNT(*) FILTER (WHERE aspect_ratio IS NULL)::int as "missingAspectRatios"
       FROM collection_items
-      WHERE video_title IS NULL OR duration_sec IS NULL
+      WHERE video_title IS NULL OR duration_sec IS NULL OR aspect_ratio IS NULL
       GROUP BY video_id
       ORDER BY video_id
     `;
@@ -314,14 +326,16 @@ async function runBackfill() {
     const rowsConsidered = pending.reduce((total, video) => total + video.rowCount, 0);
 
     console.log(
-      `Before: ${before.missingTitles} row(s) missing a title, ${before.missingDurations} missing a runtime`
+      `Before: ${before.missingTitles} row(s) missing a title, ${before.missingDurations} missing a runtime, ${before.missingAspectRatios} missing a frame shape`
     );
     console.log(
       `Found ${rowsConsidered} incomplete row(s) across ${pending.length} distinct video id(s)\n`
     );
 
     if (pending.length === 0) {
-      console.log("Nothing to repair. Every collection item has a title and a runtime.\n");
+      console.log(
+        "Nothing to repair. Every collection item has a title, a runtime and a frame shape.\n"
+      );
       process.exit(0);
     }
 
@@ -378,6 +392,9 @@ async function runBackfill() {
     );
     console.log(
       `  Runtimes missing:  ${before.missingDurations} -> ${after.missingDurations}${isDryRun ? " (unchanged, dry run)" : ""}`
+    );
+    console.log(
+      `  Shapes missing:    ${before.missingAspectRatios} -> ${after.missingAspectRatios}${isDryRun ? " (unchanged, dry run)" : ""}`
     );
 
     if (unresolved.length > 0) {

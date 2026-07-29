@@ -4,7 +4,8 @@
  * `YouTubeVideoFacts` describes what a lookup answered, not what the columns
  * can hold. Those are different domains: YouTube reports the runtime of
  * "PT999999999H" as a number far past INTEGER's ceiling, a title can carry a
- * byte Postgres refuses to encode, and an injectable resolver is only as
+ * byte Postgres refuses to encode, a frame shape divided out of absent
+ * dimensions is not a number at all, and an injectable resolver is only as
  * well-behaved as whoever supplied it. Interpolating any of those straight into
  * a statement turns a metadata answer into a failed write.
  *
@@ -45,10 +46,24 @@ export function storableTitle(title: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/** Reduces both fields of a lookup's answer, independently. */
+/**
+ * Reduces a frame shape to a ratio the column can hold, or to `null`.
+ *
+ * Non-positive and non-finite ratios fail the aspect_ratio check constraint,
+ * and a NaN or an Infinity describes no shape a reader could render. Null is
+ * the honest answer for all of them: it means the shape is unknown, which every
+ * reader already handles, rather than a shape the video does not have.
+ */
+export function storableAspectRatio(aspectRatio: unknown): number | null {
+  if (typeof aspectRatio !== "number" || !Number.isFinite(aspectRatio)) return null;
+  return aspectRatio > 0 ? aspectRatio : null;
+}
+
+/** Reduces every field of a lookup's answer, independently. */
 export function storableVideoFacts(facts: YouTubeVideoFacts): YouTubeVideoFacts {
   return {
     title: storableTitle(facts.title),
     durationSec: storableDurationSec(facts.durationSec),
+    aspectRatio: storableAspectRatio(facts.aspectRatio),
   };
 }

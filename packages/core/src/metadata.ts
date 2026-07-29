@@ -7,6 +7,60 @@ import type {
   VideoMetadata,
 } from "./types";
 
+/**
+ * The width `videos.list` is asked to size the embed player to.
+ *
+ * YouTube populates `player.embedWidth` and `player.embedHeight` only when the
+ * request supplies a `maxWidth` or `maxHeight`, so this parameter is what turns
+ * the `player` part into a source of real frame dimensions rather than just an
+ * iframe snippet. Requesting it costs nothing: `videos.list` is billed at one
+ * quota unit per call however many parts it names.
+ */
+const PLAYER_MAX_WIDTH = 8192;
+
+/**
+ * Decimal places kept on a derived aspect ratio.
+ *
+ * The embed dimensions are whole pixels YouTube already scaled to the requested
+ * width, so digits past this are an artifact of that scaling rather than
+ * information about the video. Four places resolve every shape a caller cares
+ * to tell apart (0.5625 for a Short, 1.3333 for 4:3, 1.7778 for 16:9) and read
+ * back out of a database as the numbers they were stored as.
+ */
+const ASPECT_RATIO_PRECISION = 4;
+
+/**
+ * Reads one reported embed dimension as a positive number of pixels.
+ *
+ * The API serialises these as JSON strings, so a string is the ordinary case
+ * and a number is accepted alongside it. Accepts `unknown` because this is the
+ * boundary with a third-party response: the declared type says what YouTube is
+ * supposed to send, not what arrives.
+ */
+function positiveDimension(value: unknown): number | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const pixels = Number(value);
+  return Number.isFinite(pixels) && pixels > 0 ? pixels : null;
+}
+
+/**
+ * Derives a video's frame shape as width divided by height, or `null` when
+ * YouTube did not report dimensions for it.
+ *
+ * A number rather than a vertical/landscape flag, because 4:3 archive footage
+ * is neither and a flag would have to file it under one of the two. Both
+ * dimensions must be positive for a ratio to exist, which is also what keeps a
+ * reported height of zero from dividing out to Infinity.
+ */
+function deriveAspectRatio(player: youtube_v3.Schema$VideoPlayer | undefined): number | null {
+  const width = positiveDimension(player?.embedWidth);
+  const height = positiveDimension(player?.embedHeight);
+  if (width === null || height === null) return null;
+
+  const factor = 10 ** ASPECT_RATIO_PRECISION;
+  return Math.round((width / height) * factor) / factor;
+}
+
 export async function fetchMetadata(
   input: string,
   opts: MetadataOptions
@@ -26,7 +80,8 @@ export async function fetchMetadata(
   try {
     response = await client.videos.list({
       id: [videoId],
-      part: ["snippet", "contentDetails"],
+      part: ["snippet", "contentDetails", "player"],
+      maxWidth: PLAYER_MAX_WIDTH,
     });
   } catch (err) {
     return mapError(err);
@@ -52,6 +107,7 @@ export async function fetchMetadata(
     duration: contentDetails?.duration ?? "PT0S",
     publishedAt: snippet?.publishedAt ?? new Date().toISOString(),
     description: snippet?.description ?? "",
+    aspectRatio: deriveAspectRatio(video.player),
   };
 
   const pinnedComment = await fetchPinnedComment(client, videoId);

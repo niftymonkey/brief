@@ -34,7 +34,11 @@ function expectCollectionItem(item: CollectionItem | null): CollectionItem {
  * keeps the suite off the YouTube API. Resolution itself is exercised in the
  * "collection item video facts" block below, which injects its own resolvers.
  */
-const noFacts: VideoFactsResolver = async () => ({ title: null, durationSec: null });
+const noFacts: VideoFactsResolver = async () => ({
+  title: null,
+  durationSec: null,
+  aspectRatio: null,
+});
 
 describe("midpointPosition", () => {
   it("uses an append-style first position with no neighbors", () => {
@@ -501,8 +505,18 @@ describe("collection item video facts", () => {
     }
   }
 
-  function resolverReturning(facts: ResolvedVideoFacts): VideoFactsResolver {
-    return vi.fn(async () => facts);
+  /**
+   * A resolver that answers with the named facts and `null` for every field the
+   * case under test does not care about, so each test states only the facts its
+   * assertion turns on.
+   */
+  function resolverReturning(facts: Partial<ResolvedVideoFacts>): VideoFactsResolver {
+    return vi.fn(async () => ({
+      title: null,
+      durationSec: null,
+      aspectRatio: null,
+      ...facts,
+    }));
   }
 
   afterAll(async () => {
@@ -591,12 +605,16 @@ describe("collection item video facts", () => {
         userId,
         collection.id,
         { videoId: "boundsxxxxx", startSec: 10, endSec: 40 },
-        resolverReturning({ title: "Stored Title", durationSec: 900 }),
+        resolverReturning({ title: "Stored Title", durationSec: 900, aspectRatio: 0.5625 }),
       ),
     );
-    expect(item).toMatchObject({ videoTitle: "Stored Title", durationSec: 900 });
+    expect(item).toMatchObject({
+      videoTitle: "Stored Title",
+      durationSec: 900,
+      aspectRatio: 0.5625,
+    });
 
-    const resolve = resolverReturning({ title: null, durationSec: null });
+    const resolve = resolverReturning({ title: null, durationSec: null, aspectRatio: null });
     const edited = expectCollectionItem(
       await updateCollectionItem(
         userId,
@@ -607,7 +625,11 @@ describe("collection item video facts", () => {
       ),
     );
 
-    expect(edited).toMatchObject({ videoTitle: "Stored Title", durationSec: 900 });
+    expect(edited).toMatchObject({
+      videoTitle: "Stored Title",
+      durationSec: 900,
+      aspectRatio: 0.5625,
+    });
     expect(resolve).not.toHaveBeenCalled();
   });
 
@@ -622,11 +644,11 @@ describe("collection item video facts", () => {
         userId,
         collection.id,
         { videoId: "resentxxxxx", startSec: 5 },
-        resolverReturning({ title: "Stored Title", durationSec: 1200 }),
+        resolverReturning({ title: "Stored Title", durationSec: 1200, aspectRatio: 0.5625 }),
       ),
     );
 
-    const resolve = resolverReturning({ title: null, durationSec: null });
+    const resolve = resolverReturning({ title: null, durationSec: null, aspectRatio: null });
     const edited = expectCollectionItem(
       await updateCollectionItem(
         userId,
@@ -640,13 +662,14 @@ describe("collection item video facts", () => {
     expect(edited).toMatchObject({
       videoTitle: "Stored Title",
       durationSec: 1200,
+      aspectRatio: 0.5625,
       startSec: 12,
       endSec: 30,
     });
     expect(resolve).not.toHaveBeenCalled();
   });
 
-  it("refreshes the title and runtime when the item points at a genuinely different video", async () => {
+  it("refreshes the title, runtime and frame shape when the item points at a genuinely different video", async () => {
     requireDb();
 
     const collection = await createCollection(userId, { title: "Swapped video" });
@@ -657,12 +680,17 @@ describe("collection item video facts", () => {
         userId,
         collection.id,
         { videoId: "originalxxx" },
-        resolverReturning({ title: "Original Title", durationSec: 300 }),
+        resolverReturning({ title: "Original Title", durationSec: 300, aspectRatio: 1.7778 }),
       ),
     );
     expect(item.durationSec).toBe(300);
+    expect(item.aspectRatio).toBe(1.7778);
 
-    const resolve = resolverReturning({ title: "Replacement Title", durationSec: 480 });
+    const resolve = resolverReturning({
+      title: "Replacement Title",
+      durationSec: 480,
+      aspectRatio: 0.5625,
+    });
     const swapped = expectCollectionItem(
       await updateCollectionItem(userId, collection.id, item.id, { videoId: "replacedxxx" }, resolve),
     );
@@ -671,6 +699,7 @@ describe("collection item video facts", () => {
       videoId: "replacedxxx",
       videoTitle: "Replacement Title",
       durationSec: 480,
+      aspectRatio: 0.5625,
     });
     expect(resolve).toHaveBeenCalledWith(userId, "replacedxxx");
   });
@@ -690,7 +719,7 @@ describe("collection item video facts", () => {
     const slowResolve: VideoFactsResolver = async () => {
       await new Promise((resolve) => setTimeout(resolve, lookupMs));
       lookupFinished = true;
-      return { title: "Swapped Title", durationSec: 480 };
+      return { title: "Swapped Title", durationSec: 480, aspectRatio: 0.5625 };
     };
 
     const swap = updateCollectionItem(
@@ -721,6 +750,7 @@ describe("collection item video facts", () => {
       videoId: "lockafterxx",
       videoTitle: "Swapped Title",
       durationSec: 480,
+      aspectRatio: 0.5625,
     });
   }, 30000);
 
@@ -891,6 +921,146 @@ describe("collection item video facts", () => {
     expect(publicView?.items[0].durationSec).toBe(1234);
   });
 
+  it("surfaces the stored frame shape through every collection item read", async () => {
+    requireDb();
+
+    const collection = await createCollection(userId, { title: `Shape reads ${Date.now()}` });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collection.id,
+        { videoId: "shapereadsx" },
+        resolverReturning({ title: "Read My Shape", aspectRatio: 0.5625 }),
+      ),
+    );
+
+    const listed = await getCollectionWithItems(userId, collection.id);
+    expect(listed?.items[0].aspectRatio).toBe(0.5625);
+
+    const single = await getCollectionItem(userId, collection.id, item.id);
+    expect(single?.aspectRatio).toBe(0.5625);
+
+    const summarized = await updateCollectionItem(userId, collection.id, item.id, {
+      summary: "a note",
+    });
+    expect(summarized?.aspectRatio).toBe(0.5625);
+
+    const generated = await writeGeneratedSummary(userId, collection.id, item.id, {
+      status: "failed",
+    });
+    expect(generated?.aspectRatio).toBe(0.5625);
+
+    const shared = await setCollectionShared(userId, collection.id, true);
+    const sharedSlug = shared?.slug;
+    if (!sharedSlug) throw new Error("Expected the shared collection to have a slug");
+    const publicView = await getSharedCollectionBySlug(sharedSlug);
+    expect(publicView?.items[0].aspectRatio).toBe(0.5625);
+  });
+
+  it("reads a row whose frame shape was never established back as unknown everywhere", async () => {
+    requireDb();
+
+    const collection = await createCollection(userId, { title: `Unknown shape ${Date.now()}` });
+    cleanupCollectionIds.push(collection.id);
+
+    // The shape of every row that predates the column: a value was never
+    // written, and no read may turn that into a shape the video does not have.
+    const item = expectCollectionItem(
+      await addCollectionItem(userId, collection.id, { videoId: "noshapexxxx" }, noFacts),
+    );
+    expect(item.aspectRatio).toBeNull();
+
+    const listed = await getCollectionWithItems(userId, collection.id);
+    expect(listed?.items[0].aspectRatio).toBeNull();
+
+    const single = await getCollectionItem(userId, collection.id, item.id);
+    expect(single?.aspectRatio).toBeNull();
+
+    const summarized = await updateCollectionItem(userId, collection.id, item.id, {
+      summary: "a note",
+    });
+    expect(summarized?.aspectRatio).toBeNull();
+
+    const generated = await writeGeneratedSummary(userId, collection.id, item.id, {
+      status: "failed",
+    });
+    expect(generated?.aspectRatio).toBeNull();
+
+    const shared = await setCollectionShared(userId, collection.id, true);
+    const sharedSlug = shared?.slug;
+    if (!sharedSlug) throw new Error("Expected the shared collection to have a slug");
+    const publicView = await getSharedCollectionBySlug(sharedSlug);
+    expect(publicView?.items[0].aspectRatio).toBeNull();
+  });
+
+  it("stores a 4:3 frame shape as itself rather than as landscape or vertical", async () => {
+    requireDb();
+
+    const collection = await createCollection(userId, { title: "Archive footage" });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collection.id,
+        { videoId: "fourbythree" },
+        resolverReturning({ title: "Me at the zoo", aspectRatio: 1.3333 }),
+      ),
+    );
+
+    expect(item.aspectRatio).toBeCloseTo(1.3333, 4);
+    expect(item.aspectRatio).not.toBe(16 / 9);
+  });
+
+  it("stores null instead of a frame shape the column cannot hold, and still saves the item", async () => {
+    requireDb();
+
+    const collection = await createCollection(userId, { title: "Out-of-domain shapes" });
+    cleanupCollectionIds.push(collection.id);
+
+    const unusable = [0, -1.7778, Number.NaN, Number.POSITIVE_INFINITY];
+    for (const [index, aspectRatio] of unusable.entries()) {
+      const item = expectCollectionItem(
+        await addCollectionItem(
+          userId,
+          collection.id,
+          { videoId: `badar${index}xxxxx` },
+          resolverReturning({ title: "Kept Title", aspectRatio }),
+        ),
+      );
+      expect(item).toMatchObject({ videoTitle: "Kept Title", aspectRatio: null });
+    }
+  });
+
+  it("clamps an unusable frame shape on the update path too", async () => {
+    requireDb();
+
+    const collection = await createCollection(userId, { title: "Swap to bad shape" });
+    cleanupCollectionIds.push(collection.id);
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collection.id,
+        { videoId: "shapefromxx" },
+        resolverReturning({ title: "Original Title", aspectRatio: 1.7778 }),
+      ),
+    );
+
+    const swapped = expectCollectionItem(
+      await updateCollectionItem(
+        userId,
+        collection.id,
+        item.id,
+        { videoId: "shapetobadx" },
+        resolverReturning({ title: "New Title", aspectRatio: 0 }),
+      ),
+    );
+    expect(swapped).toMatchObject({ videoTitle: "New Title", aspectRatio: null });
+  });
+
   it("refuses to store a non-positive runtime", async () => {
     requireDb();
 
@@ -903,6 +1073,20 @@ describe("collection item video facts", () => {
         VALUES (${collection.id}, 'zeroruntime', 1, 0)
       `,
     ).rejects.toThrow(/collection_items_duration_sec_check/);
+  });
+
+  it("refuses to store a non-positive frame shape", async () => {
+    requireDb();
+
+    const collection = await createCollection(userId, { title: "Zero shape" });
+    cleanupCollectionIds.push(collection.id);
+
+    await expect(
+      sql`
+        INSERT INTO collection_items (collection_id, video_id, position, aspect_ratio)
+        VALUES (${collection.id}, 'zeroshapexx', 1, 0)
+      `,
+    ).rejects.toThrow(/collection_items_aspect_ratio_check/);
   });
 
   it("falls back to a briefed title and runtime when YouTube yields nothing", async () => {
@@ -926,13 +1110,17 @@ describe("collection item video facts", () => {
     const originalKey = process.env.YOUTUBE_API_KEY;
     delete process.env.YOUTUBE_API_KEY;
     try {
+      // A brief records no frame shape, so the fallback fills the two fields it
+      // has and leaves the shape unknown rather than guessing at one.
       expect(await resolveCollectionVideoFacts(userId, videoId)).toEqual({
         title: briefTitle,
         durationSec: 630,
+        aspectRatio: null,
       });
       expect(await resolveCollectionVideoFacts(userId, "nobriefxxxx")).toEqual({
         title: null,
         durationSec: null,
+        aspectRatio: null,
       });
     } finally {
       if (originalKey !== undefined) process.env.YOUTUBE_API_KEY = originalKey;

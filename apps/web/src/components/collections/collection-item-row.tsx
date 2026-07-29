@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EditItemDialog } from "@/components/collections/edit-item-dialog";
 import { cn } from "@/lib/utils";
 import { formatSeconds } from "@/lib/collection-item-input";
+import { entryAspectRatio, isVerticalAspectRatio } from "@/lib/collection-entries";
 import type { CollectionEntry } from "@/lib/collection-entries";
 import type { CollectionItem } from "@/lib/collections";
 
@@ -49,6 +50,14 @@ const controlClass =
   "text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]";
 
 /**
+ * The thumbnail's shape, published to the CSS as well, because a vertical
+ * thumbnail is sized from a capped height and its width is derived from this.
+ */
+interface ThumbnailStyle extends CSSProperties {
+  "--thumb-aspect": string;
+}
+
+/**
  * One entry of the collection: the ordinal column with its start position, the
  * entry's own title, a mono source line, and the curator's note as body copy with
  * the thumbnail subordinate to it.
@@ -68,11 +77,18 @@ export function CollectionItemRow({
   const [isRemoving, setIsRemoving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(null);
+  const [failedThumbnailUrls, setFailedThumbnailUrls] = useState<readonly string[]>([]);
 
-  // Held as the url that failed rather than a boolean, so swapping the entry to a
+  // Held as the urls that failed rather than a flag, so swapping the entry to a
   // different video shows its thumbnail again without a remount.
-  const thumbnailFailed = failedThumbnailUrl === entry.thumbnailUrl;
+  const thumbnailSrc =
+    [entry.thumbnailUrl, entry.thumbnailFallbackUrl].find(
+      (url): url is string => url !== null && !failedThumbnailUrls.includes(url),
+    ) ?? null;
+
+  const thumbnailAspect = entryAspectRatio(entry.aspectRatio);
+  const isVerticalThumbnail = isVerticalAspectRatio(entry.aspectRatio);
+  const thumbnailStyle: ThumbnailStyle = { "--thumb-aspect": String(thumbnailAspect) };
 
   const hasSummary = item.summary !== null && item.summary.trim().length > 0;
   const isGenerating = item.summaryStatus === "pending" && !hasSummary;
@@ -267,21 +283,28 @@ export function CollectionItemRow({
             rel="noopener noreferrer"
             aria-hidden="true"
             tabIndex={-1}
-            className="group relative block float-none w-full max-w-[14rem] mb-3.5 min-[621px]:float-right min-[621px]:w-34 min-[621px]:mt-1 min-[621px]:mb-3 min-[621px]:ml-6 aspect-video rounded-lg overflow-hidden bg-[var(--color-bg-tertiary)]"
+            style={thumbnailStyle}
+            className={cn(
+              "group relative block float-none mb-3.5 min-[621px]:float-right min-[621px]:mt-1 min-[621px]:mb-3 min-[621px]:ml-6 aspect-[var(--thumb-aspect)] rounded-lg overflow-hidden bg-[var(--color-bg-tertiary)]",
+              isVerticalThumbnail
+                ? // Sized from a capped height so a vertical entry's row stands about
+                  // as tall as a landscape one beside the same amount of text.
+                  "w-[calc(10rem*var(--thumb-aspect))] min-[621px]:w-[calc(7.5rem*var(--thumb-aspect))]"
+                : "w-full max-w-[14rem] min-[621px]:w-34",
+            )}
           >
             <span className="absolute inset-0 flex items-center justify-center font-mono text-[0.625rem] tracking-[0.04em] text-[var(--color-text-tertiary)]">
               {entry.videoId}
             </span>
-            <img
-              src={entry.thumbnailUrl}
-              alt=""
-              loading="lazy"
-              onError={() => setFailedThumbnailUrl(entry.thumbnailUrl)}
-              className={cn(
-                "absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105",
-                thumbnailFailed && "hidden",
-              )}
-            />
+            {thumbnailSrc !== null && (
+              <img
+                src={thumbnailSrc}
+                alt=""
+                loading="lazy"
+                onError={() => setFailedThumbnailUrls((failed) => [...failed, thumbnailSrc])}
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+            )}
           </a>
 
           {isEditingSummary ? (

@@ -77,6 +77,16 @@ export type VideoMetadata = {
   publishedAt: string;
   description: string;
   pinnedComment?: string;
+  /**
+   * The video's frame shape, as width divided by height: 1.7778 for 16:9,
+   * 0.5625 for a vertical Short, 1.3333 for 4:3 archive footage. `null` when
+   * YouTube reported no dimensions for it, which readers should treat as
+   * unknown rather than as any particular shape.
+   *
+   * Optional so consumers that build a `VideoMetadata` from a source with no
+   * frame information at all can leave it off entirely.
+   */
+  aspectRatio?: number | null;
 };
 
 export type MetadataResult =
