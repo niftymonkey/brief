@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, Play, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatSeconds } from "@/lib/collection-item-input";
-import type { CollectionShareState } from "./collection-share-row";
+import type { CollectionShareState } from "./collection-share-popover";
 
 interface CollectionClosingProps {
   totalRuntimeSec: number | null;

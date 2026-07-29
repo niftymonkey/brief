@@ -6,6 +6,7 @@ import {
   type UsageLedger,
 } from "./usage-ledger";
 import { createServerLlmGateway } from "./llm-gateway";
+import { SUMMARY_MAX_OUTPUT_TOKENS } from "./summary-prompt";
 
 const fakeFrame = Buffer.from("not-a-real-png");
 const baseInput = { userId: "user_01", frame: fakeFrame };
@@ -456,7 +457,7 @@ describe("createServerLlmGateway.summarize", () => {
     }
   });
 
-  it("sends a system+user message pair and scales max output tokens to the range", async () => {
+  it("sends a system+user message pair under one runaway guard whatever the range", async () => {
     const openrouter = createInMemoryOpenRouterClient({
       respond: () => ({ text: "ok", usage: { inputTokens: 10, outputTokens: 2 } }),
     });
@@ -470,8 +471,11 @@ describe("createServerLlmGateway.summarize", () => {
 
     const calls = openrouter.calls();
     expect(calls[0]?.messages.map((m) => m.role)).toEqual(["system", "user"]);
-    // A 20s clip must be capped lower than a 20-minute excerpt.
-    expect(calls[0]?.maxOutputTokens).toBeLessThan(calls[1]!.maxOutputTokens);
+    // The prompt's word budget is what makes a note short. The ceiling only
+    // stops a runaway, so a 20s clip and a 20-minute excerpt get the same one,
+    // and it stays clear of the reasoning the model spends before writing.
+    expect(calls[0]?.maxOutputTokens).toBe(SUMMARY_MAX_OUTPUT_TOKENS);
+    expect(calls[1]?.maxOutputTokens).toBe(SUMMARY_MAX_OUTPUT_TOKENS);
   });
 
   it("records one ledger row with op=summarize keyed by userId", async () => {

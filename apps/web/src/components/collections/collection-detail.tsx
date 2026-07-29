@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { CollectionItemRow } from "@/components/collections/collection-item-row"
 import {
   CollectionPlayer,
   type ActiveSitting,
+  type CollectionPlayerHandle,
 } from "@/components/collections/collection-player";
 import { CollectionTransport } from "@/components/collections/collection-transport";
 import { DeleteCollectionButton } from "@/components/collections/delete-collection-button";
@@ -20,8 +21,9 @@ import {
   resolveActiveEntryId,
   type EntryVideoFacts,
 } from "@/lib/collection-entries";
+import type { SittingPosition } from "@/lib/collection-playback";
 import { notifyCollectionsChanged } from "@/lib/collections-events";
-import type { CollectionShareState } from "@/components/collections/collection-share-row";
+import type { CollectionShareState } from "@/components/collections/collection-share-popover";
 import type { CollectionItem, CollectionWithItems } from "@/lib/collections";
 
 interface CollectionDetailProps {
@@ -67,23 +69,25 @@ export function CollectionDetail({
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [activeSitting, setActiveSitting] = useState<ActiveSitting | null>(null);
-  const [playingItemId, setPlayingItemId] = useState<string | null>(null);
+  const [position, setPosition] = useState<SittingPosition | null>(null);
+  /** The run on screen, for the prev and skip controls the header carries for it. */
+  const playerRef = useRef<CollectionPlayerHandle>(null);
 
   const collectionId = collection.id;
 
-  const handlePlayingItemChange = useCallback((itemId: string | null) => {
-    setPlayingItemId(itemId);
+  const handlePositionChange = useCallback((next: SittingPosition | null) => {
+    setPosition(next);
   }, []);
 
   /** Opens a run of the collection, from the top, on the entries as they stand now. */
   const startSitting = useCallback(() => {
-    setPlayingItemId(null);
+    setPosition(null);
     setActiveSitting((previous) => ({ key: (previous?.key ?? 0) + 1, items: [...items] }));
   }, [items]);
 
   const closePlayer = useCallback(() => {
     setActiveSitting(null);
-    setPlayingItemId(null);
+    setPosition(null);
   }, []);
 
   const handleEditCollection = async (nextTitle: string, nextDescription: string | null) => {
@@ -247,13 +251,13 @@ export function CollectionDetail({
   const openSitting = activeSitting !== null && items.length > 0 ? activeSitting : null;
   if (activeSitting !== null && openSitting === null) {
     setActiveSitting(null);
-    setPlayingItemId(null);
+    setPosition(null);
   }
 
   const sitting = buildSitting(items, videoFacts);
   const entryCount = sitting.entries.length;
   const canPlay = entryCount > 0;
-  const activeEntryId = resolveActiveEntryId(sitting.entries, playingItemId);
+  const activeEntryId = resolveActiveEntryId(sitting.entries, position?.itemId ?? null);
   const share: CollectionShareState = {
     isShared,
     shareUrl: slug ? `${siteOrigin}/c/${slug}` : null,
@@ -273,9 +277,23 @@ export function CollectionDetail({
         updatedLabel={updatedLabel}
         sitting={sitting}
         canPlay={canPlay}
-        activeEntryId={activeEntryId}
+        isPlaying={openSitting !== null}
+        position={position}
         onPlay={startSitting}
+        onStop={closePlayer}
+        onPrev={() => playerRef.current?.prev()}
+        onSkip={() => playerRef.current?.skip()}
         share={share}
+        player={
+          openSitting && (
+            <CollectionPlayer
+              key={openSitting.key}
+              ref={playerRef}
+              items={openSitting.items}
+              onPositionChange={handlePositionChange}
+            />
+          )
+        }
         actions={
           editable ? (
             <>
@@ -298,61 +316,44 @@ export function CollectionDetail({
             </>
           ) : undefined
         }
-      />
-
-      {openSitting && (
-        <CollectionPlayer
-          key={openSitting.key}
-          items={openSitting.items}
-          onClose={closePlayer}
-          onCurrentItemChange={handlePlayingItemChange}
-        />
-      )}
-
-      <div className="flex items-baseline justify-between gap-4 mt-11 mb-2 pb-1.5 border-b border-[var(--color-border)]">
-        <span className="font-mono text-xs text-[var(--color-text-tertiary)]">
-          {entryCount === 0
-            ? "no entries yet"
-            : `${entryCount} ${entryCount === 1 ? "entry" : "entries"}, read or watch in order`}
-        </span>
-      </div>
-
-      {entryCount === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-[var(--color-text-secondary)]">No entries yet</p>
-          {editable && (
-            <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">
-              Paste a YouTube URL below to add the first entry.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col">
-          {sitting.entries.map((entry, index) => (
-            <CollectionItemRow
-              key={entry.id}
-              item={items[index]}
-              entry={entry}
-              isFirst={index === 0}
-              isLast={index === entryCount - 1}
-              isActive={entry.id === activeEntryId}
-              controls={
-                editable
-                  ? {
-                      reorderPending,
-                      onReorder: (direction) => handleReorder(index, direction),
-                      onRemove: () => handleRemove(entry.id),
-                      onSummarySave: (summary) => handleSummarySave(entry.id, summary),
-                      onRetrySummary: () => summarizeItem(entry.id),
-                      onSwap: (videoId, startSec, endSec) =>
-                        handleSwap(entry.id, videoId, startSec, endSec),
-                    }
-                  : undefined
-              }
-            />
-          ))}
-        </div>
-      )}
+      >
+        {entryCount === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-[var(--color-text-secondary)]">No entries yet</p>
+            {editable && (
+              <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">
+                Paste a YouTube URL below to add the first entry.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {sitting.entries.map((entry, index) => (
+              <CollectionItemRow
+                key={entry.id}
+                item={items[index]}
+                entry={entry}
+                isFirst={index === 0}
+                isLast={index === entryCount - 1}
+                isActive={entry.id === activeEntryId}
+                controls={
+                  editable
+                    ? {
+                        reorderPending,
+                        onReorder: (direction) => handleReorder(index, direction),
+                        onRemove: () => handleRemove(entry.id),
+                        onSummarySave: (summary) => handleSummarySave(entry.id, summary),
+                        onRetrySummary: () => summarizeItem(entry.id),
+                        onSwap: (videoId, startSec, endSec) =>
+                          handleSwap(entry.id, videoId, startSec, endSec),
+                      }
+                    : undefined
+                }
+              />
+            ))}
+          </div>
+        )}
+      </CollectionTransport>
 
       {editable && (
         <div className="mt-8">

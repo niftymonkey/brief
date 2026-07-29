@@ -245,6 +245,8 @@ export type PlaybackEvent =
   | { kind: "failureAdvance"; generation: number }
   | { kind: "armingTimeout"; generation: number }
   | { kind: "skip" }
+  /** Back one entry, and back to the top of the first one where there is no earlier. */
+  | { kind: "prev" }
   | { kind: "stop" };
 
 export interface PlaybackTransition {
@@ -268,19 +270,45 @@ export function describePlaybackError(code: number): string {
 }
 
 /**
- * The player's one-line position. Before the first item is loaded the sitting has
- * no current item, so the line counts the collection instead of claiming an item
- * is playing.
+ * Where a sitting stands, as the header carrying its controls reads it. The header
+ * lives outside the player, so this is the whole of what the player tells it.
  */
-export function describePlaybackPosition(state: PlaybackState, itemCount: number): string {
-  const noun = itemCount === 1 ? "item" : "items";
-  if (state.status === "done") return `Finished all ${itemCount} ${noun}`;
-  if (state.index < 0) return `${itemCount} ${noun}`;
-  const position = `${Math.min(state.index + 1, itemCount)} of ${itemCount}`;
-  // The failure banner below the player owns the "could not play" wording; the
-  // position line only keeps its place in the collection.
-  if (state.status === "failed") return `Item ${position}`;
-  return `Playing ${position}`;
+export interface SittingPosition {
+  /** The entry on screen, null before the first one starts and once the run is over. */
+  itemId: string | null;
+  /** That entry's 1-based place in the run, null wherever there is no such entry. */
+  ordinal: number | null;
+  /** How many entries the run holds, which is the run's own frozen count. */
+  total: number;
+  isDone: boolean;
+}
+
+/**
+ * Reads the sitting's position off the playback state. A failed item is still the
+ * item on screen: the failure banner owns saying it could not be played, while the
+ * counter only keeps the sitting's place.
+ */
+export function readSittingPosition(
+  state: PlaybackState,
+  items: PlaybackItem[],
+): SittingPosition {
+  const item = state.status === "idle" || state.status === "done" ? null : items[state.index];
+  return {
+    itemId: item?.id ?? null,
+    ordinal: item ? state.index + 1 : null,
+    total: items.length,
+    isDone: state.status === "done",
+  };
+}
+
+/**
+ * The counter the header carries in the slot the byline gives up. A run that has
+ * not put its first entry on screen yet is still opening on the first one, and a
+ * finished run rests on its last.
+ */
+export function describeSittingPosition(position: SittingPosition): string {
+  const place = position.ordinal ?? (position.isDone ? position.total : 1);
+  return `${place} of ${position.total}`;
 }
 
 export function initialPlaybackState(): PlaybackState {
@@ -622,6 +650,14 @@ export function reducePlayback(
         return unchanged(state);
       }
       return advance(state, items);
+    }
+
+    case "prev": {
+      if (state.status === "idle") return unchanged(state);
+      // A finished sitting sits one past its last entry, and the first entry has
+      // nothing before it, so back from the top is a restart of the top.
+      const from = Math.min(state.index, items.length);
+      return loadIndex(state, Math.max(from - 1, 0), items);
     }
 
     case "failureAdvance": {

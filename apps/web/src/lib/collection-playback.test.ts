@@ -9,8 +9,9 @@ import {
   STALL_TIMEOUT_MS,
   THROTTLED_POLL_INTERVAL_MS,
   describePlaybackError,
-  describePlaybackPosition,
+  describeSittingPosition,
   initialPlaybackState,
+  readSittingPosition,
   reducePlayback,
   type PlaybackEffect,
   type PlaybackEvent,
@@ -802,31 +803,98 @@ describe("a zero-length range", () => {
   });
 });
 
-describe("describePlaybackPosition", () => {
-  it("does not claim to be playing an item before the first one loads", () => {
-    expect(describePlaybackPosition(initialPlaybackState(), 3)).toBe("3 items");
+describe("prev", () => {
+  it("goes back to the item before the one on screen", () => {
+    const started = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
+    const back = run([{ kind: "skip" }, { kind: "prev" }], ITEMS, started.state);
+
+    expect(back.state.index).toBe(0);
+    expect(loads(back.effects)).toEqual([1, 0]);
   });
 
-  it("counts the item the player is on", () => {
+  it("restarts the first item rather than falling off the top of the sitting", () => {
+    const started = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
+    const back = run([{ kind: "prev" }], ITEMS, started.state);
+
+    expect(back.state.index).toBe(0);
+    expect(loads(back.effects)).toEqual([0]);
+  });
+
+  it("takes a finished sitting back to the item it ended on", () => {
+    const done = run(
+      [{ kind: "start" }, playing(0.058, "n3V3LZh_r40"), tick(10.003, "n3V3LZh_r40")],
+      [ITEMS[4]],
+    );
+    expect(done.state.status).toBe("done");
+
+    const back = run([{ kind: "prev" }], [ITEMS[4]], done.state);
+    expect(back.state.status).toBe("loading");
+    expect(back.state.index).toBe(0);
+  });
+
+  it("has nothing to go back to before the sitting has started", () => {
+    const { state, effects } = run([{ kind: "prev" }]);
+    expect(state.status).toBe("idle");
+    expect(effects).toEqual([]);
+  });
+});
+
+describe("readSittingPosition", () => {
+  it("names no item before the first one loads", () => {
+    const position = readSittingPosition(initialPlaybackState(), ITEMS);
+    expect(position).toEqual({ itemId: null, ordinal: null, total: 5, isDone: false });
+  });
+
+  it("names the item the player is on", () => {
     const { state } = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
-    expect(describePlaybackPosition(state, ITEMS.length)).toBe("Playing 1 of 5");
+    expect(readSittingPosition(state, ITEMS)).toEqual({
+      itemId: "a",
+      ordinal: 1,
+      total: 5,
+      isDone: false,
+    });
   });
 
-  it("does not claim to be playing the item the failure banner just disowned", () => {
+  it("keeps naming the item the failure banner just disowned", () => {
     const { state } = run([
       { kind: "start" },
       { kind: "playerError", code: 150, videoId: "aqz-KE-bpKQ" },
     ]);
     expect(state.status).toBe("failed");
-    expect(describePlaybackPosition(state, ITEMS.length)).toBe("Item 1 of 5");
+    expect(readSittingPosition(state, ITEMS).ordinal).toBe(1);
   });
 
-  it("reports the finished sitting", () => {
+  it("names no item once the sitting is over", () => {
     const done = run(
       [{ kind: "start" }, playing(0.058, "n3V3LZh_r40"), tick(10.003, "n3V3LZh_r40")],
       [ITEMS[4]],
     );
-    expect(describePlaybackPosition(done.state, 1)).toBe("Finished all 1 item");
+    expect(readSittingPosition(done.state, [ITEMS[4]])).toEqual({
+      itemId: null,
+      ordinal: null,
+      total: 1,
+      isDone: true,
+    });
+  });
+});
+
+describe("describeSittingPosition", () => {
+  it("counts the item the player is on", () => {
+    expect(
+      describeSittingPosition({ itemId: "b", ordinal: 2, total: 5, isDone: false }),
+    ).toBe("2 of 5");
+  });
+
+  it("opens on the first item before the sitting has one on screen", () => {
+    expect(
+      describeSittingPosition({ itemId: null, ordinal: null, total: 5, isDone: false }),
+    ).toBe("1 of 5");
+  });
+
+  it("rests on the last item once the sitting is over", () => {
+    expect(
+      describeSittingPosition({ itemId: null, ordinal: null, total: 5, isDone: true }),
+    ).toBe("5 of 5");
   });
 });
 

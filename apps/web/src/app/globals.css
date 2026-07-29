@@ -106,6 +106,9 @@
   --color-border: oklch(88% 0.012 55);
   --color-border-hover: oklch(80% 0.018 55);
   --color-warning: oklch(75% 0.15 85);
+  /* Marks the entry a sitting is on. Warm gold rather than the terracotta
+     accent, so "playing" reads as its own state instead of as another button. */
+  --color-playing: oklch(62% 0.13 75);
   --shadow-sm: 0 1px 2px oklch(25% 0.015 40 / 0.06);
   --shadow-md: 0 4px 12px oklch(25% 0.015 40 / 0.09);
   --shadow-lg: 0 12px 32px oklch(25% 0.015 40 / 0.14);
@@ -162,6 +165,9 @@
 
   /* Warning for tangents */
   --color-warning: oklch(75% 0.15 85);
+
+  /* Marks the entry a sitting is on. See the light-theme note above. */
+  --color-playing: oklch(80% 0.13 80);
 
   --color-border: oklch(22% 0.018 270);
   --color-border-hover: oklch(30% 0.022 270);

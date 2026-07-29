@@ -3,7 +3,6 @@
 import { useState, type CSSProperties } from "react";
 import {
   ChevronDown,
-  ChevronRight,
   ChevronUp,
   Loader2,
   Pencil,
@@ -90,6 +89,15 @@ export function CollectionItemRow({
   const isVerticalThumbnail = isVerticalAspectRatio(entry.aspectRatio);
   const thumbnailStyle: ThumbnailStyle = { "--thumb-aspect": String(thumbnailAspect) };
 
+  // What the mono slot says when this row is not the one playing: where the
+  // entry starts in its source video, and how long it runs.
+  const restingLabel = [
+    entry.offsetSec !== null ? `at ${formatSeconds(entry.offsetSec)}` : null,
+    entry.durationSec !== null ? formatSeconds(entry.durationSec) : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" / ");
+
   const hasSummary = item.summary !== null && item.summary.trim().length > 0;
   const isGenerating = item.summaryStatus === "pending" && !hasSummary;
   const generationFailed = item.summaryStatus === "failed" && !hasSummary;
@@ -156,35 +164,53 @@ export function CollectionItemRow({
     <section
       id={entry.anchorId}
       aria-current={isActive ? "true" : undefined}
-      className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3.5 py-7.5 min-[621px]:grid-cols-[4.25rem_minmax(0,1fr)] min-[621px]:gap-6 min-[621px]:py-9 border-b border-[var(--color-border)] last:border-b-0 scroll-mt-20"
+      className={cn(
+        "relative grid grid-cols-1 gap-3.5 py-4",
+        "sm:grid-cols-[3.25rem_minmax(0,1fr)] sm:gap-4 sm:py-5",
+        "scroll-mt-20",
+      )}
     >
-      <div className="flex flex-col items-start pt-0.5">
+      {/* A phone has no ordinal column, so the rail cannot mark the sitting there.
+          This is the same mark in the only place a phone has room for it. */}
+      {isActive && (
+        <span
+          aria-hidden="true"
+          className="sm:hidden absolute -left-2 top-1 bottom-1 w-0.5 rounded-full bg-[var(--color-playing)]"
+        />
+      )}
+
+      {/* The ordinal column is the first thing a phone gives up: the list is short
+          enough to read in order without it, and the width buys the title a line. */}
+      <div className="relative hidden sm:flex flex-col items-start">
+        {/* One rail down the whole list rather than a border per row. It runs
+            through the row's padding into its neighbours, and the marker's own
+            background is what breaks it, so the seam never lands on a boundary.
+            The first and last rows stop it at their marker's centre. */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "absolute left-[0.875rem] w-px -top-5 -bottom-5 transition-colors duration-300",
+            isActive ? "bg-[var(--color-playing)]" : "bg-[var(--color-border)]",
+            isFirst && "top-3.5",
+            isLast && "bottom-[calc(100%-0.875rem)]",
+          )}
+        />
         <span
           className={cn(
-            "font-heading text-xl min-[621px]:text-2xl font-light leading-[1.2] tabular-nums",
+            "relative flex items-center justify-center size-7 rounded-full border",
+            "font-mono text-[0.6875rem] tabular-nums transition-colors duration-300",
             isActive
-              ? "text-[var(--color-accent)]"
-              : "text-[var(--color-text-tertiary)]",
+              ? "border-[var(--color-playing)] bg-[var(--color-playing)] text-[var(--color-bg-secondary)]"
+              : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]",
           )}
         >
           {String(entry.ordinal).padStart(2, "0")}
         </span>
-        {entry.offsetSec !== null && (
-          <span className="mt-[0.3125rem] font-mono text-[0.625rem] min-[621px]:text-[0.6875rem] whitespace-nowrap text-[var(--color-text-tertiary)]">
-            at {formatSeconds(entry.offsetSec)}
-          </span>
-        )}
-        {!isLast && (
-          <span
-            aria-hidden="true"
-            className="block w-px grow min-h-6 mt-2.5 ml-[0.55rem] bg-[var(--color-border)]"
-          />
-        )}
       </div>
 
       <div>
         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-          <h3 className="basis-full min-[621px]:basis-auto min-[621px]:grow min-w-0 font-heading text-xl min-[621px]:text-[1.375rem] font-semibold leading-[1.3] tracking-tight text-[var(--color-text-primary)]">
+          <h3 className="basis-full sm:basis-auto sm:grow min-w-0 font-heading text-base sm:text-[1.0625rem] font-semibold leading-[1.35] tracking-tight text-[var(--color-text-primary)]">
             <a
               href={entry.watchUrl}
               target="_blank"
@@ -195,7 +221,21 @@ export function CollectionItemRow({
             </a>
           </h3>
 
-          {controls && (
+          <div className="flex items-center gap-2.5 shrink-0">
+            <span
+              className={cn(
+                "font-mono text-xs whitespace-nowrap",
+                isActive
+                  ? // The lit rail already says which row is playing, so at phone
+                    // width the words go rather than crush the title.
+                    "hidden sm:inline text-[var(--color-playing)]"
+                  : "text-[var(--color-text-tertiary)]",
+              )}
+            >
+              {isActive ? "now playing" : restingLabel}
+            </span>
+
+            {controls && (
             <div className="flex items-center gap-1 shrink-0">
               <Button
                 variant="outline"
@@ -250,62 +290,52 @@ export function CollectionItemRow({
                   <Trash2 className="w-4 h-4" />
                 )}
               </Button>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mt-2 font-mono text-xs text-[var(--color-text-tertiary)]">
-          <span className="inline-flex items-center px-1.5 py-px rounded-sm bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] text-[0.6875rem] tracking-[0.02em]">
-            {entry.kindLabel}
-          </span>
-          {entry.channelName && (
-            <>
-              <span>{entry.channelName}</span>
-              <span className="opacity-50">/</span>
-            </>
-          )}
-          <span>{entry.rangeLabel}</span>
-          {entry.durationSec !== null && (
-            <>
-              <span className="opacity-50">/</span>
-              <span>{formatSeconds(entry.durationSec)}</span>
-            </>
-          )}
-        </div>
-
-        <div className="mt-4.5">
-          {/* The heading link above already names this entry and points at the same
-              video, so this one is a pointing device only and stays out of the
-              accessibility tree and the tab order. */}
-          <a
-            href={entry.watchUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-hidden="true"
-            tabIndex={-1}
+        {/* `flow-root` contains the thumbnail's float, so a note shorter than the
+            still cannot let it escape the row. */}
+        <div className="flow-root mt-2.5">
+          {/* A fixed-width slot with the still centred inside it, so a 9:16 entry and
+              a 16:9 entry both leave the note wrapping at the same x. */}
+          <span
             style={thumbnailStyle}
-            className={cn(
-              "group relative block float-none mb-3.5 min-[621px]:float-right min-[621px]:mt-1 min-[621px]:mb-3 min-[621px]:ml-6 aspect-[var(--thumb-aspect)] rounded-lg overflow-hidden bg-[var(--color-bg-tertiary)]",
-              isVerticalThumbnail
-                ? // Sized from a capped height so a vertical entry's row stands about
-                  // as tall as a landscape one beside the same amount of text.
-                  "w-[calc(10rem*var(--thumb-aspect))] min-[621px]:w-[calc(7.5rem*var(--thumb-aspect))]"
-                : "w-full max-w-[14rem] min-[621px]:w-34",
-            )}
+            className="block float-right w-19 mb-2 ml-4 sm:w-26 sm:ml-5"
           >
-            <span className="absolute inset-0 flex items-center justify-center font-mono text-[0.625rem] tracking-[0.04em] text-[var(--color-text-tertiary)]">
-              {entry.videoId}
-            </span>
-            {thumbnailSrc !== null && (
-              <img
-                src={thumbnailSrc}
-                alt=""
-                loading="lazy"
-                onError={() => setFailedThumbnailUrls((failed) => [...failed, thumbnailSrc])}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-            )}
-          </a>
+            {/* The heading link above already names this entry and points at the same
+                video, so this one is a pointing device only and stays out of the
+                accessibility tree and the tab order. */}
+            <a
+              href={entry.watchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-hidden="true"
+              tabIndex={-1}
+              className={cn(
+                "group relative block mx-auto aspect-[var(--thumb-aspect)] rounded-md sm:rounded-lg overflow-hidden bg-[var(--color-bg-tertiary)]",
+                isVerticalThumbnail
+                  ? // Sized from a capped height so a vertical entry's still stands
+                    // about as tall as the landscape one filling the same slot.
+                    "w-[calc(3.5rem*var(--thumb-aspect))] sm:w-[calc(4.75rem*var(--thumb-aspect))]"
+                  : "w-full",
+              )}
+            >
+              <span className="absolute inset-0 flex items-center justify-center font-mono text-[0.625rem] tracking-[0.04em] text-[var(--color-text-tertiary)]">
+                {entry.videoId}
+              </span>
+              {thumbnailSrc !== null && (
+                <img
+                  src={thumbnailSrc}
+                  alt=""
+                  loading="lazy"
+                  onError={() => setFailedThumbnailUrls((failed) => [...failed, thumbnailSrc])}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              )}
+            </a>
+          </span>
 
           {isEditingSummary ? (
             <div className="space-y-2">
@@ -339,7 +369,7 @@ export function CollectionItemRow({
             </div>
           ) : hasSummary ? (
             <div>
-              <p className="text-base min-[621px]:text-[1.0625rem] leading-[1.7] text-[var(--color-text-secondary)] whitespace-pre-wrap">
+              <p className="text-sm sm:text-[0.9375rem] leading-[1.55] text-[var(--color-text-secondary)] whitespace-pre-wrap">
                 {item.summary}
               </p>
               {controls && (
@@ -399,17 +429,6 @@ export function CollectionItemRow({
               {item.summaryStatus === "failed" ? "Note unavailable" : "No note yet"}
             </p>
           )}
-
-          <a
-            href={entry.watchUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Watch ${entry.title}`}
-            className="clear-both inline-flex items-center gap-1.5 mt-4.5 text-sm font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors"
-          >
-            Watch this entry
-            <ChevronRight className="w-3.5 h-3.5" />
-          </a>
         </div>
 
         {error && (

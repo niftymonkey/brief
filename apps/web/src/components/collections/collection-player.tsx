@@ -1,19 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useRef, useState, type CSSProperties } from "react";
-import { CircleAlert, Loader2, Play, RotateCw, SkipForward, X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Ref,
+} from "react";
+import { CircleAlert, Loader2, Play, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { entryAspectRatio } from "@/lib/collection-entries";
 import { formatRange } from "@/lib/collection-item-input";
 import {
   BOUNDARY_POLL_INTERVAL_MS,
-  describePlaybackPosition,
   initialPlaybackState,
+  readSittingPosition,
   reducePlayback,
   type PlaybackEffect,
   type PlaybackEvent,
   type PlaybackState,
+  type SittingPosition,
 } from "@/lib/collection-playback";
 import { loadYouTubeIframeApi } from "@/lib/youtube-iframe-api";
 
@@ -28,10 +37,24 @@ export interface CollectionPlayerItem {
   aspectRatio: number | null;
 }
 
+/**
+ * The two moves the header carries for a run it does not own. Prev and skip are the
+ * only things outside the player that steer it; starting and stopping a run are the
+ * page's own, because they mount and unmount this component.
+ */
+export interface CollectionPlayerHandle {
+  skip: () => void;
+  prev: () => void;
+}
+
 interface CollectionPlayerProps {
   items: CollectionPlayerItem[];
-  onClose: () => void;
-  onCurrentItemChange?: (itemId: string | null) => void;
+  /**
+   * Where the run stands, reported on every change and as null once the player goes,
+   * so the header's counter and the entries list follow the sitting.
+   */
+  onPositionChange?: (position: SittingPosition | null) => void;
+  ref?: Ref<CollectionPlayerHandle>;
 }
 
 /**
@@ -72,9 +95,8 @@ function frameItem(
 }
 
 /**
- * The frame's shape, published to the CSS as well as applied to the frame, because
- * the two-column layout has to derive the player's own width from it before there is
- * a player box to measure.
+ * The frame's shape, published to the CSS as well as applied to the frame, because a
+ * phone sizes a vertical frame from its own height and derives the width from this.
  */
 interface FrameStyle extends CSSProperties {
   "--frame-aspect": string;
@@ -91,7 +113,7 @@ interface FrameStyle extends CSSProperties {
  * exactly as asked: a `seek` is what lets the reducer recognise a second range of the
  * video already on screen, and turning one into a reload would take that away.
  */
-export function CollectionPlayer({ items, onClose, onCurrentItemChange }: CollectionPlayerProps) {
+export function CollectionPlayer({ items, onPositionChange, ref }: CollectionPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YT.Player | null>(null);
   const stateRef = useRef<PlaybackState>(initialPlaybackState());
@@ -200,6 +222,15 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
   useEffect(() => {
     dispatchRef.current = dispatch;
   }, [dispatch]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      skip: () => dispatch({ kind: "skip" }),
+      prev: () => dispatch({ kind: "prev" }),
+    }),
+    [dispatch],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -321,17 +352,15 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
     };
   }, [clearArmingTimer, loadAttempt]);
 
-  const currentItemId =
-    state.status === "idle" || state.status === "done"
-      ? null
-      : (items[state.index]?.id ?? null);
+  const position = readSittingPosition(state, items);
+  const { itemId, ordinal, total, isDone } = position;
 
   useEffect(() => {
-    onCurrentItemChange?.(currentItemId);
-  }, [currentItemId, onCurrentItemChange]);
+    onPositionChange?.({ itemId, ordinal, total, isDone });
+  }, [itemId, ordinal, total, isDone, onPositionChange]);
 
   const reportPlaybackEnded = useEffectEvent(() => {
-    onCurrentItemChange?.(null);
+    onPositionChange?.(null);
   });
 
   useEffect(() => {
@@ -342,11 +371,9 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
   }, []);
 
   const currentItem = state.index >= 0 ? (items[state.index] ?? null) : null;
-  const isDone = state.status === "done";
   const range = currentItem ? formatRange(currentItem.startSec, currentItem.endSec) : "";
 
   const frameAspect = entryAspectRatio(frameItem(items, state)?.aspectRatio ?? null);
-  const isVerticalFrame = frameAspect < 1;
   const frameStyle: FrameStyle = { "--frame-aspect": String(frameAspect) };
 
   const handleRetryApi = () => {
@@ -363,137 +390,72 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
     playerRef.current?.playVideo();
   };
 
-  const handleClose = () => {
-    dispatch({ kind: "stop" });
-    onClose();
-  };
-
   return (
-    <section
-      aria-label="Collection playback"
-      className="mb-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4"
-    >
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <p className="text-sm text-[var(--color-text-secondary)]">
-          {describePlaybackPosition(state, items.length)}
-        </p>
-        <div className="flex items-center gap-2 shrink-0">
-          {isDone ? (
-            <Button size="sm" variant="outline" onClick={() => dispatch({ kind: "start" })}>
-              <Play className="w-4 h-4" />
-              Play again
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => dispatch({ kind: "skip" })}
-              title="Skip to the next item"
-            >
-              <SkipForward className="w-4 h-4" />
-              Skip
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={handleClose}
-            title="Close player"
-            aria-label="Close player"
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* One tree for both shapes: the entry the player is on can change mid-sitting,
-          and the frame the iframe lives in has to survive that change untouched. */}
+    <section aria-label="Collection playback">
+      {/* One tree across both the entry change and the breakpoint: the shape is a
+          class on a wrapper the iframe merely lives inside, and the phone's
+          true-shape frame is the same element the desktop draws at 16:9. */}
       <div
         style={frameStyle}
-        className={cn(
-          isVerticalFrame &&
-            "min-[621px]:grid min-[621px]:grid-cols-[calc(26rem*var(--frame-aspect))_minmax(0,1fr)] min-[621px]:gap-6 min-[621px]:items-start",
-        )}
+        data-frame-shape={frameAspect < 1 ? "vertical" : "landscape"}
+        className="relative w-[calc(min(70vh,32rem)*var(--frame-aspect))] max-w-full mx-auto aspect-[var(--frame-aspect)] sm:w-full sm:aspect-video rounded-lg sm:rounded-xl overflow-hidden bg-black"
       >
-        <div className={cn(isVerticalFrame && "flex justify-center")}>
-          <div
-            data-frame-shape={isVerticalFrame ? "vertical" : "landscape"}
-            className={cn(
-              "relative aspect-[var(--frame-aspect)] rounded-lg overflow-hidden bg-black",
-              // A vertical frame is sized from its height, because the width a 9:16
-              // box would take from this container is taller than the page.
-              isVerticalFrame &&
-                "w-[calc(min(70vh,32rem)*var(--frame-aspect))] max-w-full min-[621px]:w-full",
-            )}
-          >
-            <div ref={containerRef} className="absolute inset-0 w-full h-full" />
-          </div>
+        <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+      </div>
+
+      {apiFailed && (
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          <p role="alert" className="text-sm text-red-500">
+            The YouTube player could not be loaded.
+          </p>
+          <Button size="sm" variant="outline" onClick={handleRetryApi}>
+            <RotateCw className="w-4 h-4" />
+            Try again
+          </Button>
         </div>
+      )}
 
-        <div className={cn("mt-3 space-y-3", isVerticalFrame && "min-[621px]:mt-0")}>
-          {apiFailed && (
-            <div className="flex flex-wrap items-center gap-3">
-              <p role="alert" className="text-sm text-red-500">
-                The YouTube player could not be loaded.
-              </p>
-              <Button size="sm" variant="outline" onClick={handleRetryApi}>
-                <RotateCw className="w-4 h-4" />
-                Try again
-              </Button>
-            </div>
-          )}
+      {autoplayBlocked && (
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Your browser blocked playback from starting on its own.
+          </p>
+          <Button size="sm" onClick={handleResume}>
+            <Play className="w-4 h-4" />
+            Resume
+          </Button>
+        </div>
+      )}
 
-          {autoplayBlocked && (
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                Your browser blocked playback from starting on its own.
-              </p>
-              <Button size="sm" onClick={handleResume}>
-                <Play className="w-4 h-4" />
-                Resume
-              </Button>
-            </div>
-          )}
-
-          <div className="min-h-10">
+      {/* A fixed block whatever the entry's text runs to, so skipping never reflows
+          the entries list underneath the player. */}
+      <div className="mt-3.5">
+        <div className="flex items-baseline gap-2 h-[1.4em]">
+          <p className="min-w-0 truncate font-medium leading-[1.4] text-[var(--color-text-primary)]">
             {currentItem ? (
-              <>
-                <div className="flex items-baseline gap-2">
-                  <p
-                    className={cn(
-                      "font-medium text-[var(--color-text-primary)] line-clamp-1",
-                      // The two-column layout has room the full-width one does not.
-                      isVerticalFrame && "min-[621px]:line-clamp-none",
-                    )}
-                  >
-                    {itemLabel(currentItem)}
-                  </p>
-                  {range && (
-                    <span className="font-mono text-xs text-[var(--color-text-tertiary)] shrink-0">
-                      {range}
-                    </span>
-                  )}
-                </div>
-                {currentItem.summary && (
-                  <p className="mt-1 text-sm text-[var(--color-text-secondary)] whitespace-pre-wrap">
-                    {currentItem.summary}
-                  </p>
-                )}
-              </>
+              itemLabel(currentItem)
             ) : isDone ? (
-              <p className="text-sm text-[var(--color-text-secondary)]">Playback complete.</p>
+              "Playback complete."
             ) : (
-              <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
+              <span className="inline-flex items-center gap-1.5 text-[var(--color-text-tertiary)]">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 Starting playback…
-              </p>
+              </span>
             )}
-          </div>
+          </p>
+          {range && (
+            <span className="shrink-0 font-mono text-xs text-[var(--color-text-tertiary)]">
+              {range}
+            </span>
+          )}
         </div>
+        <p className="h-[3em] line-clamp-2 text-sm sm:text-[0.9375rem] leading-[1.5] text-[var(--color-text-secondary)]">
+          {currentItem?.summary ?? ""}
+        </p>
       </div>
 
       {state.failures.length > 0 && (
-        <ul className="mt-3 space-y-1.5">
+        <ul className="mt-1 space-y-1.5">
           {state.failures.map((failure) => {
             const failed = items.find((item) => item.id === failure.itemId);
             return (
