@@ -20,6 +20,13 @@ export interface CollectionItem {
    * entries against each other need it and must handle its absence.
    */
   durationSec: number | null;
+  /**
+   * Shape of the source video's frame, as width divided by height: 1.7778 for
+   * 16:9, 0.5625 for a vertical Short, 1.3333 for 4:3 archive footage. `null`
+   * when it has never been established, which readers treat as unknown and
+   * frame with their own default rather than as any particular shape.
+   */
+  aspectRatio: number | null;
   summary: string | null;
   summaryStatus: SummaryStatus;
   position: number;
@@ -93,6 +100,7 @@ interface CollectionItemRow {
   endSec: number | null;
   videoTitle: string | null;
   durationSec: number | null;
+  aspectRatio: number | null;
   summary: string | null;
   summaryStatus: SummaryStatus;
   position: number;
@@ -208,6 +216,7 @@ function toCollectionItem(row: CollectionItemRow): CollectionItem {
     endSec: row.endSec,
     videoTitle: row.videoTitle,
     durationSec: row.durationSec,
+    aspectRatio: row.aspectRatio,
     summary: row.summary,
     summaryStatus: row.summaryStatus,
     position: row.position,
@@ -242,6 +251,7 @@ async function collectionSlugExists(slug: string): Promise<boolean> {
 export interface ResolvedVideoFacts {
   title: string | null;
   durationSec: number | null;
+  aspectRatio: number | null;
 }
 
 /**
@@ -251,7 +261,11 @@ export interface ResolvedVideoFacts {
  */
 export type VideoFactsResolver = (userId: string, videoId: string) => Promise<ResolvedVideoFacts>;
 
-const NO_VIDEO_FACTS: ResolvedVideoFacts = { title: null, durationSec: null };
+const NO_VIDEO_FACTS: ResolvedVideoFacts = {
+  title: null,
+  durationSec: null,
+  aspectRatio: null,
+};
 
 /**
  * Facts drawn from the user's most recent completed brief for this video, if
@@ -259,6 +273,9 @@ const NO_VIDEO_FACTS: ResolvedVideoFacts = { title: null, durationSec: null };
  * whenever it was generated, so its title can be stale if the video has since
  * been retitled. `digests.duration` holds YouTube's ISO 8601 string, which is
  * parsed here so both sources speak seconds.
+ *
+ * A brief records nothing about the video's frame shape, so this source answers
+ * with an unknown one and leaves that field to the live lookup.
  */
 async function getBriefedVideoFacts(userId: string, videoId: string): Promise<ResolvedVideoFacts> {
   const result = await sql<{ title: string; duration: string | null }>`
@@ -275,6 +292,7 @@ async function getBriefedVideoFacts(userId: string, videoId: string): Promise<Re
   return {
     title: brief.title ?? null,
     durationSec: durationSec > 0 ? durationSec : null,
+    aspectRatio: null,
   };
 }
 
@@ -286,13 +304,15 @@ async function getBriefedVideoFacts(userId: string, videoId: string): Promise<Re
  * exhausted, network fault), since possibly-stale facts still beat showing a
  * raw video ID with no runtime.
  *
- * Title and runtime arrive together from one `fetchMetadata` call, so asking
- * for both costs no more than asking for the title alone. That call is not
- * free: it issues a `videos.list` request and then waits on a
+ * Title, runtime and frame shape arrive together from one `fetchMetadata` call,
+ * so asking for all three costs no more than asking for the title alone. That
+ * call is not free: it issues a `videos.list` request and then waits on a
  * `commentThreads.list` request for a pinned comment nothing here reads, so it
  * spends two quota units where the brief-table lookup it replaced spent none.
- * The fallback query only runs when that call left a field unanswered, and
- * fills the missing fields individually.
+ * The fallback query only runs when that call left the title or the runtime
+ * unanswered, and fills the missing fields individually. The frame shape is not
+ * part of that condition because no brief carries one, so a fallback could
+ * never supply it.
  */
 export const resolveCollectionVideoFacts: VideoFactsResolver = async (userId, videoId) => {
   const live = await fetchYouTubeVideoFacts(videoId);
@@ -302,6 +322,7 @@ export const resolveCollectionVideoFacts: VideoFactsResolver = async (userId, vi
   return {
     title: live.title ?? briefed.title,
     durationSec: live.durationSec ?? briefed.durationSec,
+    aspectRatio: live.aspectRatio,
   };
 };
 
@@ -448,6 +469,7 @@ export async function getCollectionWithItems(
       end_sec as "endSec",
       video_title as "videoTitle",
       duration_sec as "durationSec",
+      aspect_ratio as "aspectRatio",
       summary,
       summary_status as "summaryStatus",
       position
@@ -641,6 +663,7 @@ export async function getSharedCollectionBySlug(
       end_sec as "endSec",
       video_title as "videoTitle",
       duration_sec as "durationSec",
+      aspect_ratio as "aspectRatio",
       summary,
       summary_status as "summaryStatus",
       position
@@ -694,6 +717,7 @@ export async function addCollectionItem(
         end_sec,
         video_title,
         duration_sec,
+        aspect_ratio,
         summary,
         summary_status,
         position
@@ -705,6 +729,7 @@ export async function addCollectionItem(
         ${input.endSec ?? null},
         ${facts.title},
         ${facts.durationSec},
+        ${facts.aspectRatio},
         ${input.summary ?? null},
         ${summaryStatus},
         COALESCE(MAX(position), 0) + 1
@@ -717,6 +742,7 @@ export async function addCollectionItem(
         end_sec as "endSec",
         video_title as "videoTitle",
         duration_sec as "durationSec",
+        aspect_ratio as "aspectRatio",
         summary,
         summary_status as "summaryStatus",
         position
@@ -751,6 +777,7 @@ export async function getCollectionItem(
       ci.end_sec as "endSec",
       ci.video_title as "videoTitle",
       ci.duration_sec as "durationSec",
+      ci.aspect_ratio as "aspectRatio",
       ci.summary,
       ci.summary_status as "summaryStatus",
       ci.position
@@ -820,6 +847,7 @@ export async function writeGeneratedSummary(
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
         ci.duration_sec as "durationSec",
+        ci.aspect_ratio as "aspectRatio",
         ci.summary,
         ci.summary_status as "summaryStatus",
         ci.position
@@ -840,6 +868,7 @@ export async function writeGeneratedSummary(
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
         ci.duration_sec as "durationSec",
+        ci.aspect_ratio as "aspectRatio",
         ci.summary,
         ci.summary_status as "summaryStatus",
         ci.position
@@ -930,6 +959,7 @@ export async function updateCollectionItem(
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
         ci.duration_sec as "durationSec",
+        ci.aspect_ratio as "aspectRatio",
         ci.summary,
         ci.summary_status as "summaryStatus",
         ci.position
@@ -982,6 +1012,7 @@ export async function updateCollectionItem(
         end_sec = CASE WHEN ${updateEnd}::boolean THEN ${input.endSec ?? null}::int ELSE ci.end_sec END,
         video_title = CASE WHEN ${refreshesFacts}::boolean THEN ${newFacts.title}::text ELSE ci.video_title END,
         duration_sec = CASE WHEN ${refreshesFacts}::boolean THEN ${newFacts.durationSec}::int ELSE ci.duration_sec END,
+        aspect_ratio = CASE WHEN ${refreshesFacts}::boolean THEN ${newFacts.aspectRatio}::double precision ELSE ci.aspect_ratio END,
         summary = CASE
           WHEN ${changesPointer}::boolean THEN NULL
           WHEN ${changesSummary}::boolean THEN ${input.summary ?? null}::text
@@ -1007,6 +1038,7 @@ export async function updateCollectionItem(
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
         ci.duration_sec as "durationSec",
+        ci.aspect_ratio as "aspectRatio",
         ci.summary,
         ci.summary_status as "summaryStatus",
         ci.position

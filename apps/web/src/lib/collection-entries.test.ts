@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSitting,
+  entryAspectRatio,
+  entryThumbnail,
   formatRuntimeWords,
   isEntryActive,
+  isVerticalAspectRatio,
   resolveActiveEntryId,
   type EntryVideoFacts,
   type SittingItem,
 } from "./collection-entries";
+
+const VERTICAL = 0.5625;
+const LANDSCAPE = 1.7778;
+const FOUR_THREE = 1.3333;
 
 function item(overrides: Partial<SittingItem> & { id: string }): SittingItem {
   return {
@@ -14,6 +21,7 @@ function item(overrides: Partial<SittingItem> & { id: string }): SittingItem {
     startSec: null,
     endSec: null,
     videoTitle: null,
+    aspectRatio: null,
     ...overrides,
   };
 }
@@ -168,6 +176,88 @@ describe("buildSitting", () => {
     expect(sitting.entries[0].watchUrl).toBe("https://youtube.com/watch?v=abc&t=90s");
     expect(sitting.entries[1].watchUrl).toBe("https://youtube.com/watch?v=abc");
     expect(sitting.entries[0].thumbnailUrl).toBe("https://img.youtube.com/vi/abc/mqdefault.jpg");
+  });
+
+  it("carries each item's own shape through to its entry", () => {
+    const sitting = buildSitting(
+      [
+        item({ id: "a", aspectRatio: VERTICAL }),
+        item({ id: "b", aspectRatio: LANDSCAPE }),
+        item({ id: "c" }),
+      ],
+      noFacts,
+    );
+
+    expect(sitting.entries.map((entry) => entry.aspectRatio)).toEqual([
+      VERTICAL,
+      LANDSCAPE,
+      null,
+    ]);
+  });
+
+  it("asks for the native frame of a vertical entry, and mqdefault of every other", () => {
+    const sitting = buildSitting(
+      [
+        item({ id: "a", videoId: "short", aspectRatio: VERTICAL }),
+        item({ id: "b", videoId: "wide", aspectRatio: LANDSCAPE }),
+        item({ id: "c", videoId: "unknown" }),
+      ],
+      noFacts,
+    );
+
+    expect(sitting.entries.map((entry) => entry.thumbnailUrl)).toEqual([
+      "https://i.ytimg.com/vi/short/frame0.jpg",
+      "https://img.youtube.com/vi/wide/mqdefault.jpg",
+      "https://img.youtube.com/vi/unknown/mqdefault.jpg",
+    ]);
+    expect(sitting.entries.map((entry) => entry.thumbnailFallbackUrl)).toEqual([
+      "https://img.youtube.com/vi/short/mqdefault.jpg",
+      null,
+      null,
+    ]);
+  });
+});
+
+describe("entryAspectRatio", () => {
+  it("draws a known shape at the shape it is", () => {
+    expect(entryAspectRatio(VERTICAL)).toBe(VERTICAL);
+    expect(entryAspectRatio(FOUR_THREE)).toBe(FOUR_THREE);
+  });
+
+  it("draws an unknown shape at 16:9, which is what every entry used to be", () => {
+    expect(entryAspectRatio(null)).toBe(16 / 9);
+  });
+
+  it("reads a ratio that describes no frame as an unknown shape", () => {
+    expect(entryAspectRatio(0)).toBe(16 / 9);
+    expect(entryAspectRatio(-2)).toBe(16 / 9);
+  });
+});
+
+describe("isVerticalAspectRatio", () => {
+  it("counts only a frame taller than it is wide", () => {
+    expect(isVerticalAspectRatio(VERTICAL)).toBe(true);
+    expect(isVerticalAspectRatio(FOUR_THREE)).toBe(false);
+    expect(isVerticalAspectRatio(LANDSCAPE)).toBe(false);
+    expect(isVerticalAspectRatio(1)).toBe(false);
+  });
+
+  it("counts an unknown shape as landscape, so it lays out as it always has", () => {
+    expect(isVerticalAspectRatio(null)).toBe(false);
+  });
+});
+
+describe("entryThumbnail", () => {
+  it("falls back from the native frame to the long-standing path", () => {
+    expect(entryThumbnail("short", VERTICAL)).toEqual({
+      url: "https://i.ytimg.com/vi/short/frame0.jpg",
+      fallbackUrl: "https://img.youtube.com/vi/short/mqdefault.jpg",
+    });
+  });
+
+  it("has nothing to fall back to when it already asked for mqdefault", () => {
+    expect(entryThumbnail("wide", null).fallbackUrl).toBeNull();
+    expect(entryThumbnail("wide", FOUR_THREE).fallbackUrl).toBeNull();
   });
 });
 

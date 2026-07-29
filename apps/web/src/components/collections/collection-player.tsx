@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState, type CSSProperties } from "react";
 import { CircleAlert, Loader2, Play, RotateCw, SkipForward, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { entryAspectRatio } from "@/lib/collection-entries";
 import { formatRange } from "@/lib/collection-item-input";
 import {
   BOUNDARY_POLL_INTERVAL_MS,
@@ -22,6 +24,8 @@ export interface CollectionPlayerItem {
   summary: string | null;
   startSec: number | null;
   endSec: number | null;
+  /** The video's frame shape as width divided by height, null when unknown. */
+  aspectRatio: number | null;
 }
 
 interface CollectionPlayerProps {
@@ -47,6 +51,33 @@ export interface ActiveSitting {
 
 function itemLabel(item: CollectionPlayerItem): string {
   return item.videoTitle ?? item.videoId;
+}
+
+/**
+ * The entry whose shape the frame is drawn at, which is the one on screen wherever
+ * there is one.
+ *
+ * Before the first load that is the entry the run opens on, so a sitting that starts
+ * on a Short is laid out for it from the first paint instead of snapping out of 16:9
+ * a moment later. Once the run is over it is the entry it ended on, so the still the
+ * player leaves behind keeps the frame it was playing in.
+ */
+function frameItem(
+  items: CollectionPlayerItem[],
+  state: PlaybackState,
+): CollectionPlayerItem | null {
+  const playing = items[state.index];
+  if (playing) return playing;
+  return (state.index < 0 ? items[0] : items[items.length - 1]) ?? null;
+}
+
+/**
+ * The frame's shape, published to the CSS as well as applied to the frame, because
+ * the two-column layout has to derive the player's own width from it before there is
+ * a player box to measure.
+ */
+interface FrameStyle extends CSSProperties {
+  "--frame-aspect": string;
 }
 
 /**
@@ -314,6 +345,10 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
   const isDone = state.status === "done";
   const range = currentItem ? formatRange(currentItem.startSec, currentItem.endSec) : "";
 
+  const frameAspect = entryAspectRatio(frameItem(items, state)?.aspectRatio ?? null);
+  const isVerticalFrame = frameAspect < 1;
+  const frameStyle: FrameStyle = { "--frame-aspect": String(frameAspect) };
+
   const handleRetryApi = () => {
     setApiFailed(false);
     setAutoplayBlocked(false);
@@ -371,61 +406,90 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
         </div>
       </div>
 
-      <div className="relative aspect-video rounded-lg overflow-hidden bg-black">
-        <div ref={containerRef} className="absolute inset-0 w-full h-full" />
-      </div>
-
-      {apiFailed && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <p role="alert" className="text-sm text-red-500">
-            The YouTube player could not be loaded.
-          </p>
-          <Button size="sm" variant="outline" onClick={handleRetryApi}>
-            <RotateCw className="w-4 h-4" />
-            Try again
-          </Button>
+      {/* One tree for both shapes: the entry the player is on can change mid-sitting,
+          and the frame the iframe lives in has to survive that change untouched. */}
+      <div
+        style={frameStyle}
+        className={cn(
+          isVerticalFrame &&
+            "min-[621px]:grid min-[621px]:grid-cols-[calc(26rem*var(--frame-aspect))_minmax(0,1fr)] min-[621px]:gap-6 min-[621px]:items-start",
+        )}
+      >
+        <div className={cn(isVerticalFrame && "flex justify-center")}>
+          <div
+            data-frame-shape={isVerticalFrame ? "vertical" : "landscape"}
+            className={cn(
+              "relative aspect-[var(--frame-aspect)] rounded-lg overflow-hidden bg-black",
+              // A vertical frame is sized from its height, because the width a 9:16
+              // box would take from this container is taller than the page.
+              isVerticalFrame &&
+                "w-[calc(min(70vh,32rem)*var(--frame-aspect))] max-w-full min-[621px]:w-full",
+            )}
+          >
+            <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+          </div>
         </div>
-      )}
 
-      {autoplayBlocked && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            Your browser blocked playback from starting on its own.
-          </p>
-          <Button size="sm" onClick={handleResume}>
-            <Play className="w-4 h-4" />
-            Resume
-          </Button>
-        </div>
-      )}
-
-      <div className="mt-3 min-h-10">
-        {currentItem ? (
-          <>
-            <div className="flex items-baseline gap-2">
-              <p className="font-medium text-[var(--color-text-primary)] line-clamp-1">
-                {itemLabel(currentItem)}
+        <div className={cn("mt-3 space-y-3", isVerticalFrame && "min-[621px]:mt-0")}>
+          {apiFailed && (
+            <div className="flex flex-wrap items-center gap-3">
+              <p role="alert" className="text-sm text-red-500">
+                The YouTube player could not be loaded.
               </p>
-              {range && (
-                <span className="font-mono text-xs text-[var(--color-text-tertiary)] shrink-0">
-                  {range}
-                </span>
-              )}
+              <Button size="sm" variant="outline" onClick={handleRetryApi}>
+                <RotateCw className="w-4 h-4" />
+                Try again
+              </Button>
             </div>
-            {currentItem.summary && (
-              <p className="mt-1 text-sm text-[var(--color-text-secondary)] whitespace-pre-wrap">
-                {currentItem.summary}
+          )}
+
+          {autoplayBlocked && (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Your browser blocked playback from starting on its own.
+              </p>
+              <Button size="sm" onClick={handleResume}>
+                <Play className="w-4 h-4" />
+                Resume
+              </Button>
+            </div>
+          )}
+
+          <div className="min-h-10">
+            {currentItem ? (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <p
+                    className={cn(
+                      "font-medium text-[var(--color-text-primary)] line-clamp-1",
+                      // The two-column layout has room the full-width one does not.
+                      isVerticalFrame && "min-[621px]:line-clamp-none",
+                    )}
+                  >
+                    {itemLabel(currentItem)}
+                  </p>
+                  {range && (
+                    <span className="font-mono text-xs text-[var(--color-text-tertiary)] shrink-0">
+                      {range}
+                    </span>
+                  )}
+                </div>
+                {currentItem.summary && (
+                  <p className="mt-1 text-sm text-[var(--color-text-secondary)] whitespace-pre-wrap">
+                    {currentItem.summary}
+                  </p>
+                )}
+              </>
+            ) : isDone ? (
+              <p className="text-sm text-[var(--color-text-secondary)]">Playback complete.</p>
+            ) : (
+              <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Starting playback…
               </p>
             )}
-          </>
-        ) : isDone ? (
-          <p className="text-sm text-[var(--color-text-secondary)]">Playback complete.</p>
-        ) : (
-          <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Starting playback…
-          </p>
-        )}
+          </div>
+        </div>
       </div>
 
       {state.failures.length > 0 && (

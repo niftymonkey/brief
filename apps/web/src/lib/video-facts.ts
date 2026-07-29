@@ -11,6 +11,12 @@ import { parseDurationToSeconds } from "./chapters";
 export interface YouTubeVideoFacts {
   title: string | null;
   durationSec: number | null;
+  /**
+   * The frame's shape, as width divided by height: 1.7778 for 16:9, 0.5625 for
+   * a vertical Short, 1.3333 for 4:3. `null` means the shape is not known, not
+   * that it is any particular shape, so readers pick their own default.
+   */
+  aspectRatio: number | null;
 }
 
 /**
@@ -37,7 +43,7 @@ const MISSING_TITLE_PLACEHOLDER = "Untitled";
 const TIMED_OUT = Symbol("metadata-lookup-timed-out");
 
 function emptyFacts(): YouTubeVideoFacts {
-  return { title: null, durationSec: null };
+  return { title: null, durationSec: null, aspectRatio: null };
 }
 
 /**
@@ -85,8 +91,19 @@ function normalizeDurationSec(isoDuration: unknown): number | null {
 }
 
 /**
- * Reads a video's current title and runtime straight from YouTube, in one
- * lookup.
+ * Reduces whatever arrived in the aspect ratio field to a usable shape or
+ * `null`. YouTube only reports frame dimensions for videos whose shape it
+ * knows, so an absent ratio is the ordinary case rather than a fault. A ratio
+ * that is not a positive finite number describes no shape at all.
+ */
+function normalizeAspectRatio(aspectRatio: unknown): number | null {
+  if (typeof aspectRatio !== "number" || !Number.isFinite(aspectRatio)) return null;
+  return aspectRatio > 0 ? aspectRatio : null;
+}
+
+/**
+ * Reads a video's current title, runtime and frame shape straight from YouTube,
+ * in one lookup.
  *
  * This is the metadata source for features that reference a video without
  * having briefed it (collections), so it is deliberately total: every failure
@@ -96,8 +113,8 @@ function normalizeDurationSec(isoDuration: unknown): number | null {
  * on, so a YouTube outage degrades the display instead of failing the user's
  * action.
  *
- * The two fields are derived independently, so a value the response could not
- * supply in one of them never erases the other.
+ * Every field is derived independently, so a value the response could not
+ * supply in one of them never erases the others.
  *
  * The key is read per call rather than at module load so a deployment that
  * rotates `YOUTUBE_API_KEY` takes effect without a cold start.
@@ -121,5 +138,6 @@ export async function fetchYouTubeVideoFacts(videoId: string): Promise<YouTubeVi
   return {
     title: normalizeTitle(result.metadata.title),
     durationSec: normalizeDurationSec(result.metadata.duration),
+    aspectRatio: normalizeAspectRatio(result.metadata.aspectRatio),
   };
 }
