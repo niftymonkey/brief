@@ -271,4 +271,17 @@ describe("CollectionDetail header controls", () => {
     expect(screen.getByRole("button", { name: /Play the whole collection/ })).toBeTruthy();
     expect(document.querySelectorAll('[aria-current="true"]')).toHaveLength(0);
   });
+
+  it("reorders entries by dragging them, with no move buttons left to press", () => {
+    renderDetail();
+
+    expect(screen.queryByRole("button", { name: "Move up" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Move down" })).toBeNull();
+
+    // dnd-kit gives the grip its own role description, which is what a screen
+    // reader announces in place of the two buttons this replaced.
+    const grips = document.querySelectorAll('[aria-roledescription="sortable"]');
+    expect(grips).toHaveLength(3);
+    expect(grips[0]?.getAttribute("tabindex")).toBe("0");
+  });
 });

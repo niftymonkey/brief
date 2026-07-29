@@ -1,14 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Pencil,
-  RotateCw,
-  Trash2,
-} from "lucide-react";
+import { GripVertical, Loader2, Pencil, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { EditItemDialog } from "@/components/collections/edit-item-dialog";
@@ -24,25 +17,37 @@ import type { CollectionItem } from "@/lib/collections";
  * on a flag to keep the controls hidden.
  */
 export interface CollectionItemRowControls {
-  /** True while any entry in the collection is mid-reorder. */
-  reorderPending: boolean;
-  onReorder: (direction: "up" | "down") => Promise<void>;
   onRemove: () => Promise<void>;
   onSummarySave: (summary: string) => Promise<void>;
   onRetrySummary: () => Promise<void>;
   onSwap: (videoId: string, startSec: number | null, endSec: number | null) => Promise<void>;
 }
 
+/**
+ * What a sortable wrapper hands the row so it can be dragged. The row itself
+ * knows nothing about the drag library: it takes a ref for the element that
+ * moves, props to spread on the grip, and whether this row is the one in flight.
+ * A row rendered without this has no grip and cannot be reordered at all.
+ */
+export interface CollectionItemRowDrag {
+  setNodeRef: (node: HTMLElement | null) => void;
+  setGripRef: (node: HTMLElement | null) => void;
+  style: CSSProperties;
+  gripProps: Record<string, unknown>;
+  isDragging: boolean;
+}
+
 interface CollectionItemRowProps {
   item: CollectionItem;
   /** The same item read as one entry of the sitting: its place, title and links. */
   entry: CollectionEntry;
-  isFirst: boolean;
   isLast: boolean;
   /** True while the player is on this entry, so the list says where the sitting is. */
   isActive: boolean;
   /** The curator's controls. Omitted for a reader, whose entry is strictly read-only. */
   controls?: CollectionItemRowControls;
+  /** Supplied only where the list is sortable, which is the owner's page. */
+  drag?: CollectionItemRowDrag;
 }
 
 const controlClass =
@@ -64,15 +69,14 @@ interface ThumbnailStyle extends CSSProperties {
 export function CollectionItemRow({
   item,
   entry,
-  isFirst,
   isLast,
   isActive,
   controls,
+  drag,
 }: CollectionItemRowProps) {
   const [isEditingSummary, setIsEditingSummary] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState(item.summary ?? "");
   const [isSavingSummary, setIsSavingSummary] = useState(false);
-  const [isReordering, setIsReordering] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,19 +119,6 @@ export function CollectionItemRow({
     }
   };
 
-  const handleReorder = async (direction: "up" | "down") => {
-    if (!controls) return;
-    setError(null);
-    setIsReordering(true);
-    try {
-      await controls.onReorder(direction);
-    } catch {
-      setError("Could not reorder this entry. Please try again.");
-    } finally {
-      setIsReordering(false);
-    }
-  };
-
   const handleRemove = async () => {
     if (!controls) return;
     setError(null);
@@ -163,11 +154,16 @@ export function CollectionItemRow({
   return (
     <section
       id={entry.anchorId}
+      ref={drag?.setNodeRef}
+      style={drag?.style}
       aria-current={isActive ? "true" : undefined}
       className={cn(
         "relative grid grid-cols-1 gap-3.5 py-4",
         "sm:grid-cols-[3.25rem_minmax(0,1fr)] sm:gap-4 sm:py-5",
         "scroll-mt-20",
+        // Lifted out of the list while it is in flight, so the rows it passes
+        // read as settling around it rather than as part of it.
+        drag?.isDragging && "z-10 opacity-90 bg-[var(--color-bg-tertiary)] rounded-lg shadow-md",
       )}
     >
       {/* A phone has no ordinal column, so the rail cannot mark the sitting there.
@@ -245,28 +241,18 @@ export function CollectionItemRow({
 
             {controls && (
             <div className="flex items-center gap-1 shrink-0">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => handleReorder("up")}
-                disabled={isFirst || isReordering || controls.reorderPending}
-                className={controlClass}
-                title="Move up"
-                aria-label="Move up"
-              >
-                <ChevronUp className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => handleReorder("down")}
-                disabled={isLast || isReordering || controls.reorderPending}
-                className={controlClass}
-                title="Move down"
-                aria-label="Move down"
-              >
-                <ChevronDown className="w-4 h-4" />
-              </Button>
+              {drag && (
+                <Button
+                  ref={drag.setGripRef}
+                  variant="outline"
+                  size="icon-sm"
+                  className={cn(controlClass, "touch-none cursor-grab active:cursor-grabbing")}
+                  title="Drag to reorder, or press space and use the arrow keys"
+                  {...drag.gripProps}
+                >
+                  <GripVertical className="w-4 h-4" />
+                </Button>
+              )}
               <EditItemDialog
                 initialVideoId={item.videoId}
                 initialStartSec={item.startSec}

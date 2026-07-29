@@ -15,7 +15,23 @@ import {
 import { CollectionTransport } from "@/components/collections/collection-transport";
 import { DeleteCollectionButton } from "@/components/collections/delete-collection-button";
 import { EditCollectionDialog } from "@/components/collections/edit-collection-dialog";
-import { reorderNeighbors } from "@/lib/collection-item-input";
+import { SortableItemRow } from "@/components/collections/sortable-item-row";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { neighborsOf, reorderById } from "@/lib/collection-item-input";
 import {
   buildSitting,
   resolveActiveEntryId,
@@ -72,6 +88,15 @@ export function CollectionDetail({
   const [position, setPosition] = useState<SittingPosition | null>(null);
   /** The run on screen, for the prev and skip controls the header carries for it. */
   const playerRef = useRef<CollectionPlayerHandle>(null);
+
+  // A grip has to travel a few pixels before it counts as a drag, so a plain
+  // click on it (or a tap that turns into a page scroll) never lifts a row. The
+  // keyboard sensor is what keeps reordering reachable without a pointer: focus
+  // the grip, space to lift, arrows to move, space to drop.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const collectionId = collection.id;
 
@@ -147,19 +172,35 @@ export function CollectionDetail({
     }
   };
 
-  const handleReorder = async (index: number, direction: "up" | "down") => {
-    const neighbors = reorderNeighbors(
+  /**
+   * Settles a drag. The list is reordered locally first so the entry stays where
+   * it was dropped, then the server is told its new neighbours and answers with
+   * the position it computed. A failed write puts the order the user was looking
+   * at before the drag back, rather than leaving the page showing a move that
+   * did not happen.
+   */
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const previous = items;
+    const settledIds = reorderById(
       items.map((item) => item.id),
-      index,
-      direction,
+      String(active.id),
+      String(over.id),
     );
+    const neighbors = neighborsOf(settledIds, String(active.id));
     if (!neighbors) return;
 
-    const moved = items[index];
+    setItems(
+      settledIds
+        .map((id) => items.find((item) => item.id === id))
+        .filter((item): item is CollectionItem => item !== undefined),
+    );
     setReorderPending(true);
     try {
       const updated = await requestJson<CollectionItem>(
-        `/api/collections/${collectionId}/items/${moved.id}`,
+        `/api/collections/${collectionId}/items/${String(active.id)}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -169,6 +210,8 @@ export function CollectionDetail({
       setItems((prev) =>
         sortByPosition(prev.map((item) => (item.id === updated.id ? updated : item))),
       );
+    } catch {
+      setItems(previous);
     } finally {
       setReorderPending(false);
     }
@@ -326,6 +369,38 @@ export function CollectionDetail({
               </p>
             )}
           </div>
+        ) : editable ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis]}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={items.map((item) => item.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="flex flex-col">
+                {sitting.entries.map((entry, index) => (
+                  <SortableItemRow
+                    key={entry.id}
+                    item={items[index]}
+                    entry={entry}
+                    isLast={index === entryCount - 1}
+                    isActive={entry.id === activeEntryId}
+                    dragDisabled={reorderPending}
+                    controls={{
+                      onRemove: () => handleRemove(entry.id),
+                      onSummarySave: (summary) => handleSummarySave(entry.id, summary),
+                      onRetrySummary: () => summarizeItem(entry.id),
+                      onSwap: (videoId, startSec, endSec) =>
+                        handleSwap(entry.id, videoId, startSec, endSec),
+                    }}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         ) : (
           <div className="flex flex-col">
             {sitting.entries.map((entry, index) => (
@@ -333,22 +408,8 @@ export function CollectionDetail({
                 key={entry.id}
                 item={items[index]}
                 entry={entry}
-                isFirst={index === 0}
                 isLast={index === entryCount - 1}
                 isActive={entry.id === activeEntryId}
-                controls={
-                  editable
-                    ? {
-                        reorderPending,
-                        onReorder: (direction) => handleReorder(index, direction),
-                        onRemove: () => handleRemove(entry.id),
-                        onSummarySave: (summary) => handleSummarySave(entry.id, summary),
-                        onRetrySummary: () => summarizeItem(entry.id),
-                        onSwap: (videoId, startSec, endSec) =>
-                          handleSwap(entry.id, videoId, startSec, endSec),
-                      }
-                    : undefined
-                }
               />
             ))}
           </div>
