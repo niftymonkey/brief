@@ -40,23 +40,33 @@ export function TopicChannelsCard({ topicId, channels, editable }: TopicChannels
 
     setIsAdding(true);
     setError(null);
-    const result = await addTopicChannelAction(topicId, parsed.value);
-    setIsAdding(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await addTopicChannelAction(topicId, parsed.value);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setChannelField("");
+      setTitleField("");
+    } catch {
+      setError("Could not add that channel. Please try again.");
+    } finally {
+      setIsAdding(false);
     }
-    setChannelField("");
-    setTitleField("");
   };
 
   const handleRemove = async (channelId: string) => {
     setRemovingId(channelId);
     setError(null);
-    const result = await removeTopicChannelAction(topicId, channelId);
-    setRemovingId(null);
-    if (!result.ok) {
-      setError(result.error);
+    try {
+      const result = await removeTopicChannelAction(topicId, channelId);
+      if (!result.ok) {
+        setError(result.error);
+      }
+    } catch {
+      setError("Could not remove that channel. Please try again.");
+    } finally {
+      setRemovingId(null);
     }
   };
 

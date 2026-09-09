@@ -204,13 +204,18 @@ describe("topics db lifecycle", () => {
     expect(await getTopicBySlug(userId, "wasm-runtimes")).toBeNull();
   });
 
-  it("changes the slug only when the caller passes one explicitly", async () => {
+  it("leaves the slug alone through every edit updateTopic accepts", async () => {
     const topic = await seedTopic({ name: "Observability" });
+    expect(topic.slug).toBe("observability");
 
-    const reslugged = await updateTopic(userId, topic.id, { slug: "otel" });
-    expect(reslugged).toMatchObject({ name: "Observability", slug: "otel" });
-    expect(await getTopicBySlug(userId, "otel")).toMatchObject({ id: topic.id });
-    expect(await getTopicBySlug(userId, "observability")).toBeNull();
+    await updateTopic(userId, topic.id, { name: "OpenTelemetry", interests: "traces" });
+    const edited = await updateTopic(userId, topic.id, { isActive: false, cadenceDays: 2 });
+
+    // The slug is minted at creation and never written again, so no edit can
+    // break a link a person saved, and none can collide on idx_topics_user_slug.
+    expect(edited).toMatchObject({ name: "OpenTelemetry", slug: "observability" });
+    expect(await getTopicBySlug(userId, "observability")).toMatchObject({ id: topic.id });
+    expect(await getTopicBySlug(userId, "opentelemetry")).toBeNull();
   });
 
   it("retains unmodified topic fields on a partial update", async () => {

@@ -32,15 +32,19 @@ export function DeleteTopicButton({ topicId, name }: DeleteTopicButtonProps) {
   const handleDelete = async () => {
     setIsDeleting(true);
     setError(null);
-    const result = await deleteTopicAction(topicId);
-    if (!result.ok) {
-      setError(result.error);
+    try {
+      const result = await deleteTopicAction(topicId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setIsRedirecting(true);
+      router.push("/topics");
+    } catch {
+      setError("Could not delete this topic. Please try again.");
+    } finally {
       setIsDeleting(false);
-      return;
     }
-    setIsDeleting(false);
-    setIsRedirecting(true);
-    router.push("/topics");
   };
 
   return (

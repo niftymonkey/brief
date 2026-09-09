@@ -101,6 +101,18 @@ const CHANNEL_URL_COLUMN = "Channel Url";
 const CHANNEL_TITLE_COLUMN = "Channel Title";
 
 /**
+ * Finds a column by name, ignoring case and surrounding padding. The export
+ * this was written against writes `Channel Id,Channel Url,Channel Title`, while
+ * Google's own documentation writes `Channel ID` and `Channel URL`, and the
+ * spelling moves with the locale and the export version. Casing is the only
+ * thing that varies, so the words still have to match.
+ */
+function findColumn(header: string[], name: string): number {
+  const wanted = name.trim().toLowerCase();
+  return header.findIndex((candidate) => candidate.trim().toLowerCase() === wanted);
+}
+
+/**
  * Google's export is UTF-8 with a byte order mark, which would otherwise ride
  * along on the first header name and hide the column behind it.
  */
@@ -137,9 +149,9 @@ export function parseTakeoutSubscriptions(text: string): TakeoutParseResult {
   }
 
   const index = {
-    channelId: header.indexOf(CHANNEL_ID_COLUMN),
-    channelUrl: header.indexOf(CHANNEL_URL_COLUMN),
-    channelTitle: header.indexOf(CHANNEL_TITLE_COLUMN),
+    channelId: findColumn(header, CHANNEL_ID_COLUMN),
+    channelUrl: findColumn(header, CHANNEL_URL_COLUMN),
+    channelTitle: findColumn(header, CHANNEL_TITLE_COLUMN),
   };
   if (index.channelId === -1 || index.channelUrl === -1 || index.channelTitle === -1) {
     throw new InvalidTakeoutCsvError(

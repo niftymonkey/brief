@@ -10,9 +10,9 @@ export interface Topic {
   name: string;
   /**
    * Addresses `/topics/<slug>` inside one owner's account, and is unique per
-   * user rather than globally. Minted from the name at creation and stable
-   * across renames, so a saved link keeps working; only an explicit slug edit
-   * changes it.
+   * user rather than globally. Minted from the name at creation and never
+   * written again, so a saved link keeps working through any rename and there
+   * is no redirect table to maintain.
    */
   slug: string;
   interests: string | null;
@@ -57,13 +57,12 @@ export interface CreateTopicInput extends TopicCaps {
 
 /**
  * A Topic edit. Every field is optional and only the ones present change, so a
- * form that touches one setting cannot quietly reset the rest. `slug` is here
- * because a person who wants a different URL can ask for one; renaming through
- * `name` leaves the slug alone.
+ * form that touches one setting cannot quietly reset the rest. There is no
+ * `slug` field: the slug is minted at creation and stays put, which is what
+ * keeps every saved `/topics/<slug>` link working.
  */
 export interface UpdateTopicInput extends TopicCaps {
   name?: string;
-  slug?: string;
   interests?: string | null;
   isActive?: boolean;
   cadenceDays?: number;
@@ -452,7 +451,6 @@ export async function updateTopic(
   input: UpdateTopicInput,
 ): Promise<Topic | null> {
   const updateName = input.name !== undefined;
-  const updateSlug = input.slug !== undefined;
   const updateInterests = input.interests !== undefined;
   const updateIsActive = input.isActive !== undefined;
   const updateCadence = input.cadenceDays !== undefined;
@@ -492,7 +490,6 @@ export async function updateTopic(
     UPDATE topics t
     SET
       name = CASE WHEN ${updateName}::boolean THEN ${input.name ?? null}::text ELSE t.name END,
-      slug = CASE WHEN ${updateSlug}::boolean THEN ${input.slug ?? null}::varchar ELSE t.slug END,
       interests = CASE WHEN ${updateInterests}::boolean THEN ${input.interests ?? null}::text ELSE t.interests END,
       is_active = CASE WHEN ${updateIsActive}::boolean THEN ${input.isActive ?? null}::boolean ELSE t.is_active END,
       cadence_days = CASE WHEN ${updateCadence}::boolean THEN ${input.cadenceDays ?? null}::int ELSE t.cadence_days END,

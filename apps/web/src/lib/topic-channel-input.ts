@@ -15,6 +15,16 @@ export type ParsedTopicChannelInput =
  */
 const CHANNEL_ID_PATTERN = /^UC[A-Za-z0-9_-]{22}$/;
 
+/**
+ * Whether a string is a YouTube channel id. The Server Actions check this on
+ * their own input rather than trusting the form that produced it, and a bulk
+ * import checks it per row, where there is no URL to parse and no title to
+ * canonicalise.
+ */
+export function isYoutubeChannelId(value: string): boolean {
+  return CHANNEL_ID_PATTERN.test(value);
+}
+
 /** The `/channel/<id>` segment of a channel URL, whatever follows it. */
 const CHANNEL_URL_PATTERN = /youtube\.com\/channel\/(UC[A-Za-z0-9_-]{22})(?:[/?#]|$)/;
 
@@ -41,7 +51,7 @@ export function parseTopicChannelInput(raw: string, rawTitle: string): ParsedTop
   }
 
   const fromUrl = CHANNEL_URL_PATTERN.exec(text);
-  const youtubeChannelId = CHANNEL_ID_PATTERN.test(text) ? text : fromUrl?.[1];
+  const youtubeChannelId = isYoutubeChannelId(text) ? text : fromUrl?.[1];
 
   if (youtubeChannelId === undefined) {
     if (NAMED_CHANNEL_PATTERN.test(text)) {

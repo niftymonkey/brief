@@ -6,6 +6,7 @@ import { isEmailAllowed } from "@/lib/access";
 import type { TopicActionResult, TopicCreateResult } from "@/lib/topic-action-result";
 import type { TopicSettings } from "@/lib/topic-settings-input";
 import { parseTopicQuery } from "@/lib/topic-query-input";
+import { isYoutubeChannelId, parseTopicChannelInput } from "@/lib/topic-channel-input";
 import {
   DuplicateTopicQueryError,
   InvalidTopicCapError,
@@ -182,15 +183,84 @@ export async function addTopicChannelAction(
   const editor = await currentEditor();
   if (!editor.ok) return editor;
 
+  // The form parses the pasted box before calling, and this parses it again: a
+  // Server Action is reachable without that form, so the id it stores has to be
+  // one this side read, and the URL it stores is minted here from that id.
+  const parsed = parseTopicChannelInput(input.youtubeChannelId, input.channelTitle ?? "");
+  if (!parsed.ok) {
+    return { ok: false, error: parsed.error };
+  }
+
   const channel = await addTopicChannel(editor.userId, topicId, {
-    youtubeChannelId: input.youtubeChannelId,
-    channelTitle: input.channelTitle,
-    channelUrl: input.channelUrl,
+    youtubeChannelId: parsed.value.youtubeChannelId,
+    channelTitle: parsed.value.channelTitle,
+    channelUrl: parsed.value.channelUrl,
     addedVia: "manual",
   });
   if (!channel) return { ok: false, error: NO_TOPIC };
   revalidateTopics();
   return { ok: true };
+}
+
+/**
+ * The most rows one import may carry. A real subscriptions export is small: the
+ * one this was built against is 142 rows, and even a heavy subscriber is in the
+ * low thousands, so this clears an honest file with room to spare. The bound is
+ * here because every row becomes three bound parameters in a single INSERT, and
+ * an array nobody capped would decide the size of that statement.
+ */
+const MAX_TAKEOUT_IMPORT_CHANNELS = 5000;
+
+/** Trims a rejected value down to something a sentence can carry. */
+function quoteValue(value: unknown): string {
+  const text = String(value);
+  return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+}
+
+/** Whether a Takeout row's title or URL is a value the column can hold as it stands. */
+function isStorableText(value: string | null): boolean {
+  return value === null || typeof value === "string";
+}
+
+type ValidatedTakeoutChannels =
+  | { ok: true; value: TakeoutChannelInput[] }
+  | { ok: false; error: string };
+
+/**
+ * Checks the rows an import claims to hold. The channel id has one shape and is
+ * held to it. Title and URL are whatever the person's export wrote, so they are
+ * only checked for being text at all and are otherwise passed through untouched,
+ * nulls included: a Takeout row is allowed to carry neither.
+ */
+function validateTakeoutChannels(channels: TakeoutChannelInput[]): ValidatedTakeoutChannels {
+  if (channels.length > MAX_TAKEOUT_IMPORT_CHANNELS) {
+    return {
+      ok: false,
+      error: `That is ${channels.length} channels at once, and an import takes at most ${MAX_TAKEOUT_IMPORT_CHANNELS}. Tick fewer channels and import them in batches.`,
+    };
+  }
+
+  const value: TakeoutChannelInput[] = [];
+  for (const channel of channels) {
+    if (!isYoutubeChannelId(channel.youtubeChannelId)) {
+      return {
+        ok: false,
+        error: `One of those rows is not a YouTube channel ID: "${quoteValue(channel.youtubeChannelId)}". Re-export subscriptions.csv from Google Takeout and upload that file.`,
+      };
+    }
+
+    const channelTitle = channel.channelTitle ?? null;
+    const channelUrl = channel.channelUrl ?? null;
+    if (!isStorableText(channelTitle) || !isStorableText(channelUrl)) {
+      return {
+        ok: false,
+        error: `The title or link on ${quoteValue(channel.youtubeChannelId)} is not text. Re-export subscriptions.csv from Google Takeout and upload that file.`,
+      };
+    }
+
+    value.push({ youtubeChannelId: channel.youtubeChannelId, channelTitle, channelUrl });
+  }
+  return { ok: true, value };
 }
 
 export async function importTopicChannelsAction(
@@ -200,11 +270,21 @@ export async function importTopicChannelsAction(
   const editor = await currentEditor();
   if (!editor.ok) return editor;
 
+  // A caller that is not the import form can send anything, and the rest of this
+  // reads `channels` as a list.
+  if (!Array.isArray(channels)) {
+    return { ok: false, error: "That import did not arrive as a list of channels." };
+  }
   if (channels.length === 0) {
     return { ok: false, error: "Tick at least one channel to add." };
   }
 
-  const added = await addTopicChannelsFromTakeout(editor.userId, topicId, channels);
+  const validated = validateTakeoutChannels(channels);
+  if (!validated.ok) {
+    return { ok: false, error: validated.error };
+  }
+
+  const added = await addTopicChannelsFromTakeout(editor.userId, topicId, validated.value);
   if (added === null) return { ok: false, error: NO_TOPIC };
   revalidateTopics();
   return { ok: true };

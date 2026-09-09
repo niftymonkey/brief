@@ -44,13 +44,18 @@ export function TopicQueriesCard({
 
     setIsAdding(true);
     setError(null);
-    const result = await addTopicQueryAction(topicId, queryField);
-    setIsAdding(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await addTopicQueryAction(topicId, queryField);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setQueryField("");
+    } catch {
+      setError("Could not add that search. Please try again.");
+    } finally {
+      setIsAdding(false);
     }
-    setQueryField("");
   };
 
   const startEdit = (query: TopicQuery) => {
@@ -71,23 +76,33 @@ export function TopicQueriesCard({
 
     setIsEditSaving(true);
     setError(null);
-    const result = await updateTopicQueryAction(topicId, editingId, parsed.value);
-    setIsEditSaving(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await updateTopicQueryAction(topicId, editingId, parsed.value);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setEditingId(null);
+      setEditField("");
+    } catch {
+      setError("Could not save that search. Please try again.");
+    } finally {
+      setIsEditSaving(false);
     }
-    setEditingId(null);
-    setEditField("");
   };
 
   const handleRemove = async (queryId: string) => {
     setRemovingId(queryId);
     setError(null);
-    const result = await removeTopicQueryAction(topicId, queryId);
-    setRemovingId(null);
-    if (!result.ok) {
-      setError(result.error);
+    try {
+      const result = await removeTopicQueryAction(topicId, queryId);
+      if (!result.ok) {
+        setError(result.error);
+      }
+    } catch {
+      setError("Could not remove that search. Please try again.");
+    } finally {
+      setRemovingId(null);
     }
   };
 

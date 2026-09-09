@@ -37,6 +37,16 @@ export function NewTopicDialog({ variant = "default" }: NewTopicDialogProps) {
     setError(null);
   };
 
+  /**
+   * The one way this dialog closes, so Cancel, the close button, and Escape all
+   * leave the same empty form behind for the next open.
+   */
+  const handleOpenChange = (next: boolean) => {
+    if (isSubmitting) return;
+    setOpen(next);
+    if (!next) reset();
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim() || isSubmitting) return;
@@ -57,14 +67,7 @@ export function NewTopicDialog({ variant = "default" }: NewTopicDialogProps) {
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (isSubmitting) return;
-        setOpen(next);
-        if (!next) reset();
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button
           variant={variant}
@@ -121,7 +124,7 @@ export function NewTopicDialog({ variant = "default" }: NewTopicDialogProps) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={isSubmitting}
             >
               Cancel

@@ -88,6 +88,36 @@ describe("column matching", () => {
     ]);
   });
 
+  it("reads the spelling the real export ships, Channel Id and Channel Url", () => {
+    const result = parseTakeoutSubscriptions(
+      "Channel Id,Channel Url,Channel Title\nUC1,http://x/UC1,One",
+    );
+
+    expect(result.channels).toEqual([
+      { channelId: "UC1", channelUrl: "http://x/UC1", channelTitle: "One" },
+    ]);
+  });
+
+  it("reads Google's documented spelling, Channel ID and Channel URL", () => {
+    const result = parseTakeoutSubscriptions(
+      "Channel ID,Channel URL,Channel Title\nUC1,http://x/UC1,One",
+    );
+
+    expect(result.channels).toEqual([
+      { channelId: "UC1", channelUrl: "http://x/UC1", channelTitle: "One" },
+    ]);
+  });
+
+  it("matches header names whatever their case", () => {
+    const result = parseTakeoutSubscriptions(
+      "channel id,CHANNEL URL,ChAnNeL tItLe\nUC1,http://x/UC1,One",
+    );
+
+    expect(result.channels).toEqual([
+      { channelId: "UC1", channelUrl: "http://x/UC1", channelTitle: "One" },
+    ]);
+  });
+
   it("matches the columns it needs by header name, not by position", () => {
     const result = parseTakeoutSubscriptions(
       "Channel Title,Channel Id,Channel Url\nOne,UC1,http://x/UC1",

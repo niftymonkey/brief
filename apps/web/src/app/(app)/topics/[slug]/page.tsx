@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -15,6 +16,13 @@ interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
+/**
+ * One load of the Topic per request. `generateMetadata` and the page itself both
+ * need it, and the load is three queries (the Topic, its channels, its queries),
+ * so without this every render of this route runs all three twice.
+ */
+const loadTopic = cache(getTopicWithFeedsBySlug);
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { user } = await withAuth();
   if (!user) {
@@ -22,7 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   const { slug } = await params;
-  const topic = await getTopicWithFeedsBySlug(user.id, slug);
+  const topic = await loadTopic(user.id, slug);
 
   return {
     title: topic ? `${topic.name} | Brief` : "Not Found | Brief",
@@ -37,7 +45,7 @@ export default async function TopicPage({ params }: PageProps) {
   }
 
   const { slug } = await params;
-  const topic = await getTopicWithFeedsBySlug(user.id, slug);
+  const topic = await loadTopic(user.id, slug);
 
   if (!topic) {
     notFound();

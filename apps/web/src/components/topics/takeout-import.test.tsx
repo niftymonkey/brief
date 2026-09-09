@@ -49,11 +49,34 @@ function renderImport({ presentChannelIds = [], onImport }: RenderOptions = {}) 
   return { calls };
 }
 
+/** A picked file the browser hands over but cannot read back. */
+function unreadableFile(name: string) {
+  return { name, text: () => Promise.reject(new Error("could not read")) };
+}
+
+function fileInput(): HTMLInputElement {
+  const input = screen.getByLabelText(/subscriptions export/i);
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error("The subscriptions export control is not an input.");
+  }
+  return input;
+}
+
 async function pick(file: { name: string; text: () => Promise<string> }): Promise<void> {
+  const input = fileInput();
+  // jsdom holds no real selection, so the suite plays the part the browser plays:
+  // a `value` carrying the picked path until something clears it. That is what a
+  // second pick of the same path depends on.
+  let value = `C:\\fakepath\\${file.name}`;
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get: () => value,
+    set: (next: string) => {
+      value = next;
+    },
+  });
   await act(async () => {
-    fireEvent.change(screen.getByLabelText(/subscriptions export/i), {
-      target: { files: [file] },
-    });
+    fireEvent.change(input, { target: { files: [file] } });
   });
 }
 
@@ -334,6 +357,47 @@ describe("TakeoutImport", () => {
 
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     expect(screen.getByText(/No channel in this export matches/)).toBeTruthy();
+  });
+
+  it("lets the same file be picked again after a read failure", async () => {
+    renderImport();
+    await pick(unreadableFile("subscriptions.csv"));
+
+    expect(screen.getByRole("alert").textContent).toContain("Pick the file again");
+    expect(fileInput().value).toBe("");
+  });
+
+  it("lets a re-export under the same name be picked again after a parse failure", async () => {
+    renderImport();
+    await pick(pickedFile("subscriptions.csv", "Video Id,Time\nabc,2024-01-01"));
+
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(fileInput().value).toBe("");
+  });
+
+  it("takes an earlier success off screen when a later import fails", async () => {
+    let attempt = 0;
+    renderImport({
+      onImport: async () => {
+        attempt += 1;
+        return attempt === 1 ? { ok: true } : { ok: false, error: "That topic is gone." };
+      },
+    });
+    await pick(exportOf(["Theo", "Fireship"]));
+
+    fireEvent.click(screen.getByLabelText("Theo"));
+    await act(async () => {
+      fireEvent.click(importButton());
+    });
+    expect(screen.getByText(/Added 1 channel/)).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Fireship"));
+    await act(async () => {
+      fireEvent.click(importButton());
+    });
+
+    expect(screen.getByText("That topic is gone.")).toBeTruthy();
+    expect(screen.queryByText(/Added/)).toBeNull();
   });
 
   it("says the export named no channels rather than offering an empty list", async () => {

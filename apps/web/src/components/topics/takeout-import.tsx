@@ -93,8 +93,15 @@ export function TakeoutImport({ presentChannelIds, onImport }: TakeoutImportProp
   ).length;
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const picked: PickedFile | undefined = event.target.files?.[0];
+    const input = event.target;
+    const picked: PickedFile | undefined = input.files?.[0];
     if (!picked) return;
+
+    // A file input only fires `change` when the selection changes, so a message
+    // asking for the file again would go unheard while the input still holds it.
+    // Clearing it makes the same path, or a re-export under the same name, a
+    // fresh pick.
+    input.value = "";
 
     setFileName(picked.name);
     setAddedCount(null);
@@ -153,9 +160,11 @@ export function TakeoutImport({ presentChannelIds, onImport }: TakeoutImportProp
         setSelected(new Set());
         setAddedCount(picked.length);
       } else {
+        setAddedCount(null);
         setError(result.error);
       }
     } catch {
+      setAddedCount(null);
       setError("Could not add those channels. Please try again.");
     } finally {
       setIsImporting(false);
