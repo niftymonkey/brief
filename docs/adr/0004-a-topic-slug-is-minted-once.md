@@ -1,6 +1,6 @@
 # A Topic's slug is minted once and never rewritten
 
-A Topic's URL is `/topics/<slug>`. The slug is derived from the name when the Topic is created and is never written again, so renaming a Topic does not move its page. Every link a person has saved, shared, or pasted into a note keeps working, and there is no redirect table, no history of old slugs, and no rule about how long a retired slug stays reserved. `slug` is absent from `UpdateTopicInput` and from the update statement, so the collision the per-user unique index guards against is unreachable through the app.
+A Topic's URL is `/topics/<slug>`. The slug is derived from the name when the Topic is created and is never written again, so renaming a Topic does not move its page. Every link the owner has saved or pasted into a note keeps working, and there is no redirect table, no history of old slugs, and no rule about how long a retired slug stays reserved. Lookup is owner-scoped, so a slug addresses a page only inside the account that minted it. `slug` is absent from `UpdateTopicInput` and from the update statement, so a rename can never collide; creation still probes the per-user unique index and steps through numeric suffixes until one is free.
 
 The cost is a slug that can drift from the name: rename "AI engineering" to "Agent tooling" and the URL still says `ai-engineering`. That is accepted. A Topic is a long-lived thing a person returns to for months, and the same longevity that makes renaming likely is what makes a broken link expensive.
 
