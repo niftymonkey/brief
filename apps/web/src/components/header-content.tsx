@@ -18,7 +18,7 @@ export function HeaderContent({ nav, children }: HeaderContentProps) {
           className="flex items-center gap-2 text-[var(--color-text-primary)] hover:text-[var(--color-accent)] transition-colors"
         >
           <Youtube className="w-5 h-5 shrink-0" />
-          <span className="font-semibold">Brief</span>
+          <span className="font-semibold sr-only min-[400px]:not-sr-only">Brief</span>
         </Link>
         {nav}
       </div>
