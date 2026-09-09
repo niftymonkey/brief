@@ -15,6 +15,7 @@ import { config } from "dotenv";
 import { sql } from "@vercel/postgres";
 import * as path from "path";
 import * as fs from "fs";
+import { splitSqlStatements } from "./sql-statements";
 
 function parseArgs() {
   const argv = process.argv.slice(2);
@@ -29,6 +30,19 @@ async function main() {
   if (!query) {
     console.error("Usage: pnpm query \"<SQL>\"  [--pretty]");
     console.error('Example: pnpm query "SELECT id, title FROM digests LIMIT 3"');
+    process.exit(2);
+  }
+
+  // The driver returns one result per call, so a second statement leaves it
+  // reading rows off nothing. Say so plainly instead of crashing.
+  const statements = splitSqlStatements(query);
+  if (statements.length > 1) {
+    console.error(
+      `Error: one statement per call, but ${statements.length} were given. Run them as separate pnpm query calls.`,
+    );
+    for (const statement of statements) {
+      console.error(`  - ${statement.split("\n")[0].slice(0, 70)}`);
+    }
     process.exit(2);
   }
 
