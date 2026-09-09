@@ -18,9 +18,18 @@ import type { VariantProps } from "class-variance-authority";
 
 interface NewBriefDialogProps {
   variant?: VariantProps<typeof buttonVariants>["variant"];
+  /**
+   * Drops the visible label below 340px, leaving the icon and a label only a
+   * screen reader reads. The header row runs out of width on a 320px screen; a
+   * button standing on its own in the page has the room and keeps its label.
+   */
+  collapseLabelWhenNarrow?: boolean;
 }
 
-export function NewBriefDialog({ variant = "default" }: NewBriefDialogProps) {
+export function NewBriefDialog({
+  variant = "default",
+  collapseLabelWhenNarrow = false,
+}: NewBriefDialogProps) {
   const [open, setOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step | null>(null);
@@ -85,7 +94,9 @@ export function NewBriefDialog({ variant = "default" }: NewBriefDialogProps) {
             className={variant === "default" ? "bg-[var(--color-accent-dark)] !text-white hover:bg-[var(--color-accent)]" : undefined}
           >
             <Plus className="w-4 h-4" />
-            New Brief
+            <span className={collapseLabelWhenNarrow ? "sr-only min-[340px]:not-sr-only" : undefined}>
+              New Brief
+            </span>
           </Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-xl">

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Layers, Library } from "lucide-react";
+import { Layers, Library, Radar } from "lucide-react";
 import { useLayout } from "./layout-context";
 import { useSidebarEnabled } from "@/hooks/use-sidebar-enabled";
 import { cn } from "@/lib/utils";
@@ -170,6 +170,13 @@ function SidebarNav() {
             </Link>
           ))
         )}
+      </div>
+
+      <div className="flex flex-col gap-0.5">
+        <Link href="/topics" className={linkClass(pathname === "/topics")}>
+          <Radar className="w-4 h-4 shrink-0" />
+          Topics
+        </Link>
       </div>
     </nav>
   );

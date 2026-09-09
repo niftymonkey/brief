@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Layers } from "lucide-react";
+import { Layers, Radar } from "lucide-react";
 import { withAuth, signOut } from "@workos-inc/authkit-nextjs";
 import { isEmailAllowed } from "@/lib/access";
 import { NewBriefDialog } from "./new-brief-dialog";
@@ -21,17 +21,26 @@ export async function Header() {
       <HeaderContent
         nav={
           user && (
-            <Link
-              href="/collections"
-              className="ml-1 inline-flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-            >
-              <Layers className="w-4 h-4 shrink-0" />
-              <span className="sr-only min-[420px]:not-sr-only">Collections</span>
-            </Link>
+            <>
+              <Link
+                href="/collections"
+                className="inline-flex items-center gap-1.5 px-1.5 py-1.5 rounded-md text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+              >
+                <Layers className="w-4 h-4 shrink-0" />
+                <span className="sr-only min-[520px]:not-sr-only">Collections</span>
+              </Link>
+              <Link
+                href="/topics"
+                className="inline-flex items-center gap-1.5 px-1.5 py-1.5 rounded-md text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+              >
+                <Radar className="w-4 h-4 shrink-0" />
+                <span className="sr-only min-[520px]:not-sr-only">Topics</span>
+              </Link>
+            </>
           )
         }
       >
-        {user && hasAccess && <NewBriefDialog />}
+        {user && hasAccess && <NewBriefDialog collapseLabelWhenNarrow />}
         {user && (
           <UserMenu
             user={{
