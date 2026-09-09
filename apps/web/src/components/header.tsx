@@ -40,7 +40,7 @@ export async function Header() {
           )
         }
       >
-        {user && hasAccess && <NewBriefDialog />}
+        {user && hasAccess && <NewBriefDialog collapseLabelWhenNarrow />}
         {user && (
           <UserMenu
             user={{
