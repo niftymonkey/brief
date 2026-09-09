@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useEffectEvent, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 interface YouTubePlayerProps {
@@ -40,10 +40,16 @@ function loadYouTubeAPI(): Promise<void> {
 export function YouTubePlayer({ videoId, title, className, onReady }: YouTubePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YT.Player | null>(null);
-  const onReadyRef = useRef(onReady);
 
-  // Keep callback ref current
-  onReadyRef.current = onReady;
+  /**
+   * The player's ready event arrives long after the render that built it, so the
+   * report has to reach the callback this component was last rendered with rather
+   * than the one captured when the effect ran. Reading it through an effect event
+   * keeps that current without making a changed callback tear the player down.
+   */
+  const reportReady = useEffectEvent((seek: (seconds: number) => void) => {
+    onReady?.(seek);
+  });
 
   const seekTo = useCallback((seconds: number) => {
     if (playerRef.current) {
@@ -74,7 +80,7 @@ export function YouTubePlayer({ videoId, title, className, onReady }: YouTubePla
         events: {
           onReady: () => {
             if (mounted) {
-              onReadyRef.current?.(seekTo);
+              reportReady(seekTo);
             }
           },
         },
