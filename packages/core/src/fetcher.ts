@@ -61,7 +61,7 @@ export async function fetchTranscript(
 
     const decorated = withRetry(source, policy);
     const outcome = await decorated.fetch(videoId, opts.signal);
-    const result = decorate(outcome, source.name);
+    const result = decorate(outcome, source.name, opts.lang);
 
     if (result.kind === "ok") {
       await writeCache(opts, videoId, result);
@@ -97,10 +97,10 @@ function buildSources(opts: TranscriptOptions): TranscriptSource[] {
 
   for (const name of requested) {
     if (name === "youtube-transcript-plus") {
-      sources.push(new LocalSource());
+      sources.push(new LocalSource({ lang: opts.lang }));
     } else if (name === "supadata") {
       if (!opts.supadataApiKey) continue;
-      sources.push(new SupadataSource(opts.supadataApiKey));
+      sources.push(new SupadataSource(opts.supadataApiKey, { lang: opts.lang }));
     }
   }
 
@@ -109,7 +109,8 @@ function buildSources(opts: TranscriptOptions): TranscriptSource[] {
 
 function decorate(
   outcome: SourceOutcome,
-  source: SourceName
+  source: SourceName,
+  lang: string | undefined
 ): TranscriptResult {
   switch (outcome.kind) {
     case "ok":
@@ -128,6 +129,15 @@ function decorate(
         message: `Transcript generation queued by ${source}`,
       };
     case "unavailable":
+      if (outcome.reason === "language-unavailable") {
+        const available = outcome.availableLangs ?? [];
+        return {
+          kind: "unavailable",
+          reason: outcome.reason,
+          message: `No transcript in "${lang}" for this video. Available: ${available.join(", ") || "none"}`,
+          availableLangs: available,
+        };
+      }
       return {
         kind: "unavailable",
         reason: outcome.reason,

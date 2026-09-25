@@ -55,6 +55,7 @@ export interface RunAskOptions {
   question: string;
   openRouterKey?: string;
   supadataKey?: string;
+  lang?: string;
   sources?: SourceName[];
   signal?: AbortSignal;
 }
@@ -121,10 +122,12 @@ export async function runAsk(
 
   const transcriptOpts: {
     supadataApiKey?: string;
+    lang?: string;
     sources?: SourceName[];
     signal?: AbortSignal;
   } = {};
   if (opts.supadataKey) transcriptOpts.supadataApiKey = opts.supadataKey;
+  if (opts.lang) transcriptOpts.lang = opts.lang;
   if (opts.sources) transcriptOpts.sources = opts.sources;
   if (opts.signal) transcriptOpts.signal = opts.signal;
 

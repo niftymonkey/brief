@@ -4,7 +4,8 @@ export type UnavailableReason =
   | "no-captions"
   | "video-removed"
   | "video-private"
-  | "invalid-id";
+  | "invalid-id"
+  | "language-unavailable";
 
 // Legacy flat shape — predates the CLI→server submission's discriminated-union
 // `TranscriptEntrySchema` (kind: "speech" | "visual") in `./submission`. The
@@ -36,6 +37,7 @@ export type TranscriptResult =
       kind: "unavailable";
       reason: UnavailableReason;
       message: string;
+      availableLangs?: string[];
     }
   | {
       kind: "transient";
@@ -56,6 +58,8 @@ export interface TranscriptCache {
 
 export type TranscriptOptions = {
   supadataApiKey?: string;
+  /** Caption language code to fetch. Omitted means the video's original spoken language. */
+  lang?: string;
   signal?: AbortSignal;
   sources?: SourceName[];
   retryPolicy?: RetryPolicy;

@@ -286,4 +286,39 @@ describe("runTranscript with --with-frames", () => {
     const parsed = JSON.parse(result.stdout);
     expect(parsed.status).toBe("ok");
   });
+
+  it("states the transcript language on stderr on a successful frames run", async () => {
+    const framesResult: FramesResult = {
+      kind: "included",
+      transcript: "[0:00-0:05] Hello world\n",
+      metrics: sampleMetrics,
+    };
+    const deps = makeDeps({
+      fetchTranscript: vi.fn().mockResolvedValue({ ...okTranscript, lang: "en" }),
+      extractFrames: vi.fn().mockResolvedValue(framesResult),
+    });
+    const result = await runTranscript(deps, {
+      input: "dQw4w9WgXcQ",
+      json: false,
+      noMetadata: true,
+      withFrames: true,
+    });
+    expect(result.stderr).toContain("Language: en");
+  });
+});
+
+describe("runTranscript language", () => {
+  it("passes a requested language to the transcript fetch", async () => {
+    const deps = makeDeps();
+    await runTranscript(deps, {
+      input: "abc123XYZAB",
+      json: false,
+      noMetadata: true,
+      lang: "es",
+    });
+    expect(deps.fetchTranscript).toHaveBeenCalledWith(
+      "abc123XYZAB",
+      expect.objectContaining({ lang: "es" }),
+    );
+  });
 });

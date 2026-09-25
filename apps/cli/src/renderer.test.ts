@@ -77,6 +77,11 @@ describe("render — human format", () => {
     expect(out.stderr).not.toContain("Channel:");
   });
 
+  it("states the transcript language in the header", () => {
+    const out = render(combined(okTranscript, null), "human", false);
+    expect(out.stderr).toContain("Language: en");
+  });
+
   it("renders pending: empty stdout, message on stderr", () => {
     const out = render(combined(pendingTranscript, null), "human", false);
     expect(out.stdout).toBe("");

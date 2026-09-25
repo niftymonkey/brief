@@ -40,6 +40,8 @@ Options:
                                            (\`brief login\`); LLM calls run server-side so no OPENROUTER_API_KEY is needed.
                                            First run ~1–3 min per video; subsequent runs on the same video reuse the cached
                                            download + frames. Cost is attributed to your brief account.
+  --lang=<code>                            Transcript language code, e.g. es or pt-BR. Default: the video's original
+                                           spoken language. Fails with the available codes when the video lacks it.
   --source=<auto|local|supadata>           Override the transcript cascade
   --timeout=<ms>                           Overall request budget
   --supadata-key=<key>                     Override SUPADATA_API_KEY env var
@@ -68,6 +70,7 @@ type ParsedFlags = {
     json?: boolean;
     "no-metadata"?: boolean;
     "with-frames"?: boolean;
+    lang?: string;
     source?: string;
     timeout?: string;
     "supadata-key"?: string;
@@ -86,6 +89,7 @@ function parseFlags(argv: string[]): ParsedFlags {
       json: { type: "boolean" },
       "no-metadata": { type: "boolean" },
       "with-frames": { type: "boolean" },
+      lang: { type: "string" },
       source: { type: "string" },
       timeout: { type: "string" },
       "supadata-key": { type: "string" },
@@ -146,6 +150,7 @@ interface ParsedCommon {
   json: boolean;
   noMetadata: boolean;
   withFrames: boolean;
+  lang?: string;
   sources?: SourceName[];
   signal?: AbortSignal;
   supadataKey?: string;
@@ -189,6 +194,7 @@ function buildCommonOpts(parsed: ParsedFlags): ParsedCommon | { error: string } 
     noMetadata: !!parsed.values["no-metadata"],
     withFrames: !!parsed.values["with-frames"],
   };
+  if (parsed.values.lang) opts.lang = parsed.values.lang;
   if (sources) opts.sources = sources;
   if (signal) opts.signal = signal;
   if (supadataKey) opts.supadataKey = supadataKey;
@@ -323,6 +329,7 @@ async function dispatchGenerate(argv: string[]): Promise<number> {
     json: common.json,
     withFrames: common.withFrames,
   };
+  if (common.lang) generateOpts.lang = common.lang;
   if (common.sources) generateOpts.sources = common.sources;
   if (common.signal) generateOpts.signal = common.signal;
   if (common.supadataKey) generateOpts.supadataKey = common.supadataKey;
@@ -381,6 +388,14 @@ async function dispatchAsk(argv: string[]): Promise<number> {
   const openRouterKey = parsed.values["openrouter-key"] ?? process.env.OPENROUTER_API_KEY;
   const supadataKey = parsed.values["supadata-key"] ?? process.env.SUPADATA_API_KEY;
 
+  let sources: SourceName[] | undefined;
+  try {
+    sources = mapSource(parsed.values.source);
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    return EXIT_ARG_ERROR;
+  }
+
   let signal: AbortSignal | undefined;
   if (parsed.values.timeout) {
     const ms = Number(parsed.values.timeout);
@@ -395,6 +410,8 @@ async function dispatchAsk(argv: string[]): Promise<number> {
   if (input) askOpts.input = input;
   if (openRouterKey) askOpts.openRouterKey = openRouterKey;
   if (supadataKey) askOpts.supadataKey = supadataKey;
+  if (parsed.values.lang) askOpts.lang = parsed.values.lang;
+  if (sources) askOpts.sources = sources;
   if (signal) askOpts.signal = signal;
 
   const askDeps: Parameters<typeof runAsk>[0] = {

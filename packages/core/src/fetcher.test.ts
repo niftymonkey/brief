@@ -9,19 +9,25 @@ import type {
 
 vi.mock("./sources/local", () => ({
   LocalSource: class {
+    constructor(opts: unknown) {
+      localCtor(opts);
+    }
     readonly name = "youtube-transcript-plus" as const;
     fetch = localFetch;
   },
 }));
 vi.mock("./sources/supadata", () => ({
   SupadataSource: class {
-    constructor(_key: string) {
-      void _key;
+    constructor(key: string, opts: unknown) {
+      supadataCtor(key, opts);
     }
     readonly name = "supadata" as const;
     fetch = supadataFetch;
   },
 }));
+
+const localCtor = vi.fn();
+const supadataCtor = vi.fn();
 
 const localFetch = vi.fn<(...args: unknown[]) => Promise<SourceOutcome>>();
 const supadataFetch = vi.fn<(...args: unknown[]) => Promise<SourceOutcome>>();
@@ -29,6 +35,8 @@ const supadataFetch = vi.fn<(...args: unknown[]) => Promise<SourceOutcome>>();
 function reset() {
   localFetch.mockReset();
   supadataFetch.mockReset();
+  localCtor.mockReset();
+  supadataCtor.mockReset();
 }
 
 const noRetry = { maxAttempts: 1, initialDelayMs: 0, backoffMultiplier: 1 };
@@ -359,5 +367,41 @@ describe("fetchTranscript cascade", () => {
       expect(result.jobId).toBe("abc");
       expect(result.retryAfterSeconds).toBe(60);
     }
+  });
+
+  it("passes a requested language to every source", async () => {
+    reset();
+    localFetch.mockResolvedValue({ kind: "ok", entries: [], lang: "es" });
+
+    await fetchTranscript(VID, {
+      supadataApiKey: "key",
+      lang: "es",
+      retryPolicy: noRetry,
+    });
+
+    expect(localCtor).toHaveBeenCalledWith({ lang: "es" });
+    expect(supadataCtor).toHaveBeenCalledWith("key", { lang: "es" });
+  });
+
+  it("names the requested language and the ones on offer when it is missing", async () => {
+    reset();
+    localFetch.mockResolvedValue({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["ar", "en"],
+    });
+
+    const result = await fetchTranscript(VID, {
+      lang: "es",
+      sources: ["youtube-transcript-plus"],
+      retryPolicy: noRetry,
+    });
+
+    expect(result).toEqual({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      message: 'No transcript in "es" for this video. Available: ar, en',
+      availableLangs: ["ar", "en"],
+    });
   });
 });

@@ -9,6 +9,7 @@ import {
 } from "youtube-transcript-plus";
 import { z } from "zod";
 import { decodeHtmlEntities } from "../text";
+import { preferOriginalCaptionTrack } from "./original-track";
 import type { SourceOutcome, TranscriptSource } from "./types";
 
 const ResponseSchema = z.array(
@@ -20,14 +21,62 @@ const ResponseSchema = z.array(
   })
 );
 
+interface PlayerFetchParams {
+  url: string;
+  lang?: string;
+  userAgent?: string;
+  method?: "GET" | "POST";
+  body?: string;
+  headers?: Record<string, string>;
+}
+
+export interface LocalSourceOptions {
+  lang?: string;
+}
+
 export class LocalSource implements TranscriptSource {
   readonly name = "youtube-transcript-plus" as const;
+  private readonly lang: string | undefined;
+
+  constructor(opts: LocalSourceOptions = {}) {
+    this.lang = opts.lang;
+  }
 
   async fetch(videoId: string): Promise<SourceOutcome> {
+    let languages: string[] = [];
+    const playerFetch = async (params: PlayerFetchParams) => {
+      const res = await fetch(params.url, {
+        method: params.method ?? "GET",
+        headers: {
+          ...(params.userAgent ? { "User-Agent": params.userAgent } : {}),
+          ...(params.lang ? { "Accept-Language": params.lang } : {}),
+          ...params.headers,
+        },
+        ...(params.body ? { body: params.body } : {}),
+      });
+      if (!res.ok) return res;
+      const preferred = preferOriginalCaptionTrack(await res.json());
+      languages = preferred.languages;
+      return new Response(JSON.stringify(preferred.player), {
+        status: res.status,
+        headers: res.headers,
+      });
+    };
+
     let raw: unknown;
     try {
-      raw = await fetchTranscript(videoId);
+      raw = await fetchTranscript(videoId, {
+        ...(this.lang ? { lang: this.lang } : {}),
+        playerFetch,
+      });
     } catch (err) {
+      if (err instanceof YoutubeTranscriptNotAvailableLanguageError) {
+        return {
+          kind: "unavailable",
+          reason: "language-unavailable",
+          availableLangs: languages,
+        };
+      }
       return mapError(err);
     }
 
@@ -51,8 +100,7 @@ export class LocalSource implements TranscriptSource {
 function mapError(err: unknown): SourceOutcome {
   if (
     err instanceof YoutubeTranscriptDisabledError ||
-    err instanceof YoutubeTranscriptNotAvailableError ||
-    err instanceof YoutubeTranscriptNotAvailableLanguageError
+    err instanceof YoutubeTranscriptNotAvailableError
   ) {
     return { kind: "unavailable", reason: "no-captions" };
   }

@@ -23,9 +23,39 @@ vi.mock("youtube-transcript-plus", () => {
 
 import * as ytp from "youtube-transcript-plus";
 
+const PLAYER_PARAMS = {
+  url: "https://www.youtube.com/youtubei/v1/player?key=k",
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: "{}",
+};
+
+function dubbedPlayer() {
+  return {
+    captions: {
+      playerCaptionsTracklistRenderer: {
+        captionTracks: [
+          { languageCode: "ar", baseUrl: "https://x/ar" },
+          { languageCode: "en", baseUrl: "https://x/en" },
+        ],
+        audioTracks: [{ defaultCaptionTrackIndex: 1 }],
+        defaultAudioTrackIndex: 0,
+      },
+    },
+  };
+}
+
+function stubPlayer(player: unknown) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(player), { status: 200 }))
+  );
+}
+
 describe("LocalSource", () => {
   afterEach(() => {
     fetchTranscriptMock.mockReset();
+    vi.unstubAllGlobals();
   });
 
   it("identifies as youtube-transcript-plus", () => {
@@ -94,14 +124,50 @@ describe("LocalSource", () => {
     });
   });
 
-  it("maps not-available-language to unavailable: no-captions", async () => {
-    fetchTranscriptMock.mockRejectedValue(
-      new ytp.YoutubeTranscriptNotAvailableLanguageError("xx", [], "vid")
-    );
-    expect(await new LocalSource().fetch("vid")).toEqual({
-      kind: "unavailable",
-      reason: "no-captions",
+  it("maps not-available-language to language-unavailable with the languages on offer", async () => {
+    stubPlayer(dubbedPlayer());
+    fetchTranscriptMock.mockImplementation(async (_id, config) => {
+      await config.playerFetch(PLAYER_PARAMS);
+      throw new ytp.YoutubeTranscriptNotAvailableLanguageError("xx", [], "vid");
     });
+    expect(await new LocalSource({ lang: "xx" }).fetch("vid")).toEqual({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["ar", "en"],
+    });
+  });
+
+  it("fetches the original-language track of a dubbed video", async () => {
+    stubPlayer(dubbedPlayer());
+    fetchTranscriptMock.mockImplementation(async (_id, config) => {
+      const res = await config.playerFetch(PLAYER_PARAMS);
+      const player = await res.json();
+      const first = player.captions.playerCaptionsTracklistRenderer.captionTracks[0];
+      return [{ text: "hi", offset: 0, duration: 1, lang: first.languageCode }];
+    });
+    const result = await new LocalSource().fetch("vid");
+    expect(result).toMatchObject({ kind: "ok", lang: "en" });
+  });
+
+  it("passes a requested language to the library", async () => {
+    fetchTranscriptMock.mockResolvedValue([
+      { text: "hola", offset: 0, duration: 1, lang: "es" },
+    ]);
+    await new LocalSource({ lang: "es" }).fetch("vid");
+    expect(fetchTranscriptMock).toHaveBeenCalledWith(
+      "vid",
+      expect.objectContaining({ lang: "es" })
+    );
+  });
+
+  it("returns a failed player response untouched", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 500 })));
+    fetchTranscriptMock.mockImplementation(async (_id, config) => {
+      const res = await config.playerFetch(PLAYER_PARAMS);
+      return [{ text: String(res.status), offset: 0, duration: 1 }];
+    });
+    const result = await new LocalSource().fetch("vid");
+    expect(result).toMatchObject({ kind: "ok", entries: [{ text: "500" }] });
   });
 
   it("maps video-unavailable to unavailable: video-removed", async () => {

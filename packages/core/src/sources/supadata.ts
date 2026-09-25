@@ -22,12 +22,18 @@ const ResponseSchema = z.union([InlineTranscriptSchema, JobIdSchema]);
 
 const DEFAULT_RETRY_AFTER_SECONDS = 90;
 
+export interface SupadataSourceOptions {
+  lang?: string;
+}
+
 export class SupadataSource implements TranscriptSource {
   readonly name = "supadata" as const;
   private readonly client: Supadata;
+  private readonly lang: string | undefined;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, opts: SupadataSourceOptions = {}) {
     this.client = new Supadata({ apiKey });
+    this.lang = opts.lang;
   }
 
   async fetch(videoId: string): Promise<SourceOutcome> {
@@ -36,6 +42,7 @@ export class SupadataSource implements TranscriptSource {
       raw = await this.client.transcript({
         url: `https://www.youtube.com/watch?v=${videoId}`,
         mode: "auto",
+        ...(this.lang ? { lang: this.lang } : {}),
       });
     } catch (err) {
       return mapError(err);
@@ -54,6 +61,16 @@ export class SupadataSource implements TranscriptSource {
       };
     }
 
+    // Supadata answers a missing language with the first one it has, so a
+    // mismatch here means the requested language is not on offer.
+    if (this.lang && !sameLanguage(this.lang, parsed.data.lang)) {
+      return {
+        kind: "unavailable",
+        reason: "language-unavailable",
+        availableLangs: parsed.data.availableLangs,
+      };
+    }
+
     const entries = parsed.data.content.map((c) => ({
       text: decodeHtmlEntities(c.text),
       offsetSec: c.offset / 1000,
@@ -63,6 +80,11 @@ export class SupadataSource implements TranscriptSource {
 
     return { kind: "ok", lang: parsed.data.lang, entries };
   }
+}
+
+function sameLanguage(requested: string, returned: string): boolean {
+  const primary = (code: string) => code.split("-")[0]!.toLowerCase();
+  return primary(requested) === primary(returned);
 }
 
 function mapError(err: unknown): SourceOutcome {

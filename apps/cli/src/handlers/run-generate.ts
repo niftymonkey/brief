@@ -32,6 +32,7 @@ export interface RunGenerateDeps {
     input: string,
     opts: {
       supadataApiKey?: string;
+      lang?: string;
       sources?: SourceName[];
       signal?: AbortSignal;
     },
@@ -48,6 +49,7 @@ export interface RunGenerateOptions {
   sources?: SourceName[];
   signal?: AbortSignal;
   supadataKey?: string;
+  lang?: string;
 }
 
 function toSubmissionEntries(transcript: TranscriptResult & { kind: "ok" }): SumTypeEntry[] {
@@ -78,10 +80,12 @@ export async function runGenerate(
 
   const transcriptOpts: {
     supadataApiKey?: string;
+    lang?: string;
     sources?: SourceName[];
     signal?: AbortSignal;
   } = {};
   if (opts.supadataKey) transcriptOpts.supadataApiKey = opts.supadataKey;
+  if (opts.lang) transcriptOpts.lang = opts.lang;
   if (opts.sources) transcriptOpts.sources = opts.sources;
   if (opts.signal) transcriptOpts.signal = opts.signal;
 
