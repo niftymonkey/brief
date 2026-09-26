@@ -51,9 +51,10 @@ export type RetryPolicy = {
   backoffMultiplier: number;
 };
 
+/** Keyed by `<videoId>:<lang>`, with `default` standing in when no lang was requested. */
 export interface TranscriptCache {
-  get(videoId: string): Promise<TranscriptResult | null>;
-  set(videoId: string, result: TranscriptResult): Promise<void>;
+  get(key: string): Promise<TranscriptResult | null>;
+  set(key: string, result: TranscriptResult): Promise<void>;
 }
 
 export type TranscriptOptions = {

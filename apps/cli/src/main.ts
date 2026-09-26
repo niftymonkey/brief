@@ -41,7 +41,8 @@ Options:
                                            First run ~1–3 min per video; subsequent runs on the same video reuse the cached
                                            download + frames. Cost is attributed to your brief account.
   --lang=<code>                            Transcript language code, e.g. es or pt-BR. Default: the video's original
-                                           spoken language. Fails with the available codes when the video lacks it.
+                                           spoken language (local source); Supadata uses its first available language.
+                                           Fails with the available codes when the video lacks it.
   --source=<auto|local|supadata>           Override the transcript cascade
   --timeout=<ms>                           Overall request budget
   --supadata-key=<key>                     Override SUPADATA_API_KEY env var
@@ -387,6 +388,11 @@ async function dispatchAsk(argv: string[]): Promise<number> {
 
   const openRouterKey = parsed.values["openrouter-key"] ?? process.env.OPENROUTER_API_KEY;
   const supadataKey = parsed.values["supadata-key"] ?? process.env.SUPADATA_API_KEY;
+
+  if (parsed.values.source === "supadata" && !supadataKey) {
+    process.stderr.write("--source=supadata requires SUPADATA_API_KEY or --supadata-key\n");
+    return EXIT_ARG_ERROR;
+  }
 
   let sources: SourceName[] | undefined;
   try {

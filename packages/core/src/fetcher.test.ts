@@ -256,7 +256,7 @@ describe("fetchTranscript cascade", () => {
     });
 
     expect(result).toBe(cached);
-    expect(cache.get).toHaveBeenCalledWith(VID);
+    expect(cache.get).toHaveBeenCalledWith(`${VID}:default`);
     expect(localFetch).not.toHaveBeenCalled();
   });
 
@@ -275,7 +275,35 @@ describe("fetchTranscript cascade", () => {
     });
 
     expect(cache.set).toHaveBeenCalledTimes(1);
-    expect(cache.set).toHaveBeenCalledWith(VID, result);
+    expect(cache.set).toHaveBeenCalledWith(`${VID}:default`, result);
+  });
+
+  it("does not return a cache entry stored under a different language", async () => {
+    reset();
+    const english: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      entries: [],
+      lang: "en",
+    };
+    const store = new Map<string, TranscriptResult>([[`${VID}:en`, english]]);
+    const cache: TranscriptCache = {
+      get: vi.fn(async (key: string) => store.get(key) ?? null),
+      set: vi.fn().mockResolvedValue(undefined),
+    };
+    localFetch.mockResolvedValue({ kind: "ok", entries: [], lang: "es" });
+
+    const result = await fetchTranscript(VID, {
+      lang: "es",
+      sources: ["youtube-transcript-plus"],
+      cache,
+      retryPolicy: noRetry,
+    });
+
+    expect(cache.get).toHaveBeenCalledWith(`${VID}:es`);
+    expect(localFetch).toHaveBeenCalledTimes(1);
+    expect(result).not.toBe(english);
+    expect(cache.set).toHaveBeenCalledWith(`${VID}:es`, result);
   });
 
   it("does not call cache.set on non-ok outcomes", async () => {
@@ -397,6 +425,30 @@ describe("fetchTranscript cascade", () => {
       retryPolicy: noRetry,
     });
 
+    expect(result).toEqual({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      message: 'No transcript in "es" for this video. Available: ar, en',
+      availableLangs: ["ar", "en"],
+    });
+  });
+
+  it("keeps a language-unavailable result when a later source has no captions", async () => {
+    reset();
+    localFetch.mockResolvedValue({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["ar", "en"],
+    });
+    supadataFetch.mockResolvedValue({ kind: "unavailable", reason: "no-captions" });
+
+    const result = await fetchTranscript(VID, {
+      lang: "es",
+      supadataApiKey: "key",
+      retryPolicy: noRetry,
+    });
+
+    expect(supadataFetch).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       kind: "unavailable",
       reason: "language-unavailable",

@@ -32,8 +32,9 @@ export async function fetchTranscript(
     };
   }
 
+  const cacheKey = `${videoId}:${opts.lang ?? "default"}`;
   if (opts.cache) {
-    const cached = await opts.cache.get(videoId);
+    const cached = await opts.cache.get(cacheKey);
     if (cached) return cached;
   }
 
@@ -64,7 +65,7 @@ export async function fetchTranscript(
     const result = decorate(outcome, source.name, opts.lang);
 
     if (result.kind === "ok") {
-      await writeCache(opts, videoId, result);
+      await writeCache(opts, cacheKey, result);
       return result;
     }
 
@@ -73,7 +74,11 @@ export async function fetchTranscript(
     }
 
     if (result.kind === "unavailable") {
-      bestNonTerminal = result;
+      const keepLanguageMiss =
+        bestNonTerminal?.kind === "unavailable" &&
+        bestNonTerminal.reason === "language-unavailable" &&
+        result.reason === "no-captions";
+      if (!keepLanguageMiss) bestNonTerminal = result;
       continue;
     }
 
@@ -169,14 +174,14 @@ function messageForUnavailable(reason: string): string {
 
 async function writeCache(
   opts: TranscriptOptions,
-  videoId: string,
+  cacheKey: string,
   result: TranscriptResult
 ): Promise<void> {
   if (!opts.cache) return;
   try {
-    await opts.cache.set(videoId, result);
+    await opts.cache.set(cacheKey, result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[transcript] cache.set failed for ${videoId}: ${msg}`);
+    console.error(`[transcript] cache.set failed for key ${cacheKey}: ${msg}`);
   }
 }
