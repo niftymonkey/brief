@@ -1,27 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchTranscript } from "./fetcher";
-import type { SourceOutcome, TranscriptSource } from "./sources/types";
-import type {
-  SourceName,
-  TranscriptCache,
-  TranscriptResult,
-} from "./types";
+import type { SourceOutcome } from "./sources/types";
+import type { TranscriptCache, TranscriptResult } from "./types";
 
 vi.mock("./sources/local", () => ({
   LocalSource: class {
+    constructor(opts: unknown) {
+      localCtor(opts);
+    }
     readonly name = "youtube-transcript-plus" as const;
     fetch = localFetch;
   },
 }));
 vi.mock("./sources/supadata", () => ({
   SupadataSource: class {
-    constructor(_key: string) {
-      void _key;
+    constructor(key: string, opts: unknown) {
+      supadataCtor(key, opts);
     }
     readonly name = "supadata" as const;
     fetch = supadataFetch;
   },
 }));
+
+const localCtor = vi.fn();
+const supadataCtor = vi.fn();
 
 const localFetch = vi.fn<(...args: unknown[]) => Promise<SourceOutcome>>();
 const supadataFetch = vi.fn<(...args: unknown[]) => Promise<SourceOutcome>>();
@@ -29,6 +31,8 @@ const supadataFetch = vi.fn<(...args: unknown[]) => Promise<SourceOutcome>>();
 function reset() {
   localFetch.mockReset();
   supadataFetch.mockReset();
+  localCtor.mockReset();
+  supadataCtor.mockReset();
 }
 
 const noRetry = { maxAttempts: 1, initialDelayMs: 0, backoffMultiplier: 1 };
@@ -60,7 +64,7 @@ describe("fetchTranscript cascade", () => {
       kind: "pending",
       jobId: "j",
       retryAfterSeconds: 90,
-    } as SourceOutcome);
+    });
     supadataFetch.mockResolvedValue({ kind: "ok", entries: [] });
 
     const result = await fetchTranscript(VID, {
@@ -219,7 +223,7 @@ describe("fetchTranscript cascade", () => {
   it("returns transient: no-sources when sources resolve to empty (e.g. supadata-only without key)", async () => {
     reset();
     const result = await fetchTranscript(VID, {
-      sources: ["supadata"] as SourceName[],
+      sources: ["supadata"],
       retryPolicy: noRetry,
     });
     expect(result.kind).toBe("transient");
@@ -268,6 +272,62 @@ describe("fetchTranscript cascade", () => {
 
     expect(cache.set).toHaveBeenCalledTimes(1);
     expect(cache.set).toHaveBeenCalledWith(VID, result);
+  });
+
+  it("does not return a cache entry stored under a different language", async () => {
+    reset();
+    const english: TranscriptResult = {
+      kind: "ok",
+      source: "youtube-transcript-plus",
+      entries: [],
+      lang: "en",
+    };
+    const store = new Map<string, TranscriptResult>([[`${VID}:en`, english]]);
+    const cache: TranscriptCache = {
+      get: vi.fn(async (key: string) => store.get(key) ?? null),
+      set: vi.fn().mockResolvedValue(undefined),
+    };
+    localFetch.mockResolvedValue({ kind: "ok", entries: [], lang: "es" });
+
+    const result = await fetchTranscript(VID, {
+      lang: "es",
+      sources: ["youtube-transcript-plus"],
+      cache,
+      retryPolicy: noRetry,
+    });
+
+    expect(cache.get).toHaveBeenCalledWith(`${VID}:es`);
+    expect(localFetch).toHaveBeenCalledTimes(1);
+    expect(result).not.toBe(english);
+    expect(cache.set).toHaveBeenCalledWith(`${VID}:es`, result);
+  });
+
+  it("does not return the omitted-lang cache entry for an explicit lang of default", async () => {
+    reset();
+    const store = new Map<string, TranscriptResult>();
+    const cache: TranscriptCache = {
+      get: vi.fn(async (key: string) => store.get(key) ?? null),
+      set: vi.fn(async (key: string, value: TranscriptResult) => {
+        store.set(key, value);
+      }),
+    };
+    localFetch.mockResolvedValue({ kind: "ok", entries: [], lang: "en" });
+    const original = await fetchTranscript(VID, {
+      sources: ["youtube-transcript-plus"],
+      cache,
+      retryPolicy: noRetry,
+    });
+
+    const result = await fetchTranscript(VID, {
+      lang: "default",
+      sources: ["youtube-transcript-plus"],
+      cache,
+      retryPolicy: noRetry,
+    });
+
+    expect(cache.get).toHaveBeenLastCalledWith(`${VID}:default`);
+    expect(localFetch).toHaveBeenCalledTimes(2);
+    expect(result).not.toBe(original);
   });
 
   it("does not call cache.set on non-ok outcomes", async () => {
@@ -359,5 +419,92 @@ describe("fetchTranscript cascade", () => {
       expect(result.jobId).toBe("abc");
       expect(result.retryAfterSeconds).toBe(60);
     }
+  });
+
+  it("passes a requested language to every source", async () => {
+    reset();
+    localFetch.mockResolvedValue({ kind: "ok", entries: [], lang: "es" });
+
+    await fetchTranscript(VID, {
+      supadataApiKey: "key",
+      lang: "es",
+      retryPolicy: noRetry,
+    });
+
+    expect(localCtor).toHaveBeenCalledWith({ lang: "es" });
+    expect(supadataCtor).toHaveBeenCalledWith("key", { lang: "es" });
+  });
+
+  it("names the requested language and the ones on offer when it is missing", async () => {
+    reset();
+    localFetch.mockResolvedValue({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["ar", "en"],
+    });
+
+    const result = await fetchTranscript(VID, {
+      lang: "es",
+      sources: ["youtube-transcript-plus"],
+      retryPolicy: noRetry,
+    });
+
+    expect(result).toEqual({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      message: 'No transcript in "es" for this video. Available: ar, en',
+      availableLangs: ["ar", "en"],
+    });
+  });
+
+  it("keeps a language-unavailable result when a later source has no captions", async () => {
+    reset();
+    localFetch.mockResolvedValue({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["ar", "en"],
+    });
+    supadataFetch.mockResolvedValue({ kind: "unavailable", reason: "no-captions" });
+
+    const result = await fetchTranscript(VID, {
+      lang: "es",
+      supadataApiKey: "key",
+      retryPolicy: noRetry,
+    });
+
+    expect(supadataFetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      message: 'No transcript in "es" for this video. Available: ar, en',
+      availableLangs: ["ar", "en"],
+    });
+  });
+
+  it("merges the languages on offer when every source reports the requested one missing", async () => {
+    reset();
+    localFetch.mockResolvedValue({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["ar", "en"],
+    });
+    supadataFetch.mockResolvedValue({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["en", "fr"],
+    });
+
+    const result = await fetchTranscript(VID, {
+      lang: "es",
+      supadataApiKey: "key",
+      retryPolicy: noRetry,
+    });
+
+    expect(result).toEqual({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      message: 'No transcript in "es" for this video. Available: ar, en, fr',
+      availableLangs: ["ar", "en", "fr"],
+    });
   });
 });

@@ -206,4 +206,41 @@ describe("SupadataSource", () => {
       mode: "auto",
     });
   });
+
+  it("asks Supadata for a requested language", async () => {
+    transcriptMock.mockResolvedValue({
+      content: [{ text: "hola", offset: 0, duration: 1000, lang: "es" }],
+      lang: "es",
+      availableLangs: ["en", "es"],
+    });
+    await new SupadataSource("key", { lang: "es" }).fetch("dQw4w9WgXcQ");
+    expect(transcriptMock).toHaveBeenCalledWith({
+      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      mode: "auto",
+      lang: "es",
+    });
+  });
+
+  it("accepts a regional variant of the requested language", async () => {
+    transcriptMock.mockResolvedValue({
+      content: [{ text: "oi", offset: 0, duration: 1000, lang: "pt" }],
+      lang: "pt",
+      availableLangs: ["en", "pt"],
+    });
+    const result = await new SupadataSource("key", { lang: "pt-BR" }).fetch("vid");
+    expect(result).toMatchObject({ kind: "ok", lang: "pt" });
+  });
+
+  it("returns language-unavailable when Supadata falls back to another language", async () => {
+    transcriptMock.mockResolvedValue({
+      content: [{ text: "hello", offset: 0, duration: 1000, lang: "en" }],
+      lang: "en",
+      availableLangs: ["en", "fr"],
+    });
+    expect(await new SupadataSource("key", { lang: "es" }).fetch("vid")).toEqual({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["en", "fr"],
+    });
+  });
 });

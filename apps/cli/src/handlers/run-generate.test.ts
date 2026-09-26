@@ -208,3 +208,14 @@ describe("runGenerate", () => {
     expect(deps.hostedClient.submit).not.toHaveBeenCalled();
   });
 });
+
+describe("runGenerate transcript language", () => {
+  it("passes a requested language to the transcript fetch", async () => {
+    const deps = makeDeps();
+    await runGenerate(deps, { ...baseOptions, lang: "es" });
+    expect(deps.fetchTranscript).toHaveBeenCalledWith(
+      "dQw4w9WgXcQ",
+      expect.objectContaining({ lang: "es" }),
+    );
+  });
+});

@@ -30,7 +30,8 @@ export function render(
 
 function renderHuman(combined: CombinedResult, isTTY: boolean): Rendered {
   const { transcript, metadata, videoIdOrUrl } = combined;
-  const headerLines = buildHeader(videoIdOrUrl, metadata, isTTY);
+  const lang = transcript.kind === "ok" ? transcript.lang : undefined;
+  const headerLines = buildHeader(videoIdOrUrl, metadata, lang, isTTY);
   const stderrLines = [...headerLines];
 
   let stdout = "";
@@ -47,6 +48,7 @@ function renderHuman(combined: CombinedResult, isTTY: boolean): Rendered {
 function buildHeader(
   videoIdOrUrl: string,
   metadata: MetadataResult | null,
+  lang: string | undefined,
   isTTY: boolean
 ): string[] {
   const dim = (s: string): string => (isTTY ? `${DIM}${s}${RESET}` : s);
@@ -60,6 +62,7 @@ function buildHeader(
   }
   lines.push(`Video ID: ${id}`);
   lines.push(`URL: ${videoIdOrUrl}`);
+  if (lang) lines.push(`Language: ${lang}`);
 
   return lines.map(dim);
 }

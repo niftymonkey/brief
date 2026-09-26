@@ -19,6 +19,7 @@ export interface RunTranscriptDeps {
     input: string,
     opts: {
       supadataApiKey?: string;
+      lang?: string;
       sources?: SourceName[];
       signal?: AbortSignal;
     },
@@ -52,6 +53,7 @@ export interface RunTranscriptOptions {
   sources?: SourceName[];
   signal?: AbortSignal;
   supadataKey?: string;
+  lang?: string;
   youtubeKey?: string;
   ttyStderr?: boolean;
   bareShortcut?: boolean;
@@ -75,10 +77,12 @@ export async function runTranscript(
 
   const transcriptOpts: {
     supadataApiKey?: string;
+    lang?: string;
     sources?: SourceName[];
     signal?: AbortSignal;
   } = {};
   if (opts.supadataKey) transcriptOpts.supadataApiKey = opts.supadataKey;
+  if (opts.lang) transcriptOpts.lang = opts.lang;
   if (opts.sources) transcriptOpts.sources = opts.sources;
   if (opts.signal) transcriptOpts.signal = opts.signal;
 
@@ -157,9 +161,10 @@ export async function runTranscript(
 
   // Augmented happy path: the woven string IS the stdout output, so pipelines
   // like `brief transcript --with-frames | brief ask "..."` work directly.
+  const language = transcript.lang ? `Language: ${transcript.lang}\n` : "";
   return {
     stdout: `${framesResult.transcript}\n`,
-    stderr: tip,
+    stderr: `${tip}${language}`,
     exitCode: EXIT_OK,
   };
 }

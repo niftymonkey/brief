@@ -32,8 +32,9 @@ export async function fetchTranscript(
     };
   }
 
+  const cacheKey = opts.lang === undefined ? videoId : `${videoId}:${opts.lang}`;
   if (opts.cache) {
-    const cached = await opts.cache.get(videoId);
+    const cached = await opts.cache.get(cacheKey);
     if (cached) return cached;
   }
 
@@ -61,10 +62,10 @@ export async function fetchTranscript(
 
     const decorated = withRetry(source, policy);
     const outcome = await decorated.fetch(videoId, opts.signal);
-    const result = decorate(outcome, source.name);
+    const result = decorate(outcome, source.name, opts.lang);
 
     if (result.kind === "ok") {
-      await writeCache(opts, videoId, result);
+      await writeCache(opts, cacheKey, result);
       return result;
     }
 
@@ -73,7 +74,24 @@ export async function fetchTranscript(
     }
 
     if (result.kind === "unavailable") {
-      bestNonTerminal = result;
+      const priorLangs: string[] | null =
+        bestNonTerminal?.kind === "unavailable" &&
+        bestNonTerminal.reason === "language-unavailable"
+          ? (bestNonTerminal.availableLangs ?? [])
+          : null;
+      if (priorLangs && result.reason === "language-unavailable") {
+        const merged: string[] = [
+          ...new Set([...priorLangs, ...(result.availableLangs ?? [])]),
+        ];
+        bestNonTerminal = {
+          kind: "unavailable",
+          reason: "language-unavailable",
+          message: languageUnavailableMessage(opts.lang, merged),
+          availableLangs: merged,
+        };
+      } else if (!(priorLangs && result.reason === "no-captions")) {
+        bestNonTerminal = result;
+      }
       continue;
     }
 
@@ -97,10 +115,10 @@ function buildSources(opts: TranscriptOptions): TranscriptSource[] {
 
   for (const name of requested) {
     if (name === "youtube-transcript-plus") {
-      sources.push(new LocalSource());
+      sources.push(new LocalSource({ lang: opts.lang }));
     } else if (name === "supadata") {
       if (!opts.supadataApiKey) continue;
-      sources.push(new SupadataSource(opts.supadataApiKey));
+      sources.push(new SupadataSource(opts.supadataApiKey, { lang: opts.lang }));
     }
   }
 
@@ -109,7 +127,8 @@ function buildSources(opts: TranscriptOptions): TranscriptSource[] {
 
 function decorate(
   outcome: SourceOutcome,
-  source: SourceName
+  source: SourceName,
+  lang: string | undefined
 ): TranscriptResult {
   switch (outcome.kind) {
     case "ok":
@@ -128,6 +147,15 @@ function decorate(
         message: `Transcript generation queued by ${source}`,
       };
     case "unavailable":
+      if (outcome.reason === "language-unavailable") {
+        const available = outcome.availableLangs ?? [];
+        return {
+          kind: "unavailable",
+          reason: outcome.reason,
+          message: languageUnavailableMessage(lang, available),
+          availableLangs: available,
+        };
+      }
       return {
         kind: "unavailable",
         reason: outcome.reason,
@@ -140,6 +168,13 @@ function decorate(
         message: `Transient failure (${outcome.cause}) from ${source}`,
       };
   }
+}
+
+function languageUnavailableMessage(
+  lang: string | undefined,
+  available: string[]
+): string {
+  return `No transcript in "${lang}" for this video. Available: ${available.join(", ") || "none"}`;
 }
 
 function messageForUnavailable(reason: string): string {
@@ -159,14 +194,14 @@ function messageForUnavailable(reason: string): string {
 
 async function writeCache(
   opts: TranscriptOptions,
-  videoId: string,
+  cacheKey: string,
   result: TranscriptResult
 ): Promise<void> {
   if (!opts.cache) return;
   try {
-    await opts.cache.set(videoId, result);
+    await opts.cache.set(cacheKey, result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[transcript] cache.set failed for ${videoId}: ${msg}`);
+    console.error(`[transcript] cache.set failed for key ${cacheKey}: ${msg}`);
   }
 }
