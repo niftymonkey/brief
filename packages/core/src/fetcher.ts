@@ -32,7 +32,7 @@ export async function fetchTranscript(
     };
   }
 
-  const cacheKey = `${videoId}:${opts.lang ?? "default"}`;
+  const cacheKey = opts.lang === undefined ? videoId : `${videoId}:${opts.lang}`;
   if (opts.cache) {
     const cached = await opts.cache.get(cacheKey);
     if (cached) return cached;
@@ -74,11 +74,24 @@ export async function fetchTranscript(
     }
 
     if (result.kind === "unavailable") {
-      const keepLanguageMiss =
+      const priorLangs: string[] | null =
         bestNonTerminal?.kind === "unavailable" &&
-        bestNonTerminal.reason === "language-unavailable" &&
-        result.reason === "no-captions";
-      if (!keepLanguageMiss) bestNonTerminal = result;
+        bestNonTerminal.reason === "language-unavailable"
+          ? (bestNonTerminal.availableLangs ?? [])
+          : null;
+      if (priorLangs && result.reason === "language-unavailable") {
+        const merged: string[] = [
+          ...new Set([...priorLangs, ...(result.availableLangs ?? [])]),
+        ];
+        bestNonTerminal = {
+          kind: "unavailable",
+          reason: "language-unavailable",
+          message: languageUnavailableMessage(opts.lang, merged),
+          availableLangs: merged,
+        };
+      } else if (!(priorLangs && result.reason === "no-captions")) {
+        bestNonTerminal = result;
+      }
       continue;
     }
 
@@ -139,7 +152,7 @@ function decorate(
         return {
           kind: "unavailable",
           reason: outcome.reason,
-          message: `No transcript in "${lang}" for this video. Available: ${available.join(", ") || "none"}`,
+          message: languageUnavailableMessage(lang, available),
           availableLangs: available,
         };
       }
@@ -155,6 +168,13 @@ function decorate(
         message: `Transient failure (${outcome.cause}) from ${source}`,
       };
   }
+}
+
+function languageUnavailableMessage(
+  lang: string | undefined,
+  available: string[]
+): string {
+  return `No transcript in "${lang}" for this video. Available: ${available.join(", ") || "none"}`;
 }
 
 function messageForUnavailable(reason: string): string {

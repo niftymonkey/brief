@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchTranscript } from "./fetcher";
-import type { SourceOutcome, TranscriptSource } from "./sources/types";
-import type {
-  SourceName,
-  TranscriptCache,
-  TranscriptResult,
-} from "./types";
+import type { SourceOutcome } from "./sources/types";
+import type { TranscriptCache, TranscriptResult } from "./types";
 
 vi.mock("./sources/local", () => ({
   LocalSource: class {
@@ -68,7 +64,7 @@ describe("fetchTranscript cascade", () => {
       kind: "pending",
       jobId: "j",
       retryAfterSeconds: 90,
-    } as SourceOutcome);
+    });
     supadataFetch.mockResolvedValue({ kind: "ok", entries: [] });
 
     const result = await fetchTranscript(VID, {
@@ -227,7 +223,7 @@ describe("fetchTranscript cascade", () => {
   it("returns transient: no-sources when sources resolve to empty (e.g. supadata-only without key)", async () => {
     reset();
     const result = await fetchTranscript(VID, {
-      sources: ["supadata"] as SourceName[],
+      sources: ["supadata"],
       retryPolicy: noRetry,
     });
     expect(result.kind).toBe("transient");
@@ -256,7 +252,7 @@ describe("fetchTranscript cascade", () => {
     });
 
     expect(result).toBe(cached);
-    expect(cache.get).toHaveBeenCalledWith(`${VID}:default`);
+    expect(cache.get).toHaveBeenCalledWith(VID);
     expect(localFetch).not.toHaveBeenCalled();
   });
 
@@ -275,7 +271,7 @@ describe("fetchTranscript cascade", () => {
     });
 
     expect(cache.set).toHaveBeenCalledTimes(1);
-    expect(cache.set).toHaveBeenCalledWith(`${VID}:default`, result);
+    expect(cache.set).toHaveBeenCalledWith(VID, result);
   });
 
   it("does not return a cache entry stored under a different language", async () => {
@@ -304,6 +300,34 @@ describe("fetchTranscript cascade", () => {
     expect(localFetch).toHaveBeenCalledTimes(1);
     expect(result).not.toBe(english);
     expect(cache.set).toHaveBeenCalledWith(`${VID}:es`, result);
+  });
+
+  it("does not return the omitted-lang cache entry for an explicit lang of default", async () => {
+    reset();
+    const store = new Map<string, TranscriptResult>();
+    const cache: TranscriptCache = {
+      get: vi.fn(async (key: string) => store.get(key) ?? null),
+      set: vi.fn(async (key: string, value: TranscriptResult) => {
+        store.set(key, value);
+      }),
+    };
+    localFetch.mockResolvedValue({ kind: "ok", entries: [], lang: "en" });
+    const original = await fetchTranscript(VID, {
+      sources: ["youtube-transcript-plus"],
+      cache,
+      retryPolicy: noRetry,
+    });
+
+    const result = await fetchTranscript(VID, {
+      lang: "default",
+      sources: ["youtube-transcript-plus"],
+      cache,
+      retryPolicy: noRetry,
+    });
+
+    expect(cache.get).toHaveBeenLastCalledWith(`${VID}:default`);
+    expect(localFetch).toHaveBeenCalledTimes(2);
+    expect(result).not.toBe(original);
   });
 
   it("does not call cache.set on non-ok outcomes", async () => {
@@ -454,6 +478,33 @@ describe("fetchTranscript cascade", () => {
       reason: "language-unavailable",
       message: 'No transcript in "es" for this video. Available: ar, en',
       availableLangs: ["ar", "en"],
+    });
+  });
+
+  it("merges the languages on offer when every source reports the requested one missing", async () => {
+    reset();
+    localFetch.mockResolvedValue({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["ar", "en"],
+    });
+    supadataFetch.mockResolvedValue({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      availableLangs: ["en", "fr"],
+    });
+
+    const result = await fetchTranscript(VID, {
+      lang: "es",
+      supadataApiKey: "key",
+      retryPolicy: noRetry,
+    });
+
+    expect(result).toEqual({
+      kind: "unavailable",
+      reason: "language-unavailable",
+      message: 'No transcript in "es" for this video. Available: ar, en, fr',
+      availableLangs: ["ar", "en", "fr"],
     });
   });
 });
