@@ -68,9 +68,9 @@ pnpm --filter @brief/web db:sync-from-prod             # asks you to type yes
 
 This replaces everything in `dev` with production's current data. Run it after every merge whose migration ran on production, and any time dev data gets messy. Then run `migrate <file>` again for any migration on your current branch that production does not have yet.
 
-It also moves your rows from your production user id to your local one. WorkOS gives you a different id in each environment, so without this step you would see no data locally.
+After the reset, it moves your rows from your production user id to your local one. WorkOS gives you a different id in each environment, so without this step you would see no data locally.
 
-It needs `NEON_API_KEY`, `NEON_PROJECT_ID`, `DEV_OWNER_PROD_USER_ID` and `DEV_OWNER_LOCAL_USER_ID` in `apps/web/.env` (see `apps/web/.env.example`). It refuses to run unless `POSTGRES_URL` points at the `dev` branch, so it cannot reset production.
+The reset needs `NEON_API_KEY`, `NEON_PROJECT_ID` and `POSTGRES_URL` in `apps/web/.env` (see `apps/web/.env.example`). It refuses to run unless `POSTGRES_URL` points at the `dev` branch, so it cannot reset production. Moving your rows also needs `DEV_OWNER_PROD_USER_ID` and `DEV_OWNER_LOCAL_USER_ID`. If either is missing, the script says so before you confirm, then resets without moving them.
 
 ### Repair scripts
 
