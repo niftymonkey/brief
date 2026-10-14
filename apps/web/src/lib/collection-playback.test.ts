@@ -12,6 +12,7 @@ import {
   describeSittingPosition,
   initialPlaybackState,
   readSittingPosition,
+  readSittingSteps,
   reducePlayback,
   type PlaybackEffect,
   type PlaybackEvent,
@@ -820,16 +821,21 @@ describe("prev", () => {
     expect(loads(back.effects)).toEqual([0]);
   });
 
-  it("takes a finished sitting back to the item it ended on", () => {
-    const done = run(
-      [{ kind: "start" }, playing(0.058, "n3V3LZh_r40"), tick(10.003, "n3V3LZh_r40")],
-      [ITEMS[4]],
-    );
+  it("takes a finished sitting to the item before the one it ended on, as it would mid-run", () => {
+    const done = run([
+      { kind: "start" },
+      { kind: "skip" },
+      { kind: "skip" },
+      { kind: "skip" },
+      { kind: "skip" },
+      { kind: "skip" },
+    ]);
     expect(done.state.status).toBe("done");
 
-    const back = run([{ kind: "prev" }], [ITEMS[4]], done.state);
+    const back = run([{ kind: "prev" }], ITEMS, done.state);
     expect(back.state.status).toBe("loading");
-    expect(back.state.index).toBe(0);
+    expect(back.state.index).toBe(3);
+    expect(loads(back.effects)).toEqual([3]);
   });
 
   it("has nothing to go back to before the sitting has started", () => {
@@ -895,6 +901,68 @@ describe("describeSittingPosition", () => {
     expect(
       describeSittingPosition({ itemId: null, ordinal: null, total: 5, isDone: true }),
     ).toBe("5 of 5");
+  });
+});
+
+describe("readSittingSteps", () => {
+  it("has nothing to step back to from the first entry", () => {
+    expect(readSittingSteps({ itemId: "a", ordinal: 1, total: 5, isDone: false })).toEqual({
+      canStepBack: false,
+      canStepForward: true,
+    });
+  });
+
+  it("steps either way from an entry in the middle", () => {
+    expect(readSittingSteps({ itemId: "c", ordinal: 3, total: 5, isDone: false })).toEqual({
+      canStepBack: true,
+      canStepForward: true,
+    });
+  });
+
+  it("has nothing to step forward to from the last entry", () => {
+    expect(readSittingSteps({ itemId: "e", ordinal: 5, total: 5, isDone: false })).toEqual({
+      canStepBack: true,
+      canStepForward: false,
+    });
+  });
+
+  it("steps nowhere in a run of one entry", () => {
+    expect(readSittingSteps({ itemId: "a", ordinal: 1, total: 1, isDone: false })).toEqual({
+      canStepBack: false,
+      canStepForward: false,
+    });
+  });
+
+  it("counts entries rather than videos, so a last range of a repeated video is still the last", () => {
+    const items = [ITEMS[0], ITEMS[1], { ...ITEMS[1], id: "b-later", startSec: 50, endSec: 60 }];
+    const { state, effects } = run([{ kind: "start" }, { kind: "skip" }, { kind: "skip" }], items);
+    expect(effects.at(-2)).toMatchObject({ kind: "seek", index: 2 });
+    expect(readSittingSteps(readSittingPosition(state, items))).toEqual({
+      canStepBack: true,
+      canStepForward: false,
+    });
+  });
+
+  it("steps back past the entry the run ended on once it is over, and no further forward", () => {
+    expect(readSittingSteps({ itemId: null, ordinal: null, total: 5, isDone: true })).toEqual({
+      canStepBack: true,
+      canStepForward: false,
+    });
+  });
+
+  it("steps nowhere once a run of one entry is over", () => {
+    expect(readSittingSteps({ itemId: null, ordinal: null, total: 1, isDone: true })).toEqual({
+      canStepBack: false,
+      canStepForward: false,
+    });
+  });
+
+  it("steps nowhere before the run has put an entry on screen", () => {
+    expect(readSittingSteps({ itemId: null, ordinal: null, total: 5, isDone: false })).toEqual({
+      canStepBack: false,
+      canStepForward: false,
+    });
+    expect(readSittingSteps(null)).toEqual({ canStepBack: false, canStepForward: false });
   });
 });
 

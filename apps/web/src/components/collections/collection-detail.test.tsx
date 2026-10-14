@@ -26,10 +26,10 @@ vi.mock("@/lib/youtube-iframe-api", () => ({
   loadYouTubeIframeApi: () => Promise.resolve(),
 }));
 
-function detailElement() {
+function detailElement(collection = makeCollection()) {
   return (
     <CollectionDetail
-      collection={makeCollection()}
+      collection={collection}
       editable
       videoFacts={VIDEO_FACTS}
       curator="Curator"
@@ -39,8 +39,17 @@ function detailElement() {
   );
 }
 
-function renderDetail() {
-  return render(detailElement());
+function renderDetail(collection = makeCollection()) {
+  return render(detailElement(collection));
+}
+
+function isDisabled(name: string): boolean {
+  return screen.getByRole("button", { name }).hasAttribute("disabled");
+}
+
+async function pressNext(): Promise<void> {
+  fireEvent.click(screen.getByRole("button", { name: "Next entry" }));
+  await settle();
 }
 
 /** The aria-describedby of every drag grip in one server render of the page. */
@@ -270,6 +279,47 @@ describe("CollectionDetail header controls", () => {
       { kind: "load", videoId: VIDEO_B, toSec: 0 },
       { kind: "load", videoId: VIDEO_A, toSec: 0 },
     ]);
+  });
+
+  it("offers no Previous on the first entry", async () => {
+    renderDetail();
+    await startSitting();
+
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+    expect(isDisabled("Previous entry")).toBe(true);
+    expect(isDisabled("Next entry")).toBe(false);
+  });
+
+  it("offers both Previous and Next on an entry in the middle", async () => {
+    renderDetail();
+    await startSitting();
+    await pressNext();
+
+    expect(screen.getByText("2 of 3")).toBeTruthy();
+    expect(isDisabled("Previous entry")).toBe(false);
+    expect(isDisabled("Next entry")).toBe(false);
+  });
+
+  it("offers no Next on the last entry, even when it is a second range of the video on screen", async () => {
+    renderDetail();
+    await startSitting();
+    await pressNext();
+    await pressNext();
+
+    expect(screen.getByText("3 of 3")).toBeTruthy();
+    expect(livePlayer().loads.at(-1)).toEqual({ kind: "seek", toSec: 30 });
+    expect(isDisabled("Previous entry")).toBe(false);
+    expect(isDisabled("Next entry")).toBe(true);
+  });
+
+  it("offers neither Previous nor Next in a collection of one entry", async () => {
+    const collection = makeCollection();
+    renderDetail({ ...collection, itemCount: 1, items: collection.items.slice(0, 1) });
+    await startSitting();
+
+    expect(screen.getByText("1 of 1")).toBeTruthy();
+    expect(isDisabled("Previous entry")).toBe(true);
+    expect(isDisabled("Next entry")).toBe(true);
   });
 
   it("takes the player down from the one control that started it", async () => {

@@ -7,7 +7,11 @@ import {
 } from "./collection-share-popover";
 import { cn } from "@/lib/utils";
 import { formatRuntimeWords, type CollectionSitting } from "@/lib/collection-entries";
-import { describeSittingPosition, type SittingPosition } from "@/lib/collection-playback";
+import {
+  describeSittingPosition,
+  readSittingSteps,
+  type SittingPosition,
+} from "@/lib/collection-playback";
 
 interface CollectionTransportProps {
   title: string;
@@ -94,6 +98,7 @@ export function CollectionTransport({
   children,
 }: CollectionTransportProps) {
   const { entries, totalRuntimeSec } = sitting;
+  const { canStepBack, canStepForward } = readSittingSteps(position);
   const playLabel =
     totalRuntimeSec !== null
       ? `Play the whole collection, ${formatRuntimeWords(totalRuntimeSec)}`
@@ -196,6 +201,7 @@ export function CollectionTransport({
                   variant="outline"
                   size="icon-sm"
                   onClick={onPrev}
+                  disabled={!canStepBack}
                   title="Previous entry"
                   aria-label="Previous entry"
                   className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
@@ -206,6 +212,7 @@ export function CollectionTransport({
                   variant="outline"
                   size="icon-sm"
                   onClick={onSkip}
+                  disabled={!canStepForward}
                   title="Next entry"
                   aria-label="Next entry"
                   className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"

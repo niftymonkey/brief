@@ -311,6 +311,31 @@ export function describeSittingPosition(position: SittingPosition): string {
   return `${place} of ${position.total}`;
 }
 
+/** Which way the header's previous and next controls can still take the sitting. */
+export interface SittingSteps {
+  canStepBack: boolean;
+  canStepForward: boolean;
+}
+
+/**
+ * Whether stepping either way would put a different entry on screen. Previous on the
+ * first entry only restarts it, and next on the last only ends the run. A finished
+ * run rests on its last entry, so it steps back exactly as that entry would. A run
+ * with no entry on screen yet, or none reported, ignores both.
+ */
+export function readSittingSteps(position: SittingPosition | null): SittingSteps {
+  if (position?.isDone) {
+    return { canStepBack: position.total > 1, canStepForward: false };
+  }
+  if (position?.ordinal == null) {
+    return { canStepBack: false, canStepForward: false };
+  }
+  return {
+    canStepBack: position.ordinal > 1,
+    canStepForward: position.ordinal < position.total,
+  };
+}
+
 export function initialPlaybackState(): PlaybackState {
   return {
     status: "idle",
@@ -654,9 +679,10 @@ export function reducePlayback(
 
     case "prev": {
       if (state.status === "idle") return unchanged(state);
-      // A finished sitting sits one past its last entry, and the first entry has
-      // nothing before it, so back from the top is a restart of the top.
-      const from = Math.min(state.index, items.length);
+      // A finished sitting rests on its last entry, so back from it is the entry
+      // before that, as it is mid-run. The first entry has nothing before it, so
+      // back from the top is a restart of the top.
+      const from = Math.min(state.index, items.length - 1);
       return loadIndex(state, Math.max(from - 1, 0), items);
     }
 

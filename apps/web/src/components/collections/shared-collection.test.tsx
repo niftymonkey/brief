@@ -60,4 +60,27 @@ describe("SharedCollection playback", () => {
     expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_A, toSec: 0 }]);
     expect(FakeYouTubePlayer.instances).toHaveLength(2);
   });
+
+  it("offers no Previous on the first entry and no Next on the last", async () => {
+    renderShared();
+    const isDisabled = (name: string) =>
+      screen.getByRole("button", { name }).hasAttribute("disabled");
+
+    fireEvent.click(screen.getByRole("button", { name: /Play the whole collection/ }));
+    await settle();
+    await settle();
+
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+    expect(isDisabled("Previous entry")).toBe(true);
+    expect(isDisabled("Next entry")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next entry" }));
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Next entry" }));
+    await settle();
+
+    expect(screen.getByText("3 of 3")).toBeTruthy();
+    expect(isDisabled("Previous entry")).toBe(false);
+    expect(isDisabled("Next entry")).toBe(true);
+  });
 });
