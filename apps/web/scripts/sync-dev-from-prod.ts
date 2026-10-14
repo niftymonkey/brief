@@ -214,6 +214,8 @@ function connectionHostsOf(endpoint: NeonEndpoint): string[] {
   return [direct, pooled];
 }
 
+const POSTGRES_PROTOCOLS = ["postgres:", "postgresql:"];
+
 function refuse(reason: SafetyRefusalReason, message: string): SafetyRefused {
   return { ok: false, reason, message };
 }
@@ -281,12 +283,19 @@ export function decideResetSafety(input: SafetyInput): SafetyDecision {
     );
   }
 
-  let postgresHost: string;
+  let parsedUrl: URL;
   try {
-    postgresHost = new URL(postgresUrl).hostname.toLowerCase();
+    parsedUrl = new URL(postgresUrl);
   } catch {
     return refuse("invalid-postgres-url", "POSTGRES_URL in .env is not a valid connection URL.");
   }
+  if (!POSTGRES_PROTOCOLS.includes(parsedUrl.protocol)) {
+    return refuse(
+      "invalid-postgres-url",
+      `POSTGRES_URL in .env uses the scheme "${parsedUrl.protocol}"; only ${POSTGRES_PROTOCOLS.map((p) => `"${p}"`).join(" or ")} are accepted.`,
+    );
+  }
+  const postgresHost = parsedUrl.hostname.toLowerCase();
   if (!postgresHost) {
     return refuse("invalid-postgres-url", "POSTGRES_URL in .env has no host.");
   }

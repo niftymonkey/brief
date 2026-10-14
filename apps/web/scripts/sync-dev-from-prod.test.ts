@@ -156,6 +156,31 @@ describe("decideResetSafety", () => {
     expect(refusalOf(decide({ postgresUrl: "not a url" }))).toBe("invalid-postgres-url");
   });
 
+  it("refuses a URL on dev's host whose scheme is not a Postgres one, naming the scheme", () => {
+    const decision = decide({
+      postgresUrl: "https://ep-ancient-lab-ahh80koz-pooler.c-3.us-east-1.aws.neon.tech/neondb",
+    });
+    expect(refusalOf(decision)).toBe("invalid-postgres-url");
+    if (!decision.ok) {
+      expect(decision.message).toContain("https:");
+      expect(decision.message).toContain("postgres:");
+      expect(decision.message).toContain("postgresql:");
+    }
+  });
+
+  it("accepts a postgres:// URL on dev's host", () => {
+    expect(decide({ postgresUrl: DEV_POOLED_URL }).ok).toBe(true);
+  });
+
+  it("accepts a postgresql:// URL on dev's host", () => {
+    expect(
+      decide({
+        postgresUrl:
+          "postgresql://user:pw@ep-ancient-lab-ahh80koz-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require",
+      }).ok,
+    ).toBe(true);
+  });
+
   it("refuses when POSTGRES_URL points at production", () => {
     const decision = decide({ postgresUrl: PROD_POOLED_URL });
     expect(refusalOf(decision)).toBe("host-not-on-branch");
