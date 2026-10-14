@@ -1,6 +1,6 @@
-# YouTube Data API v3: facts that shaped the Topic design
+# YouTube: verified facts that shaped Topics and Collections
 
-Verified against the official docs on 2026-09-08. Re-check the revision history before leaning on any of these:
+The Data API facts were verified against the official docs on 2026-09-08; the frame-shape, thumbnail and embed facts on 2026-07-29 and 2026-10-14. Re-check the revision history before leaning on any of these:
 https://developers.google.com/youtube/v3/revision_history
 
 ## Quota
@@ -30,3 +30,17 @@ https://developers.google.com/youtube/v3/revision_history
 ## Captions
 
 - Do not filter search by `videoCaption=closedCaption`. Read `contentDetails.caption` from the `videos.list` batch instead, so a Report can say how many candidates had no captions. Whether that field is trustworthy for auto-generated captions is unverified.
+
+## Frame shape (aspect ratio)
+
+- `videos.list` with `part` including `player` and `maxWidth: 8192` returns `player.embedWidth` and `player.embedHeight` **as JSON strings**. Only their ratio is stable; the pixel values scale to `maxWidth`. It rides free on a lookup already being made, since `videos.list` costs 1 unit regardless of parts.
+- Dead ends, all verified: `snippet.thumbnails` sizes (identical for both shapes), oEmbed (no aspect data), `contentDetails.dimension` and `.projection` (stereoscopy and 360, not frame shape), `fileDetails` (owner-only OAuth), duration heuristics (false positives), a pasted `/shorts/` URL (discarded by the parser), the IFrame API (no aspect getter, and the `<video>` is cross-origin).
+
+## Thumbnails
+
+- Vertical videos use `https://i.ytimg.com/vi/<id>/frame0.jpg` with `mqdefault.jpg` as fallback, because `mqdefault` has pillarbox panels baked into the pixels. These ytimg paths are undocumented. `oar2.jpg` is clean but 404s on at least one real video (`A0scuiiGBC4`); `oardefault.jpg` 404s everywhere. `frame0.jpg` is low resolution at large sizes.
+
+## Embedded Shorts
+
+- YouTube serves some visitors a "Shorts embed" player for Shorts (`<shorts-embeds>`, `ytm-reel-player-overlay-renderer` inside the iframe). It has no fullscreen button, ignores the documented `fs` default, and no player parameter opts out. Which player a visitor gets follows YouTube's own cookies (`VISITOR_INFO1_LIVE`, `__Secure-ROLLOUT_TOKEN`), not viewport width or user agent, and sticks once assigned. Regular landscape videos always get the standard player. This is why the collection player draws its own full screen toggle.
+- `Element.requestFullscreen` is not available on iPhone Safari (iPad only, per MDN browser-compat-data), so the toggle falls back to filling the viewport with CSS there.
