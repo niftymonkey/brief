@@ -9,9 +9,11 @@ import {
   useState,
   type CSSProperties,
   type Ref,
+  type RefObject,
 } from "react";
-import { CircleAlert, Loader2, Play, RotateCw } from "lucide-react";
+import { CircleAlert, Loader2, Minimize, Play, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useElementFullscreen } from "@/hooks/use-element-fullscreen";
 import { entryAspectRatio } from "@/lib/collection-entries";
 import { formatRange } from "@/lib/collection-item-input";
 import {
@@ -24,6 +26,7 @@ import {
   type PlaybackState,
   type SittingPosition,
 } from "@/lib/collection-playback";
+import { cn } from "@/lib/utils";
 import { loadYouTubeIframeApi } from "@/lib/youtube-iframe-api";
 
 export interface CollectionPlayerItem {
@@ -38,13 +41,14 @@ export interface CollectionPlayerItem {
 }
 
 /**
- * The two moves the header carries for a run it does not own. Prev and skip are the
- * only things outside the player that steer it; starting and stopping a run are the
- * page's own, because they mount and unmount this component.
+ * The moves the header carries for a run it does not own. Prev, skip and full screen
+ * are the only things outside the player that steer it; starting and stopping a run
+ * are the page's own, because they mount and unmount this component.
  */
 export interface CollectionPlayerHandle {
   skip: () => void;
   prev: () => void;
+  toggleFullscreen: () => void;
 }
 
 interface CollectionPlayerProps {
@@ -54,6 +58,16 @@ interface CollectionPlayerProps {
    * so the header's counter and the entries list follow the sitting.
    */
   onPositionChange?: (position: SittingPosition | null) => void;
+  /**
+   * Whether the frame fills the screen, reported on every change and as false if the
+   * player goes while it does, so the header's toggle reads the same as the frame.
+   */
+  onFullscreenChange?: (isFullscreen: boolean) => void;
+  /**
+   * The header's full screen toggle, which focus returns to when the frame leaves
+   * full screen.
+   */
+  fullscreenReturnFocusRef?: RefObject<HTMLElement | null>;
   ref?: Ref<CollectionPlayerHandle>;
 }
 
@@ -113,7 +127,14 @@ interface FrameStyle extends CSSProperties {
  * exactly as asked: a `seek` is what lets the reducer recognise a second range of the
  * video already on screen, and turning one into a reload would take that away.
  */
-export function CollectionPlayer({ items, onPositionChange, ref }: CollectionPlayerProps) {
+export function CollectionPlayer({
+  items,
+  onPositionChange,
+  onFullscreenChange,
+  fullscreenReturnFocusRef,
+  ref,
+}: CollectionPlayerProps) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YT.Player | null>(null);
   const stateRef = useRef<PlaybackState>(initialPlaybackState());
@@ -131,6 +152,10 @@ export function CollectionPlayer({ items, onPositionChange, ref }: CollectionPla
   const [apiFailed, setApiFailed] = useState(false);
   /** Bumped by the Try again control to build the player over from scratch. */
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const fullscreen = useElementFullscreen(frameRef, {
+    onChange: onFullscreenChange,
+    returnFocusRef: fullscreenReturnFocusRef,
+  });
 
   const clearArmingTimer = useCallback(() => {
     if (armingTimerRef.current !== null) {
@@ -228,8 +253,9 @@ export function CollectionPlayer({ items, onPositionChange, ref }: CollectionPla
     () => ({
       skip: () => dispatch({ kind: "skip" }),
       prev: () => dispatch({ kind: "prev" }),
+      toggleFullscreen: fullscreen.toggle,
     }),
-    [dispatch],
+    [dispatch, fullscreen.toggle],
   );
 
   useEffect(() => {
@@ -392,15 +418,49 @@ export function CollectionPlayer({ items, onPositionChange, ref }: CollectionPla
 
   return (
     <section aria-label="Collection playback">
-      {/* One tree across both the entry change and the breakpoint: the shape is a
-          class on a wrapper the iframe merely lives inside, and the phone's
-          true-shape frame is the same element the desktop draws at 16:9. */}
+      {/* One tree across the entry change, the breakpoint and full screen: the shape
+          is a class on a wrapper the iframe merely lives inside, the phone's
+          true-shape frame is the same element the desktop draws at 16:9, and filling
+          the screen restyles that element where it stands rather than moving it. */}
       <div
+        ref={frameRef}
         style={frameStyle}
         data-frame-shape={frameAspect < 1 ? "vertical" : "landscape"}
-        className="relative w-[calc(min(70vh,32rem)*var(--frame-aspect))] max-w-full mx-auto aspect-[var(--frame-aspect)] sm:w-full sm:aspect-video rounded-lg sm:rounded-xl overflow-hidden bg-black"
+        data-fullscreen={fullscreen.mode === "off" ? undefined : fullscreen.mode}
+        className={cn(
+          "overflow-hidden bg-black",
+          fullscreen.mode === "off"
+            ? "relative w-[calc(min(70vh,32rem)*var(--frame-aspect))] max-w-full mx-auto aspect-[var(--frame-aspect)] sm:w-full sm:aspect-video rounded-lg sm:rounded-xl"
+            : "fixed inset-0 z-[100] [container-type:size]",
+        )}
       >
-        <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+        {/* Full screen draws the video at its true shape, as large as the frame
+            allows, rather than handing a Short a landscape box to letterbox in. */}
+        <div
+          ref={containerRef}
+          className={cn(
+            "absolute inset-0",
+            fullscreen.mode === "off"
+              ? "w-full h-full"
+              : "m-auto w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] h-[min(100cqh,calc(100cqw/var(--frame-aspect)))]",
+          )}
+        />
+        {/* The header is out of reach while the frame fills the screen, so the way
+            back out is drawn inside it, and focus moves to it so a keyboard can
+            find it. */}
+        {fullscreen.mode !== "off" && (
+          <Button
+            variant="outline"
+            size="icon-sm"
+            autoFocus
+            onClick={fullscreen.exit}
+            title="Exit full screen"
+            aria-label="Exit full screen"
+            className="absolute size-9 top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] rounded-full border-white/25 bg-black/60 text-white hover:bg-black/80 hover:text-white dark:bg-black/60 dark:hover:bg-black/80"
+          >
+            <Minimize className="w-4 h-4" />
+          </Button>
+        )}
       </div>
 
       {apiFailed && (

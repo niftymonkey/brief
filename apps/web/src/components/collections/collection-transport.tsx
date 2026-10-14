@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Play, SkipBack, SkipForward, Square } from "lucide-react";
+import type { ReactNode, Ref } from "react";
+import { Maximize, Minimize, Play, SkipBack, SkipForward, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   CollectionSharePopover,
@@ -25,10 +25,15 @@ interface CollectionTransportProps {
   isPlaying: boolean;
   /** Where that run stands, null until it reports its first position. */
   position: SittingPosition | null;
+  /** True while the player fills the screen. */
+  isFullscreen: boolean;
   onPlay: () => void;
   onStop: () => void;
   onPrev: () => void;
   onSkip: () => void;
+  onToggleFullscreen: () => void;
+  /** The full screen toggle itself, for the player to hand focus back to. */
+  fullscreenToggleRef?: Ref<HTMLButtonElement>;
   /** The share link and its state. Omitted where sharing is not the viewer's to see. */
   share?: CollectionShareState;
   /** Owner-only controls, joining share in the header's icon cluster. */
@@ -88,10 +93,13 @@ export function CollectionTransport({
   canPlay,
   isPlaying,
   position,
+  isFullscreen,
   onPlay,
   onStop,
   onPrev,
   onSkip,
+  onToggleFullscreen,
+  fullscreenToggleRef,
   share,
   actions,
   player,
@@ -219,6 +227,21 @@ export function CollectionTransport({
                 >
                   <SkipForward className="w-4 h-4" />
                 </Button>
+                <Button
+                  ref={fullscreenToggleRef}
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={onToggleFullscreen}
+                  title={isFullscreen ? "Exit full screen" : "Enter full screen"}
+                  aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+                  className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
+                >
+                  {isFullscreen ? (
+                    <Minimize className="w-4 h-4" />
+                  ) : (
+                    <Maximize className="w-4 h-4" />
+                  )}
+                </Button>
                 {/* The divider only earns its place between two groups, and a
                     reader's cluster has nothing on the far side of it. */}
                 {(share || actions) && (
@@ -243,11 +266,14 @@ export function CollectionTransport({
         )}
       >
         <div className="min-h-0 overflow-hidden">
+          {/* Any translate, even a zero one, would make this the box a filled
+              player is fixed to instead of the viewport, so full screen drops it. */}
           <div
             className={cn(
               "px-4 pt-3.5 sm:px-6 sm:pt-4 transition-[opacity,transform]",
               MOTION,
               isPlaying ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2",
+              isFullscreen && "translate-none",
             )}
           >
             {player}

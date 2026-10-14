@@ -215,6 +215,12 @@ html {
   scrollbar-gutter: stable both-edges;
 }
 
+/* The gutters inset the viewport a fixed or full screen element fills, which would
+   leave a strip of page down each side of a player filling the screen. */
+html:has(:fullscreen, [data-fullscreen]) {
+  scrollbar-gutter: auto;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--color-bg-primary);

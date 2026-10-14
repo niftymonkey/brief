@@ -86,8 +86,10 @@ export function CollectionDetail({
   const [shareError, setShareError] = useState<string | null>(null);
   const [activeSitting, setActiveSitting] = useState<ActiveSitting | null>(null);
   const [position, setPosition] = useState<SittingPosition | null>(null);
-  /** The run on screen, for the prev and skip controls the header carries for it. */
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  /** The run on screen, for the prev, skip and full screen controls the header carries for it. */
   const playerRef = useRef<CollectionPlayerHandle>(null);
+  const fullscreenToggleRef = useRef<HTMLButtonElement>(null);
 
   // A grip has to travel a few pixels before it counts as a drag, so a plain
   // click on it (or a tap that turns into a page scroll) never lifts a row. The
@@ -327,10 +329,13 @@ export function CollectionDetail({
         canPlay={canPlay}
         isPlaying={openSitting !== null}
         position={position}
+        isFullscreen={isFullscreen}
         onPlay={startSitting}
         onStop={closePlayer}
         onPrev={() => playerRef.current?.prev()}
         onSkip={() => playerRef.current?.skip()}
+        onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
+        fullscreenToggleRef={fullscreenToggleRef}
         share={share}
         player={
           openSitting && (
@@ -339,6 +344,8 @@ export function CollectionDetail({
               ref={playerRef}
               items={openSitting.items}
               onPositionChange={handlePositionChange}
+              onFullscreenChange={setIsFullscreen}
+              fullscreenReturnFocusRef={fullscreenToggleRef}
             />
           )
         }

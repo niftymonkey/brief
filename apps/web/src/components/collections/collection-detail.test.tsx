@@ -336,6 +336,27 @@ describe("CollectionDetail header controls", () => {
     expect(document.querySelectorAll('[aria-current="true"]')).toHaveLength(0);
   });
 
+  it("fills the viewport with the player from the header's full screen toggle", async () => {
+    renderDetail();
+    expect(screen.queryByRole("button", { name: "Enter full screen" })).toBeNull();
+    await startSitting();
+
+    fireEvent.click(screen.getByRole("button", { name: "Enter full screen" }));
+    await settle();
+
+    const frame = document.querySelector("[data-frame-shape]");
+    expect(frame?.getAttribute("data-fullscreen")).toBe("fill");
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(frame?.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Exit full screen");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(frame?.hasAttribute("data-fullscreen")).toBe(false);
+    expect(document.body.style.overflow).toBe("");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Enter full screen" }));
+  });
+
   it("reorders entries by dragging them, with no move buttons left to press", () => {
     renderDetail();
 
