@@ -33,6 +33,17 @@ pnpm --filter @brief/web inspect-schema --json      # machine-readable
 
 Parses every migration in `apps/web/migrations/` to derive the expected schema (additions and drops), then compares against `information_schema`. Per-migration status is `applied` / `partial` / `not-applied`. Also flags columns that exist in the DB but aren't declared by any migration. Use this after applying a migration to prod to confirm it actually landed.
 
+## Syncing dev from production
+
+Local dev uses the Neon `dev` branch, a child of production. After a merge whose migrations ran on prod, reset dev so it is an exact copy of production again:
+
+```sh
+pnpm --filter @brief/web db:sync-from-prod             # reset dev from production (asks for confirmation)
+pnpm --filter @brief/web db:sync-from-prod --dry-run   # run every safety check and print the plan, reset nothing
+```
+
+This wipes dev: every row is replaced by production's and Neon keeps no backup. It needs `NEON_API_KEY` and `NEON_PROJECT_ID` in `apps/web/.env`, and refuses unless the host in `POSTGRES_URL` is one of dev's own endpoints, so it can never reset production. After the reset it moves the owner's rows from `DEV_OWNER_PROD_USER_ID` to `DEV_OWNER_LOCAL_USER_ID` (WorkOS ids differ per environment) in every base table with a `user_id` column, in one transaction; if either id is unset it skips that step. Then run `inspect-schema` and apply any migration from your current branch that production does not have yet.
+
 ## Local CLI iteration
 
 `pnpm cli:local` runs `apps/cli` against `http://localhost:3100`, sourcing `apps/web/.env.local` first so env-driven settings (OpenRouter key, WorkOS client ID, etc.) match the web server.
