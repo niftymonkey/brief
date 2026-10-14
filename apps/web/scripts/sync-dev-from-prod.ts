@@ -203,13 +203,15 @@ export function isConfirmed(answer: string): boolean {
 }
 
 /**
- * The Neon endpoint id a connection host points at. Pooled hosts carry a
- * `-pooler` suffix on the first label (`ep-x-pooler.c-3...`) that the
- * endpoint's own id does not.
+ * The hostnames a client can use to reach a Neon endpoint, lowercased: the
+ * direct host Neon lists for it, and the pooled form that carries `-pooler` on
+ * the first label (`ep-x.c-3...` and `ep-x-pooler.c-3...`).
  */
-export function endpointIdFromHost(hostname: string): string {
-  const firstLabel = hostname.toLowerCase().split(".")[0] ?? "";
-  return firstLabel.replace(/-pooler$/, "");
+function connectionHostsOf(endpoint: NeonEndpoint): string[] {
+  const direct = endpoint.host.toLowerCase();
+  const [firstLabel, ...rest] = direct.split(".");
+  const pooled = [`${firstLabel}-pooler`, ...rest].join(".");
+  return [direct, pooled];
 }
 
 function refuse(reason: SafetyRefusalReason, message: string): SafetyRefused {
@@ -289,15 +291,14 @@ export function decideResetSafety(input: SafetyInput): SafetyDecision {
     return refuse("invalid-postgres-url", "POSTGRES_URL in .env has no host.");
   }
 
-  const endpointId = endpointIdFromHost(postgresHost);
-  const endpoint = endpoints.find(
-    (e) => e.branchId === target.id && e.id.toLowerCase() === endpointId,
-  );
+  const targetEndpoints = endpoints.filter((e) => e.branchId === target.id);
+  const endpoint = targetEndpoints.find((e) => connectionHostsOf(e).includes(postgresHost));
   if (!endpoint) {
-    const known = endpoints.length > 0 ? endpoints.map((e) => e.id).join(", ") : "none";
+    const expected =
+      targetEndpoints.length > 0 ? targetEndpoints.flatMap(connectionHostsOf).join(", ") : "none";
     return refuse(
       "host-not-on-branch",
-      `POSTGRES_URL in .env points at ${postgresHost} (endpoint ${endpointId}), which is not one of "${targetName}"'s endpoints (${known}). Refusing to reset a database local dev does not use.`,
+      `POSTGRES_URL in .env points at ${postgresHost}, which is not a host of "${targetName}"'s endpoints (expected one of: ${expected}). Refusing to reset a database local dev does not use.`,
     );
   }
 

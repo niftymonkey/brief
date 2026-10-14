@@ -3,7 +3,6 @@ import {
   buildOwnerRemapPlan,
   createNeonClient,
   decideResetSafety,
-  endpointIdFromHost,
   executeOwnerRemap,
   isConfirmed,
   NeonApiError,
@@ -76,30 +75,6 @@ describe("isConfirmed", () => {
     expect(isConfirmed("y")).toBe(false);
     expect(isConfirmed(" yes")).toBe(false);
     expect(isConfirmed("")).toBe(false);
-  });
-});
-
-describe("endpointIdFromHost", () => {
-  it("strips the -pooler suffix from a pooled host", () => {
-    expect(endpointIdFromHost("ep-ancient-lab-ahh80koz-pooler.c-3.us-east-1.aws.neon.tech")).toBe(
-      "ep-ancient-lab-ahh80koz",
-    );
-  });
-
-  it("reads the endpoint id from a direct host", () => {
-    expect(endpointIdFromHost("ep-ancient-lab-ahh80koz.c-3.us-east-1.aws.neon.tech")).toBe(
-      "ep-ancient-lab-ahh80koz",
-    );
-  });
-
-  it("lowercases the host", () => {
-    expect(endpointIdFromHost("EP-Ancient-Lab-AHH80KOZ-Pooler.c-3.us-east-1.aws.neon.tech")).toBe(
-      "ep-ancient-lab-ahh80koz",
-    );
-  });
-
-  it("only strips -pooler at the end of the first label", () => {
-    expect(endpointIdFromHost("ep-pooler-thing.example.com")).toBe("ep-pooler-thing");
   });
 });
 
@@ -188,6 +163,53 @@ describe("decideResetSafety", () => {
       expect(decision.message).toContain("ep-ancient-truth-ah2094of-pooler");
       expect(decision.message).toContain("ep-ancient-lab-ahh80koz");
     }
+  });
+
+  it("refuses a pooled host on another domain that reuses dev's endpoint id", () => {
+    const decision = decide({
+      postgresUrl: "postgres://user:pw@ep-ancient-lab-ahh80koz-pooler.db.example.com/neondb",
+    });
+    expect(refusalOf(decision)).toBe("host-not-on-branch");
+    if (!decision.ok) {
+      expect(decision.message).toContain("ep-ancient-lab-ahh80koz-pooler.db.example.com");
+      expect(decision.message).toContain("ep-ancient-lab-ahh80koz.c-3.us-east-1.aws.neon.tech");
+      expect(decision.message).toContain(
+        "ep-ancient-lab-ahh80koz-pooler.c-3.us-east-1.aws.neon.tech",
+      );
+    }
+  });
+
+  it("refuses a direct host on another domain that reuses dev's endpoint id", () => {
+    const decision = decide({
+      postgresUrl: "postgres://user:pw@ep-ancient-lab-ahh80koz.neon.tech.example.com/neondb",
+    });
+    expect(refusalOf(decision)).toBe("host-not-on-branch");
+  });
+
+  it("approves the pooled form of dev's endpoint host", () => {
+    expect(decide({ postgresUrl: DEV_POOLED_URL })).toMatchObject({
+      ok: true,
+      endpoint: DEV_ENDPOINT,
+    });
+  });
+
+  it("approves dev's endpoint host exactly as Neon lists it", () => {
+    expect(decide({ postgresUrl: DEV_DIRECT_URL })).toMatchObject({
+      ok: true,
+      endpoint: DEV_ENDPOINT,
+    });
+  });
+
+  it("ignores case differences between POSTGRES_URL's host and the endpoint host", () => {
+    const shoutingUrl =
+      "postgres://user:pw@EP-Ancient-Lab-AHH80KOZ-Pooler.C-3.US-East-1.AWS.Neon.Tech/neondb";
+    expect(decide({ postgresUrl: shoutingUrl }).ok).toBe(true);
+
+    const shoutingEndpoint: NeonEndpoint = {
+      ...DEV_ENDPOINT,
+      host: "EP-ANCIENT-LAB-AHH80KOZ.C-3.US-EAST-1.AWS.NEON.TECH",
+    };
+    expect(decide({ endpoints: [shoutingEndpoint] }).ok).toBe(true);
   });
 
   it("refuses when dev has no endpoints at all", () => {
