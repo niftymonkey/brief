@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,11 @@ export function CollectionDetail({
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  // Left to itself, DndContext numbers its accessibility ids from a module-wide
+  // counter that a long-lived server keeps climbing while each browser starts at
+  // zero, so the grips' aria-describedby would never hydrate. useId is the same on
+  // both sides.
+  const dndContextId = useId();
 
   const collectionId = collection.id;
 
@@ -371,6 +376,7 @@ export function CollectionDetail({
           </div>
         ) : editable ? (
           <DndContext
+            id={dndContextId}
             sensors={sensors}
             collisionDetection={closestCenter}
             modifiers={[restrictToVerticalAxis]}

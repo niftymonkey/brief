@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { CollectionDetail } from "@/components/collections/collection-detail";
 import {
   FakeYouTubePlayer,
@@ -25,8 +26,8 @@ vi.mock("@/lib/youtube-iframe-api", () => ({
   loadYouTubeIframeApi: () => Promise.resolve(),
 }));
 
-function renderDetail() {
-  return render(
+function detailElement() {
+  return (
     <CollectionDetail
       collection={makeCollection()}
       editable
@@ -34,7 +35,20 @@ function renderDetail() {
       curator="Curator"
       updatedLabel="today"
       siteOrigin="https://example.test"
-    />,
+    />
+  );
+}
+
+function renderDetail() {
+  return render(detailElement());
+}
+
+/** The aria-describedby of every drag grip in one server render of the page. */
+function serverRenderedGripDescriptions(): (string | null)[] {
+  const container = document.createElement("div");
+  container.innerHTML = renderToString(detailElement());
+  return [...container.querySelectorAll('[aria-roledescription="sortable"]')].map((grip) =>
+    grip.getAttribute("aria-describedby"),
   );
 }
 
@@ -283,5 +297,18 @@ describe("CollectionDetail header controls", () => {
     const grips = document.querySelectorAll('[aria-roledescription="sortable"]');
     expect(grips).toHaveLength(3);
     expect(grips[0]?.getAttribute("tabindex")).toBe("0");
+  });
+});
+
+describe("CollectionDetail server rendering", () => {
+  it("describes the drag grips by the same id on every server render, so hydration matches", () => {
+    // A long-lived server renders the page many times while each browser renders it
+    // once, so an id that drifts between renders in one process cannot match the client.
+    const first = serverRenderedGripDescriptions();
+    const second = serverRenderedGripDescriptions();
+
+    expect(first).toHaveLength(3);
+    expect(first[0]).toBeTruthy();
+    expect(second).toEqual(first);
   });
 });
