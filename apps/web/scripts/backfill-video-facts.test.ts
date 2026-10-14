@@ -3,9 +3,12 @@ import { sql } from "@vercel/postgres";
 import { createCollection } from "../src/lib/collections";
 import {
   countRepairableRows,
+  describeRepair,
+  isConfirmed,
   parseArgs,
   repairOneVideo,
   repairVideoFactsForVideo,
+  resolveRunEnv,
 } from "./backfill-video-facts";
 
 interface StoredRow {
@@ -320,11 +323,27 @@ describe("repairVideoFactsForVideo", () => {
 
 describe("parseArgs", () => {
   it("accepts a bare invocation and the documented --dry-run flag", () => {
-    expect(parseArgs([])).toEqual({ ok: true, isDryRun: false });
-    expect(parseArgs(["--dry-run"])).toEqual({ ok: true, isDryRun: true });
+    expect(parseArgs([])).toEqual({ ok: true, isDryRun: false, isProd: false });
+    expect(parseArgs(["--dry-run"])).toEqual({ ok: true, isDryRun: true, isProd: false });
   });
 
-  it.each(["--dryrun", "--dry_run", "--DRY-RUN", "-d", "--prod", "dry-run"])(
+  it("accepts --prod and --dry-run in any combination", () => {
+    expect(parseArgs(["--prod"])).toEqual({ ok: true, isDryRun: false, isProd: true });
+    expect(parseArgs(["--prod", "--dry-run"])).toEqual({ ok: true, isDryRun: true, isProd: true });
+    expect(parseArgs(["--dry-run", "--prod"])).toEqual({ ok: true, isDryRun: true, isProd: true });
+  });
+
+  it.each([
+    "--dryrun",
+    "--dry_run",
+    "--DRY-RUN",
+    "-d",
+    "dry-run",
+    "--production",
+    "--PROD",
+    "-p",
+    "prod",
+  ])(
     "refuses %s rather than silently running a live pass",
     (arg) => {
       const parsed = parseArgs([arg]);
@@ -339,6 +358,182 @@ describe("parseArgs", () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.ok === false && parsed.error).toContain("--force");
   });
+
+  it("refuses an unknown argument even when --prod is also given", () => {
+    const parsed = parseArgs(["--prod", "--dryrun"]);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.ok === false && parsed.error).toContain("--dryrun");
+  });
+});
+
+describe("resolveRunEnv", () => {
+  const devUrl = "postgres://dev:pw@ep-dev-123.us-east-2.aws.neon.tech/brief";
+  const prodUrl = "postgres://prod:pw@ep-prod-456.us-east-2.aws.neon.tech/brief";
+  const devEnv = { POSTGRES_URL: devUrl, YOUTUBE_API_KEY: "yt-key" };
+  const prodEnv = { POSTGRES_URL: prodUrl };
+
+  it("takes the database URL only from .env.production in --prod mode", () => {
+    expect(resolveRunEnv(true, { env: devEnv, production: prodEnv })).toEqual({
+      ok: true,
+      environment: "PRODUCTION",
+      postgresUrl: prodUrl,
+      dbHost: "ep-prod-456.us-east-2.aws.neon.tech",
+      youtubeApiKey: "yt-key",
+    });
+  });
+
+  it("refuses --prod when .env.production has no POSTGRES_URL instead of falling back to .env", () => {
+    const resolved = resolveRunEnv(true, { env: devEnv, production: {} });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.ok === false && resolved.error).toContain(".env.production");
+  });
+
+  it("refuses --prod when .env.production does not exist", () => {
+    const resolved = resolveRunEnv(true, { env: devEnv, production: null });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.ok === false && resolved.error).toContain(".env.production");
+  });
+
+  it("still takes the YouTube key from .env in --prod mode, never from .env.production", () => {
+    const resolved = resolveRunEnv(true, {
+      env: { YOUTUBE_API_KEY: "dev-file-key" },
+      production: { POSTGRES_URL: prodUrl, YOUTUBE_API_KEY: "prod-file-key" },
+    });
+    expect(resolved.ok && resolved.youtubeApiKey).toBe("dev-file-key");
+  });
+
+  it("uses the .env database URL without --prod", () => {
+    expect(resolveRunEnv(false, { env: devEnv, production: null })).toEqual({
+      ok: true,
+      environment: "local",
+      postgresUrl: devUrl,
+      dbHost: "ep-dev-123.us-east-2.aws.neon.tech",
+      youtubeApiKey: "yt-key",
+    });
+  });
+
+  it("never takes the database URL from .env.production without --prod", () => {
+    const resolved = resolveRunEnv(false, {
+      env: { YOUTUBE_API_KEY: "yt-key" },
+      production: prodEnv,
+    });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.ok === false && resolved.error).toContain("POSTGRES_URL not found in .env");
+  });
+
+  it.each([
+    ["the same host", prodUrl],
+    ["the pooled host of the same endpoint", "postgres://x:pw@ep-prod-456-pooler.us-east-2.aws.neon.tech/brief"],
+  ])("refuses a run without --prod whose .env points at %s as .env.production", (_label, url) => {
+    const resolved = resolveRunEnv(false, {
+      env: { POSTGRES_URL: url, YOUTUBE_API_KEY: "yt-key" },
+      production: prodEnv,
+    });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.ok === false && resolved.error).toContain("--prod");
+  });
+
+  it("refuses a POSTGRES_URL that is not a connection URL, naming the file it came from", () => {
+    const resolved = resolveRunEnv(true, {
+      env: devEnv,
+      production: { POSTGRES_URL: "not a url" },
+    });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.ok === false && resolved.error).toContain(".env.production");
+  });
+
+  it.each([
+    ["absent", {}],
+    ["blank", { YOUTUBE_API_KEY: "   " }],
+  ])("refuses a run whose YouTube key is %s", (_label, keyFields) => {
+    const resolved = resolveRunEnv(false, {
+      env: { POSTGRES_URL: devUrl, ...keyFields },
+      production: null,
+    });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.ok === false && resolved.error).toContain("YOUTUBE_API_KEY");
+  });
+
+  it("refuses a run when .env does not exist", () => {
+    const resolved = resolveRunEnv(true, { env: null, production: prodEnv });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.ok === false && resolved.error).toContain(".env");
+  });
+});
+
+describe("describeRepair", () => {
+  const allFacts = { title: "Named", durationSec: 300, aspectRatio: 1.7778 };
+
+  function pending(missing: { titles: number; durations: number; shapes: number }) {
+    return {
+      videoId: "describexx",
+      rowCount: 2,
+      missingTitles: missing.titles,
+      missingDurations: missing.durations,
+      missingAspectRatios: missing.shapes,
+    };
+  }
+
+  it("names only the fields this run fills, not facts the rows already have", () => {
+    const video = pending({ titles: 0, durations: 2, shapes: 0 });
+    expect(describeRepair(video, allFacts, 2, false)).toBe("set runtime 300s on 2 row(s)");
+  });
+
+  it("names the same fields on the dry run's would-set line", () => {
+    const video = pending({ titles: 1, durations: 0, shapes: 1 });
+    expect(describeRepair(video, allFacts, 2, true)).toBe(
+      'would set title "Named", frame shape 1.7778 on 2 row(s)',
+    );
+  });
+
+  it("leaves out a missing field the lookup could not answer", () => {
+    const video = pending({ titles: 2, durations: 2, shapes: 2 });
+    expect(
+      describeRepair(video, { title: "Named", durationSec: null, aspectRatio: null }, 2, false),
+    ).toBe('set title "Named" on 2 row(s)');
+  });
+
+  it("leaves out a value the column cannot hold", () => {
+    const video = pending({ titles: 2, durations: 2, shapes: 2 });
+    expect(
+      describeRepair(
+        video,
+        { title: "Named", durationSec: 3_599_999_996_400, aspectRatio: Number.NaN },
+        2,
+        false,
+      ),
+    ).toBe('set title "Named" on 2 row(s)');
+  });
+
+  it("keeps the note about rows the run left unchanged", () => {
+    const video = pending({ titles: 1, durations: 0, shapes: 0 });
+    expect(describeRepair(video, allFacts, 1, true)).toBe(
+      'would set title "Named" on 1 row(s) (1 row(s) unchanged: nothing this lookup can fill there, or another writer already filled it)',
+    );
+  });
+
+  it.each([
+    [false, "set nothing (the lookup answered none of the fields these rows are missing)"],
+    [true, "would set nothing (the lookup answered none of the fields these rows are missing)"],
+  ])("says it sets nothing when the lookup answered no missing field (dry run %s)", (isDryRun, line) => {
+    const video = pending({ titles: 2, durations: 0, shapes: 0 });
+    expect(
+      describeRepair(video, { title: null, durationSec: 300, aspectRatio: 1.7778 }, 0, isDryRun),
+    ).toBe(line);
+  });
+});
+
+describe("isConfirmed", () => {
+  it("accepts exactly yes", () => {
+    expect(isConfirmed("yes")).toBe(true);
+  });
+
+  it.each(["", "y", "YES", "Yes", " yes", "yes ", "yes please", "no"])(
+    "refuses %j",
+    (answer) => {
+      expect(isConfirmed(answer)).toBe(false);
+    },
+  );
 });
 
 describe("repairOneVideo", () => {
