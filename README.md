@@ -74,7 +74,9 @@ The reset needs `NEON_API_KEY`, `NEON_PROJECT_ID` and `POSTGRES_URL` in `apps/we
 
 ### Repair scripts
 
-`pnpm --filter @brief/web backfill-video-facts` fills in collection entries that are missing a title or runtime from YouTube. A lookup can fail when an entry is saved, for example during a YouTube outage or with an exhausted quota. Re-run the script whenever that happens. Add `--dry-run` to see what it would change.
+`pnpm --filter @brief/web backfill-video-facts` fills in collection entries that are missing a title, runtime or frame shape from YouTube. A lookup can fail when an entry is saved, for example during a YouTube outage or with an exhausted quota. Re-run the script whenever that happens. Add `--dry-run` to see what it would change.
+
+It runs on dev by default. Add `--prod` to run it on production: it then reads the database from `apps/web/.env.production` only and asks you to type `yes` first. Run it there once after a merge that adds a column it fills, so existing entries get the new value.
 
 ## License
 

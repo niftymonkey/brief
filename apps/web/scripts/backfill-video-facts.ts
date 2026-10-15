@@ -2,16 +2,16 @@
 /**
  * Collection Item Video Facts Repair
  *
- * Fills in `collection_items.video_title` and `collection_items.duration_sec`
- * for rows that still have none, by reading each video's current title and
- * runtime from YouTube.
+ * Fills in `collection_items.video_title`, `collection_items.duration_sec` and
+ * `collection_items.aspect_ratio` for rows that still have none, by reading each
+ * video's current title, runtime and frame shape from YouTube.
  *
- * One tool for both fields because one YouTube response carries both: splitting
- * the repair in two would double the cost of learning the same facts. That cost
- * is two quota units per video, not one, because the shared `fetchMetadata` also
- * requests a pinned comment this repair never reads. Each field is repaired
- * independently, so a video that answers with a runtime but no title still heals
- * half the row.
+ * One tool for all three fields because one YouTube response carries all three:
+ * splitting the repair up would multiply the cost of learning the same facts.
+ * That cost is two quota units per video, not one, because the shared
+ * `fetchMetadata` also requests a pinned comment this repair never reads. Each
+ * field is repaired independently, so a video that answers with a runtime but no
+ * title still heals part of the row.
  *
  * This is a standing repair tool, not a one-shot migration. Facts are only
  * resolved when an item is created or its video changes, so any lookup that
@@ -21,18 +21,24 @@
  * lookup actually returned, so a row it cannot help is neither touched nor
  * counted, and running it twice in a row is a no-op the second time.
  *
- * Usage: pnpm backfill-video-facts [--dry-run]
+ * Usage: pnpm backfill-video-facts [--prod] [--dry-run]
  *
- * Local-only by design. Reads POSTGRES_URL and YOUTUBE_API_KEY from
- * apps/web/.env, and does NOT accept a --prod flag; running this against
- * production should happen through the Vercel/Neon dashboard, not from a
- * local shell.
+ * Without --prod it runs against the database named by POSTGRES_URL in
+ * apps/web/.env, and refuses to start if that URL points at the same host as
+ * apps/web/.env.production. With --prod the database URL comes from
+ * apps/web/.env.production and nowhere else, and the run prints the target
+ * host and waits for the operator to type `yes` before its first query, dry run
+ * included. YOUTUBE_API_KEY always comes from apps/web/.env, because
+ * .env.production holds only database settings. Both files are parsed
+ * explicitly and their values assigned over whatever the shell already
+ * exported, so no other file or variable can choose the database.
  */
 
-import { config } from "dotenv";
+import { parse } from "dotenv";
 import { sql } from "@vercel/postgres";
 import * as path from "path";
 import * as fs from "fs";
+import * as readline from "readline";
 import { fileURLToPath } from "url";
 import { fetchYouTubeVideoFacts, type YouTubeVideoFacts } from "../src/lib/video-facts";
 import { storableVideoFacts } from "../src/lib/storable-video-facts";
@@ -42,6 +48,7 @@ export interface PendingVideo {
   rowCount: number;
   missingTitles: number;
   missingDurations: number;
+  missingAspectRatios: number;
 }
 
 interface RepairedVideo extends PendingVideo {
@@ -56,30 +63,176 @@ interface UnresolvedVideo extends PendingVideo {
 interface RemainingGaps {
   missingTitles: number;
   missingDurations: number;
+  missingAspectRatios: number;
 }
 
-export type ParsedArgs = { ok: true; isDryRun: boolean } | { ok: false; error: string };
+export type ParsedArgs =
+  | { ok: true; isDryRun: boolean; isProd: boolean }
+  | { ok: false; error: string };
 
-const USAGE = "Usage: pnpm backfill-video-facts [--dry-run]";
+const USAGE = "Usage: pnpm backfill-video-facts [--prod] [--dry-run]";
 
 /**
  * Reads the command line, refusing anything it does not recognise.
  *
- * Failing closed is the whole point: this tool's only flag asks it NOT to write,
- * so a near miss like `--dryrun` or `--DRY-RUN` that was quietly ignored would
- * run a live pass against the database on behalf of an operator who asked for
- * the opposite.
+ * Failing closed is the whole point. `--dry-run` asks the tool NOT to write, so
+ * a near miss like `--dryrun` or `--DRY-RUN` that was quietly ignored would run
+ * a live pass on behalf of an operator who asked for the opposite, and a near
+ * miss of `--prod` quietly ignored would aim a run meant for production at
+ * whatever database .env names.
  */
 export function parseArgs(args: string[]): ParsedArgs {
   let isDryRun = false;
+  let isProd = false;
   for (const arg of args) {
     if (arg === "--dry-run") {
       isDryRun = true;
       continue;
     }
+    if (arg === "--prod") {
+      isProd = true;
+      continue;
+    }
     return { ok: false, error: `Unknown argument: ${arg}\n${USAGE}` };
   }
-  return { ok: true, isDryRun };
+  return { ok: true, isDryRun, isProd };
+}
+
+/** The parsed contents of the env files a run may read; `null` when absent. */
+export interface EnvFiles {
+  env: Record<string, string> | null;
+  production: Record<string, string> | null;
+}
+
+export type RunEnv =
+  | {
+      ok: true;
+      environment: "PRODUCTION" | "local";
+      postgresUrl: string;
+      dbHost: string;
+      youtubeApiKey: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Treats a Neon pooled host and its direct host as the same database, since
+ * they name one endpoint.
+ */
+function databaseIdentity(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase().replace("-pooler.", ".");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Chooses the database and the YouTube key for a run, from the env files alone.
+ *
+ * With --prod the database URL is read from .env.production and never from
+ * .env, so a production run that finds no production URL stops instead of
+ * falling back to the development one. Without --prod it is read from .env and
+ * never from .env.production, and a .env that points at production's host is
+ * refused, so production is only ever reached by asking for it. The YouTube key
+ * comes from .env in both modes.
+ */
+export function resolveRunEnv(isProd: boolean, files: EnvFiles): RunEnv {
+  const dbFile = isProd ? ".env.production" : ".env";
+  const dbVars = isProd ? files.production : files.env;
+
+  if (dbVars === null) {
+    return {
+      ok: false,
+      error: isProd
+        ? "Environment file not found: .env.production\nCreate .env.production with your production POSTGRES_URL"
+        : "Environment file not found: .env",
+    };
+  }
+
+  const postgresUrl = dbVars.POSTGRES_URL?.trim();
+  if (!postgresUrl) {
+    return { ok: false, error: `POSTGRES_URL not found in ${dbFile}` };
+  }
+
+  let dbHost: string;
+  try {
+    dbHost = new URL(postgresUrl).host;
+  } catch {
+    return { ok: false, error: `POSTGRES_URL in ${dbFile} is not a valid connection URL` };
+  }
+
+  if (!isProd && files.production?.POSTGRES_URL) {
+    const productionIdentity = databaseIdentity(files.production.POSTGRES_URL);
+    if (productionIdentity !== null && productionIdentity === databaseIdentity(postgresUrl)) {
+      return {
+        ok: false,
+        error:
+          "POSTGRES_URL in .env points at the same database host as .env.production.\nPass --prod to run against production.",
+      };
+    }
+  }
+
+  if (files.env === null) {
+    return {
+      ok: false,
+      error: "Environment file not found: .env (YOUTUBE_API_KEY is read from it)",
+    };
+  }
+
+  const youtubeApiKey = files.env.YOUTUBE_API_KEY?.trim();
+  if (!youtubeApiKey) {
+    return {
+      ok: false,
+      error:
+        "YOUTUBE_API_KEY not found in .env.\nEvery lookup would fail without it; set the key and re-run.",
+    };
+  }
+
+  return {
+    ok: true,
+    environment: isProd ? "PRODUCTION" : "local",
+    postgresUrl,
+    dbHost,
+    youtubeApiKey,
+  };
+}
+
+/** Only the exact word goes ahead; anything else, including silence, cancels. */
+export function isConfirmed(answer: string): boolean {
+  return answer === "yes";
+}
+
+/**
+ * Asks the operator to confirm a production run. A closed stdin answers no,
+ * so a piped or detached invocation cancels rather than hanging or proceeding.
+ */
+async function confirmProduction(): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    let answered = false;
+    rl.on("close", () => {
+      if (!answered) resolve(false);
+    });
+    rl.question(
+      "\n⚠️  WARNING: You are about to run the video facts backfill on PRODUCTION!\n" +
+        "Type 'yes' to confirm: ",
+      (answer) => {
+        answered = true;
+        rl.close();
+        resolve(isConfirmed(answer));
+      }
+    );
+  });
+}
+
+function readEnvFile(fileName: string): Record<string, string> | null {
+  const filePath = path.join(process.cwd(), fileName);
+  if (!fs.existsSync(filePath)) return null;
+  return parse(fs.readFileSync(filePath));
 }
 
 /**
@@ -98,10 +251,10 @@ async function resolveFacts(
 ): Promise<{ facts: YouTubeVideoFacts } | { reason: string }> {
   try {
     const facts = storableVideoFacts(await fetchYouTubeVideoFacts(videoId));
-    if (facts.title === null && facts.durationSec === null) {
+    if (facts.title === null && facts.durationSec === null && facts.aspectRatio === null) {
       return {
         reason:
-          "YouTube returned no storable title and no storable runtime (video may be private, deleted, live, or the API refused the request)",
+          "YouTube returned no storable title, runtime or frame shape (video may be private, deleted, live, or the API refused the request)",
       };
     }
     return { facts };
@@ -141,11 +294,16 @@ export async function repairVideoFactsForVideo(
           WHEN duration_sec IS NULL THEN ${facts.durationSec}::int
           ELSE duration_sec
         END,
+        aspect_ratio = CASE
+          WHEN aspect_ratio IS NULL THEN ${facts.aspectRatio}::double precision
+          ELSE aspect_ratio
+        END,
         updated_at = NOW()
     WHERE video_id = ${videoId}
       AND (
         (video_title IS NULL AND ${facts.title}::text IS NOT NULL)
         OR (duration_sec IS NULL AND ${facts.durationSec}::int IS NOT NULL)
+        OR (aspect_ratio IS NULL AND ${facts.aspectRatio}::double precision IS NOT NULL)
       )
   `;
   return result.rowCount ?? 0;
@@ -158,9 +316,10 @@ export async function repairVideoFactsForVideo(
  * The predicate is the repair's own WHERE clause, and the facts are reduced the
  * same way before it runs, so the number is the write's number rather than an
  * estimate. Neither the video's row count nor any arithmetic over
- * `missingTitles` and `missingDurations` can stand in for it: a lookup that can
- * only fill one of the two fields leaves every row whose gap is the other one
- * untouched, and the overlap between the two gap counts is not known here.
+ * `missingTitles`, `missingDurations` and `missingAspectRatios` can stand in for
+ * it: a lookup that can only fill some of the fields leaves every row whose gaps
+ * are the others untouched, and the overlap between the gap counts is not known
+ * here.
  */
 export async function countRepairableRows(
   videoId: string,
@@ -174,6 +333,7 @@ export async function countRepairableRows(
       AND (
         (video_title IS NULL AND ${facts.title}::text IS NOT NULL)
         OR (duration_sec IS NULL AND ${facts.durationSec}::int IS NOT NULL)
+        OR (aspect_ratio IS NULL AND ${facts.aspectRatio}::double precision IS NOT NULL)
       )
   `;
   return result.rows[0]?.count ?? 0;
@@ -235,21 +395,53 @@ export async function repairOneVideo(
   }
 }
 
-function describeFacts(facts: YouTubeVideoFacts): string {
-  const parts: string[] = [];
-  parts.push(facts.title === null ? "no title" : `title "${facts.title}"`);
-  parts.push(facts.durationSec === null ? "no runtime" : `runtime ${facts.durationSec}s`);
-  return parts.join(", ");
+/**
+ * Describes what this run does to one video's rows, naming only the fields it
+ * fills: a field counts when some row for the video is missing it and the
+ * lookup answered it with a value the column can hold. A fact the rows already
+ * have is not written, so naming it would claim a change that never happened.
+ */
+export function describeRepair(
+  video: PendingVideo,
+  unstorableFacts: YouTubeVideoFacts,
+  rowsUpdated: number,
+  isDryRun: boolean,
+): string {
+  const facts = storableVideoFacts(unstorableFacts);
+  const verb = isDryRun ? "would set" : "set";
+
+  const filled: string[] = [];
+  if (video.missingTitles > 0 && facts.title !== null) {
+    filled.push(`title "${facts.title}"`);
+  }
+  if (video.missingDurations > 0 && facts.durationSec !== null) {
+    filled.push(`runtime ${facts.durationSec}s`);
+  }
+  if (video.missingAspectRatios > 0 && facts.aspectRatio !== null) {
+    filled.push(`frame shape ${facts.aspectRatio}`);
+  }
+
+  if (filled.length === 0) {
+    return `${verb} nothing (the lookup answered none of the fields these rows are missing)`;
+  }
+
+  const skipped = video.rowCount - rowsUpdated;
+  const skippedNote =
+    skipped > 0
+      ? ` (${skipped} row(s) unchanged: nothing this lookup can fill there, or another writer already filled it)`
+      : "";
+  return `${verb} ${filled.join(", ")} on ${rowsUpdated} row(s)${skippedNote}`;
 }
 
 async function countRemainingGaps(): Promise<RemainingGaps> {
   const result = await sql<RemainingGaps>`
     SELECT
       COUNT(*) FILTER (WHERE video_title IS NULL)::int as "missingTitles",
-      COUNT(*) FILTER (WHERE duration_sec IS NULL)::int as "missingDurations"
+      COUNT(*) FILTER (WHERE duration_sec IS NULL)::int as "missingDurations",
+      COUNT(*) FILTER (WHERE aspect_ratio IS NULL)::int as "missingAspectRatios"
     FROM collection_items
   `;
-  return result.rows[0] ?? { missingTitles: 0, missingDurations: 0 };
+  return result.rows[0] ?? { missingTitles: 0, missingDurations: 0, missingAspectRatios: 0 };
 }
 
 async function runBackfill() {
@@ -258,42 +450,36 @@ async function runBackfill() {
     console.error(`\nError: ${parsed.error}\n`);
     process.exit(1);
   }
-  const { isDryRun } = parsed;
-  const envPath = path.join(process.cwd(), ".env");
+  const { isDryRun, isProd } = parsed;
 
-  if (!fs.existsSync(envPath)) {
-    console.error(`Error: Environment file not found: ${envPath}`);
+  const runEnv = resolveRunEnv(isProd, {
+    env: readEnvFile(".env"),
+    production: readEnvFile(".env.production"),
+  });
+  if (!runEnv.ok) {
+    console.error(`\nError: ${runEnv.error}\n`);
     process.exit(1);
   }
 
-  config({ path: envPath });
-
   console.log(`\n🏷️  Collection Video Facts Backfill`);
-  console.log(`   Environment: local`);
+  console.log(`   Environment: ${runEnv.environment}`);
   if (isDryRun) {
     console.log(`   Mode:        DRY RUN (no changes will be made)`);
   }
-
-  if (!process.env.POSTGRES_URL) {
-    console.error(`\nError: POSTGRES_URL not found in .env\n`);
-    process.exit(1);
-  }
-
-  let dbHost: string;
-  try {
-    dbHost = new URL(process.env.POSTGRES_URL).host;
-  } catch {
-    console.error(`\nError: POSTGRES_URL in .env is not a valid connection URL\n`);
-    process.exit(1);
-  }
-  console.log(`   Database:    ${dbHost}`);
+  console.log(`   Database:    ${runEnv.dbHost}`);
   console.log();
 
-  if (!process.env.YOUTUBE_API_KEY?.trim()) {
-    console.error("Error: YOUTUBE_API_KEY not found in .env.");
-    console.error("Every lookup would fail without it; set the key and re-run.\n");
-    process.exit(1);
+  if (isProd) {
+    const confirmed = await confirmProduction();
+    if (!confirmed) {
+      console.log("\nBackfill cancelled.\n");
+      process.exit(0);
+    }
+    console.log();
   }
+
+  process.env.POSTGRES_URL = runEnv.postgresUrl;
+  process.env.YOUTUBE_API_KEY = runEnv.youtubeApiKey;
 
   try {
     const before = await countRemainingGaps();
@@ -303,9 +489,10 @@ async function runBackfill() {
         video_id as "videoId",
         COUNT(*)::int as "rowCount",
         COUNT(*) FILTER (WHERE video_title IS NULL)::int as "missingTitles",
-        COUNT(*) FILTER (WHERE duration_sec IS NULL)::int as "missingDurations"
+        COUNT(*) FILTER (WHERE duration_sec IS NULL)::int as "missingDurations",
+        COUNT(*) FILTER (WHERE aspect_ratio IS NULL)::int as "missingAspectRatios"
       FROM collection_items
-      WHERE video_title IS NULL OR duration_sec IS NULL
+      WHERE video_title IS NULL OR duration_sec IS NULL OR aspect_ratio IS NULL
       GROUP BY video_id
       ORDER BY video_id
     `;
@@ -314,14 +501,16 @@ async function runBackfill() {
     const rowsConsidered = pending.reduce((total, video) => total + video.rowCount, 0);
 
     console.log(
-      `Before: ${before.missingTitles} row(s) missing a title, ${before.missingDurations} missing a runtime`
+      `Before: ${before.missingTitles} row(s) missing a title, ${before.missingDurations} missing a runtime, ${before.missingAspectRatios} missing a frame shape`
     );
     console.log(
       `Found ${rowsConsidered} incomplete row(s) across ${pending.length} distinct video id(s)\n`
     );
 
     if (pending.length === 0) {
-      console.log("Nothing to repair. Every collection item has a title and a runtime.\n");
+      console.log(
+        "Nothing to repair. Every collection item has a title, a runtime and a frame shape.\n"
+      );
       process.exit(0);
     }
 
@@ -341,22 +530,8 @@ async function runBackfill() {
       }
 
       repaired.push({ ...video, facts: outcome.facts, rowsUpdated: outcome.rowsUpdated });
-
-      const skipped = video.rowCount - outcome.rowsUpdated;
-      const skippedNote =
-        skipped > 0
-          ? ` (${skipped} row(s) unchanged: nothing this lookup can fill there, or another writer already filled it)`
-          : "";
-
-      if (isDryRun) {
-        console.log(
-          `${label}: would set ${describeFacts(outcome.facts)} on ${outcome.rowsUpdated} row(s)${skippedNote}`
-        );
-        continue;
-      }
-
       console.log(
-        `${label}: set ${describeFacts(outcome.facts)} on ${outcome.rowsUpdated} row(s)${skippedNote}`
+        `${label}: ${describeRepair(video, outcome.facts, outcome.rowsUpdated, isDryRun)}`
       );
     }
 
@@ -378,6 +553,9 @@ async function runBackfill() {
     );
     console.log(
       `  Runtimes missing:  ${before.missingDurations} -> ${after.missingDurations}${isDryRun ? " (unchanged, dry run)" : ""}`
+    );
+    console.log(
+      `  Shapes missing:    ${before.missingAspectRatios} -> ${after.missingAspectRatios}${isDryRun ? " (unchanged, dry run)" : ""}`
     );
 
     if (unresolved.length > 0) {

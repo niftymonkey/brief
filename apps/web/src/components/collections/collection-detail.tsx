@@ -1,27 +1,50 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddItemForm } from "@/components/collections/add-item-form";
-import { CollectionClosing } from "@/components/collections/collection-closing";
 import { CollectionItemRow } from "@/components/collections/collection-item-row";
 import {
   CollectionPlayer,
   type ActiveSitting,
+  type CollectionPlayerHandle,
 } from "@/components/collections/collection-player";
-import { CollectionTransport } from "@/components/collections/collection-transport";
+import {
+  CollectionTransport,
+  useFullscreenToggles,
+} from "@/components/collections/collection-transport";
 import { DeleteCollectionButton } from "@/components/collections/delete-collection-button";
 import { EditCollectionDialog } from "@/components/collections/edit-collection-dialog";
-import { reorderNeighbors } from "@/lib/collection-item-input";
+import { SortableItemRow } from "@/components/collections/sortable-item-row";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { neighborsOf, reorderById } from "@/lib/collection-item-input";
 import {
   buildSitting,
+  cueAt,
   resolveActiveEntryId,
+  resolveCuedIndex,
+  type EntryCue,
   type EntryVideoFacts,
 } from "@/lib/collection-entries";
+import type { SittingPosition } from "@/lib/collection-playback";
 import { notifyCollectionsChanged } from "@/lib/collections-events";
-import type { CollectionShareState } from "@/components/collections/collection-share-row";
+import type { CollectionShareState } from "@/components/collections/collection-share-popover";
 import type { CollectionItem, CollectionWithItems } from "@/lib/collections";
 
 interface CollectionDetailProps {
@@ -67,24 +90,47 @@ export function CollectionDetail({
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [activeSitting, setActiveSitting] = useState<ActiveSitting | null>(null);
-  const [playingItemId, setPlayingItemId] = useState<string | null>(null);
+  const [position, setPosition] = useState<SittingPosition | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  /** The entry a wide screen's stage shows while nothing plays, and Play starts from. */
+  const [cue, setCue] = useState<EntryCue>({ entryId: null, index: 0 });
+  /** The run on screen, for the prev, skip, jump and full screen controls the page carries for it. */
+  const playerRef = useRef<CollectionPlayerHandle>(null);
+  const fullscreenToggles = useFullscreenToggles();
+
+  // A grip has to travel a few pixels before it counts as a drag, so a plain
+  // click on it (or a tap that turns into a page scroll) never lifts a row. The
+  // keyboard sensor is what keeps reordering reachable without a pointer: focus
+  // the grip, space to lift, arrows to move, space to drop.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  // Left to itself, DndContext numbers its accessibility ids from a module-wide
+  // counter that a long-lived server keeps climbing while each browser starts at
+  // zero, so the grips' aria-describedby would never hydrate. useId is the same on
+  // both sides.
+  const dndContextId = useId();
 
   const collectionId = collection.id;
 
-  const handlePlayingItemChange = useCallback((itemId: string | null) => {
-    setPlayingItemId(itemId);
+  const handlePositionChange = useCallback((next: SittingPosition | null) => {
+    setPosition(next);
   }, []);
 
-  /** Opens a run of the collection, from the top, on the entries as they stand now. */
-  const startSitting = useCallback(() => {
-    setPlayingItemId(null);
-    setActiveSitting((previous) => ({ key: (previous?.key ?? 0) + 1, items: [...items] }));
-  }, [items]);
-
-  const closePlayer = useCallback(() => {
-    setActiveSitting(null);
-    setPlayingItemId(null);
-  }, []);
+  /** Opens a run of the collection on one entry, on the entries as they stand now. */
+  const startSitting = useCallback(
+    (startIndex: number) => {
+      setPosition(null);
+      setCue(cueAt(items, startIndex));
+      setActiveSitting((previous) => ({
+        key: (previous?.key ?? 0) + 1,
+        items: [...items],
+        startIndex,
+      }));
+    },
+    [items],
+  );
 
   const handleEditCollection = async (nextTitle: string, nextDescription: string | null) => {
     const updated = await requestJson<{ title: string; description: string | null }>(
@@ -143,19 +189,35 @@ export function CollectionDetail({
     }
   };
 
-  const handleReorder = async (index: number, direction: "up" | "down") => {
-    const neighbors = reorderNeighbors(
+  /**
+   * Settles a drag. The list is reordered locally first so the entry stays where
+   * it was dropped, then the server is told its new neighbours and answers with
+   * the position it computed. A failed write puts the order the user was looking
+   * at before the drag back, rather than leaving the page showing a move that
+   * did not happen.
+   */
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const previous = items;
+    const settledIds = reorderById(
       items.map((item) => item.id),
-      index,
-      direction,
+      String(active.id),
+      String(over.id),
     );
+    const neighbors = neighborsOf(settledIds, String(active.id));
     if (!neighbors) return;
 
-    const moved = items[index];
+    setItems(
+      settledIds
+        .map((id) => items.find((item) => item.id === id))
+        .filter((item): item is CollectionItem => item !== undefined),
+    );
     setReorderPending(true);
     try {
       const updated = await requestJson<CollectionItem>(
-        `/api/collections/${collectionId}/items/${moved.id}`,
+        `/api/collections/${collectionId}/items/${String(active.id)}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -165,6 +227,8 @@ export function CollectionDetail({
       setItems((prev) =>
         sortByPosition(prev.map((item) => (item.id === updated.id ? updated : item))),
       );
+    } catch {
+      setItems(previous);
     } finally {
       setReorderPending(false);
     }
@@ -247,13 +311,34 @@ export function CollectionDetail({
   const openSitting = activeSitting !== null && items.length > 0 ? activeSitting : null;
   if (activeSitting !== null && openSitting === null) {
     setActiveSitting(null);
-    setPlayingItemId(null);
+    setPosition(null);
   }
 
   const sitting = buildSitting(items, videoFacts);
   const entryCount = sitting.entries.length;
   const canPlay = entryCount > 0;
-  const activeEntryId = resolveActiveEntryId(sitting.entries, playingItemId);
+  const activeEntryId = resolveActiveEntryId(sitting.entries, position?.itemId ?? null);
+  const cued = resolveCuedIndex(sitting.entries, cue);
+
+  /** Stops the run and cues the entry it was on, so Play picks up there. */
+  const closePlayer = () => {
+    const onScreen = sitting.entries.findIndex((entry) => entry.id === position?.itemId);
+    if (onScreen >= 0) setCue(cueAt(sitting.entries, onScreen));
+    else if (position?.isDone) setCue(cueAt(sitting.entries, 0));
+    setActiveSitting(null);
+    setPosition(null);
+  };
+
+  /** Puts an entry on the stage: the run moves there, or it becomes the cued one. */
+  const jumpTo = (index: number) => {
+    const entry = sitting.entries[index];
+    if (!entry) return;
+    if (openSitting === null) {
+      setCue(cueAt(sitting.entries, index));
+      return;
+    }
+    if (!playerRef.current?.jumpTo(entry.id)) startSitting(index);
+  };
   const share: CollectionShareState = {
     isShared,
     shareUrl: slug ? `${siteOrigin}/c/${slug}` : null,
@@ -265,58 +350,68 @@ export function CollectionDetail({
   };
 
   return (
-    <div>
-      <CollectionTransport
-        title={title}
-        lede={description}
-        curator={curator}
-        updatedLabel={updatedLabel}
-        sitting={sitting}
-        canPlay={canPlay}
-        activeEntryId={activeEntryId}
-        onPlay={startSitting}
-        share={share}
-        actions={
-          editable ? (
-            <>
-              <EditCollectionDialog
-                initialTitle={title}
-                initialDescription={description}
-                onSave={handleEditCollection}
+    <CollectionTransport
+      title={title}
+      lede={description}
+      curator={curator}
+      updatedLabel={updatedLabel}
+      sitting={sitting}
+      notes={items.map((item) => item.summary)}
+      canPlay={canPlay}
+      isPlaying={openSitting !== null}
+      position={position}
+      cuedIndex={cued}
+      isFullscreen={isFullscreen}
+      onPlay={startSitting}
+      onStop={closePlayer}
+      onPrev={() => playerRef.current?.prev()}
+      onSkip={() => playerRef.current?.skip()}
+      onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
+      fullscreenToggles={fullscreenToggles}
+      share={share}
+      player={
+        openSitting && (
+          <CollectionPlayer
+            key={openSitting.key}
+            ref={playerRef}
+            items={openSitting.items}
+            startIndex={openSitting.startIndex}
+            onPositionChange={handlePositionChange}
+            onFullscreenChange={setIsFullscreen}
+            fullscreenReturnFocusRef={fullscreenToggles.returnFocus}
+          />
+        )
+      }
+      shelfFooter={
+        editable && (
+          <div className="mt-8 lg:mt-0">
+            <AddItemForm onAdd={handleAddItem} />
+          </div>
+        )
+      }
+      actions={
+        editable ? (
+          <>
+            <EditCollectionDialog
+              initialTitle={title}
+              initialDescription={description}
+              onSave={handleEditCollection}
+            >
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
+                title="Edit collection"
+                aria-label="Edit collection"
               >
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
-                  title="Edit collection"
-                  aria-label="Edit collection"
-                >
-                  <Pencil className="w-4 h-4" />
-                </Button>
-              </EditCollectionDialog>
-              <DeleteCollectionButton collectionId={collectionId} title={title} />
-            </>
-          ) : undefined
-        }
-      />
-
-      {openSitting && (
-        <CollectionPlayer
-          key={openSitting.key}
-          items={openSitting.items}
-          onClose={closePlayer}
-          onCurrentItemChange={handlePlayingItemChange}
-        />
-      )}
-
-      <div className="flex items-baseline justify-between gap-4 mt-11 mb-2 pb-1.5 border-b border-[var(--color-border)]">
-        <span className="font-mono text-xs text-[var(--color-text-tertiary)]">
-          {entryCount === 0
-            ? "no entries yet"
-            : `${entryCount} ${entryCount === 1 ? "entry" : "entries"}, read or watch in order`}
-        </span>
-      </div>
-
+                <Pencil className="w-4 h-4" />
+              </Button>
+            </EditCollectionDialog>
+            <DeleteCollectionButton collectionId={collectionId} title={title} />
+          </>
+        ) : undefined
+      }
+    >
       {entryCount === 0 ? (
         <div className="text-center py-12">
           <p className="text-[var(--color-text-secondary)]">No entries yet</p>
@@ -326,6 +421,41 @@ export function CollectionDetail({
             </p>
           )}
         </div>
+      ) : editable ? (
+        <DndContext
+          id={dndContextId}
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis]}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={items.map((item) => item.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col">
+              {sitting.entries.map((entry, index) => (
+                <SortableItemRow
+                  key={entry.id}
+                  item={items[index]}
+                  entry={entry}
+                  isLast={index === entryCount - 1}
+                  isActive={entry.id === activeEntryId}
+                  isCued={openSitting === null && index === cued}
+                  onJump={() => jumpTo(index)}
+                  dragDisabled={reorderPending}
+                  controls={{
+                    onRemove: () => handleRemove(entry.id),
+                    onSummarySave: (summary) => handleSummarySave(entry.id, summary),
+                    onRetrySummary: () => summarizeItem(entry.id),
+                    onSwap: (videoId, startSec, endSec) =>
+                      handleSwap(entry.id, videoId, startSec, endSec),
+                  }}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : (
         <div className="flex flex-col">
           {sitting.entries.map((entry, index) => (
@@ -333,42 +463,14 @@ export function CollectionDetail({
               key={entry.id}
               item={items[index]}
               entry={entry}
-              isFirst={index === 0}
               isLast={index === entryCount - 1}
               isActive={entry.id === activeEntryId}
-              controls={
-                editable
-                  ? {
-                      reorderPending,
-                      onReorder: (direction) => handleReorder(index, direction),
-                      onRemove: () => handleRemove(entry.id),
-                      onSummarySave: (summary) => handleSummarySave(entry.id, summary),
-                      onRetrySummary: () => summarizeItem(entry.id),
-                      onSwap: (videoId, startSec, endSec) =>
-                        handleSwap(entry.id, videoId, startSec, endSec),
-                    }
-                  : undefined
-              }
+              isCued={openSitting === null && index === cued}
+              onJump={() => jumpTo(index)}
             />
           ))}
         </div>
       )}
-
-      {editable && (
-        <div className="mt-8">
-          <AddItemForm onAdd={handleAddItem} />
-        </div>
-      )}
-
-      {entryCount > 0 && (
-        <CollectionClosing
-          totalRuntimeSec={sitting.totalRuntimeSec}
-          entryCount={entryCount}
-          canPlay={canPlay}
-          onPlay={startSitting}
-          share={share}
-        />
-      )}
-    </div>
+    </CollectionTransport>
   );
 }

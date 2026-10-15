@@ -9,8 +9,10 @@ import {
   STALL_TIMEOUT_MS,
   THROTTLED_POLL_INTERVAL_MS,
   describePlaybackError,
-  describePlaybackPosition,
+  describeSittingPosition,
   initialPlaybackState,
+  readSittingPosition,
+  readSittingSteps,
   reducePlayback,
   type PlaybackEffect,
   type PlaybackEvent,
@@ -120,6 +122,24 @@ describe("start", () => {
     expect(restarted.state.status).toBe("loading");
     expect(restarted.state.index).toBe(0);
     expect(loads(restarted.effects)).toEqual([0]);
+  });
+
+  it("opens the run on the entry it is asked to start from", () => {
+    const { state, effects } = run([{ kind: "start", index: 2 }]);
+    expect(state.status).toBe("loading");
+    expect(state.index).toBe(2);
+    expect(effects).toEqual([
+      { kind: "load", index: 2, item: ITEMS[2], generation: state.generation },
+      { kind: "scheduleArmingTimeout", generation: state.generation, delayMs: ARMING_TIMEOUT_MS },
+      { kind: "play" },
+    ]);
+  });
+
+  it("opens on the first entry when asked to start from one the run does not hold", () => {
+    const { state, effects } = run([{ kind: "start", index: ITEMS.length }]);
+    expect(state.status).toBe("loading");
+    expect(state.index).toBe(0);
+    expect(loads(effects)).toEqual([0]);
   });
 
   it("puts the first item back on screen with a load, not a seek within a player it left", () => {
@@ -802,31 +822,238 @@ describe("a zero-length range", () => {
   });
 });
 
-describe("describePlaybackPosition", () => {
-  it("does not claim to be playing an item before the first one loads", () => {
-    expect(describePlaybackPosition(initialPlaybackState(), 3)).toBe("3 items");
+describe("prev", () => {
+  it("goes back to the item before the one on screen", () => {
+    const started = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
+    const back = run([{ kind: "skip" }, { kind: "prev" }], ITEMS, started.state);
+
+    expect(back.state.index).toBe(0);
+    expect(loads(back.effects)).toEqual([1, 0]);
   });
 
-  it("counts the item the player is on", () => {
+  it("restarts the first item rather than falling off the top of the sitting", () => {
+    const started = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
+    const back = run([{ kind: "prev" }], ITEMS, started.state);
+
+    expect(back.state.index).toBe(0);
+    expect(loads(back.effects)).toEqual([0]);
+  });
+
+  it("takes a finished sitting to the item before the one it ended on, as it would mid-run", () => {
+    const done = run([
+      { kind: "start" },
+      { kind: "skip" },
+      { kind: "skip" },
+      { kind: "skip" },
+      { kind: "skip" },
+      { kind: "skip" },
+    ]);
+    expect(done.state.status).toBe("done");
+
+    const back = run([{ kind: "prev" }], ITEMS, done.state);
+    expect(back.state.status).toBe("loading");
+    expect(back.state.index).toBe(3);
+    expect(loads(back.effects)).toEqual([3]);
+  });
+
+  it("has nothing to go back to before the sitting has started", () => {
+    const { state, effects } = run([{ kind: "prev" }]);
+    expect(state.status).toBe("idle");
+    expect(effects).toEqual([]);
+  });
+});
+
+describe("jump", () => {
+  it("moves a live run to the entry asked for, as a fresh load of it", () => {
+    const started = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
+    const jumped = run([{ kind: "jump", index: 3 }], ITEMS, started.state);
+
+    expect(jumped.state.status).toBe("loading");
+    expect(jumped.state.index).toBe(3);
+    expect(jumped.state.armed).toBe(false);
+    expect(jumped.state.generation).toBeGreaterThan(started.state.generation);
+    expect(jumped.effects).toEqual([
+      { kind: "load", index: 3, item: ITEMS[3], generation: jumped.state.generation },
+      {
+        kind: "scheduleArmingTimeout",
+        generation: jumped.state.generation,
+        delayMs: ARMING_TIMEOUT_MS,
+      },
+    ]);
+  });
+
+  it("moves within the video already on screen with a seek", () => {
+    const items = [ITEMS[0], ITEMS[1], { ...ITEMS[1], id: "b-later", startSec: 50, endSec: 60 }];
+    const onSecond = run([{ kind: "start" }, { kind: "skip" }], items);
+    const jumped = run([{ kind: "jump", index: 2 }], items, onSecond.state);
+
+    expect(jumped.effects[0]).toEqual({
+      kind: "seek",
+      index: 2,
+      item: items[2],
+      generation: jumped.state.generation,
+      toSec: 50,
+    });
+  });
+
+  it("takes a finished run back to the entry asked for", () => {
+    const skip: PlaybackEvent = { kind: "skip" };
+    const done = run([{ kind: "start" }, ...Array.from({ length: ITEMS.length }, () => skip)]);
+    expect(done.state.status).toBe("done");
+
+    const jumped = run([{ kind: "jump", index: 1 }], ITEMS, done.state);
+    expect(jumped.state.status).toBe("loading");
+    expect(jumped.state.index).toBe(1);
+    expect(loads(jumped.effects)).toEqual([1]);
+  });
+
+  it("leaves a failed entry's pending advance behind", () => {
+    const failed = run([{ kind: "start" }, { kind: "playerError", code: 150, videoId: "aqz-KE-bpKQ" }]);
+    const jumped = run([{ kind: "jump", index: 3 }], ITEMS, failed.state);
+    const staleAdvance = run(
+      [{ kind: "failureAdvance", generation: failed.state.generation }],
+      ITEMS,
+      jumped.state,
+    );
+
+    expect(staleAdvance.state.index).toBe(3);
+    expect(staleAdvance.effects).toEqual([]);
+  });
+
+  it("ignores an entry the run does not hold", () => {
+    const started = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
+    for (const index of [-1, ITEMS.length, 1.5]) {
+      const jumped = run([{ kind: "jump", index }], ITEMS, started.state);
+      expect(jumped.state).toBe(started.state);
+      expect(jumped.effects).toEqual([]);
+    }
+  });
+
+  it("has nothing to move before the run has started", () => {
+    const { state, effects } = run([{ kind: "jump", index: 2 }]);
+    expect(state.status).toBe("idle");
+    expect(effects).toEqual([]);
+  });
+});
+
+describe("readSittingPosition", () => {
+  it("names no item before the first one loads", () => {
+    const position = readSittingPosition(initialPlaybackState(), ITEMS);
+    expect(position).toEqual({ itemId: null, ordinal: null, total: 5, isDone: false });
+  });
+
+  it("names the item the player is on", () => {
     const { state } = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
-    expect(describePlaybackPosition(state, ITEMS.length)).toBe("Playing 1 of 5");
+    expect(readSittingPosition(state, ITEMS)).toEqual({
+      itemId: "a",
+      ordinal: 1,
+      total: 5,
+      isDone: false,
+    });
   });
 
-  it("does not claim to be playing the item the failure banner just disowned", () => {
+  it("keeps naming the item the failure banner just disowned", () => {
     const { state } = run([
       { kind: "start" },
       { kind: "playerError", code: 150, videoId: "aqz-KE-bpKQ" },
     ]);
     expect(state.status).toBe("failed");
-    expect(describePlaybackPosition(state, ITEMS.length)).toBe("Item 1 of 5");
+    expect(readSittingPosition(state, ITEMS).ordinal).toBe(1);
   });
 
-  it("reports the finished sitting", () => {
+  it("names no item once the sitting is over", () => {
     const done = run(
       [{ kind: "start" }, playing(0.058, "n3V3LZh_r40"), tick(10.003, "n3V3LZh_r40")],
       [ITEMS[4]],
     );
-    expect(describePlaybackPosition(done.state, 1)).toBe("Finished all 1 item");
+    expect(readSittingPosition(done.state, [ITEMS[4]])).toEqual({
+      itemId: null,
+      ordinal: null,
+      total: 1,
+      isDone: true,
+    });
+  });
+});
+
+describe("describeSittingPosition", () => {
+  it("counts the item the player is on", () => {
+    expect(
+      describeSittingPosition({ itemId: "b", ordinal: 2, total: 5, isDone: false }),
+    ).toBe("2 of 5");
+  });
+
+  it("opens on the first item before the sitting has one on screen", () => {
+    expect(
+      describeSittingPosition({ itemId: null, ordinal: null, total: 5, isDone: false }),
+    ).toBe("1 of 5");
+  });
+
+  it("rests on the last item once the sitting is over", () => {
+    expect(
+      describeSittingPosition({ itemId: null, ordinal: null, total: 5, isDone: true }),
+    ).toBe("5 of 5");
+  });
+});
+
+describe("readSittingSteps", () => {
+  it("has nothing to step back to from the first entry", () => {
+    expect(readSittingSteps({ itemId: "a", ordinal: 1, total: 5, isDone: false })).toEqual({
+      canStepBack: false,
+      canStepForward: true,
+    });
+  });
+
+  it("steps either way from an entry in the middle", () => {
+    expect(readSittingSteps({ itemId: "c", ordinal: 3, total: 5, isDone: false })).toEqual({
+      canStepBack: true,
+      canStepForward: true,
+    });
+  });
+
+  it("has nothing to step forward to from the last entry", () => {
+    expect(readSittingSteps({ itemId: "e", ordinal: 5, total: 5, isDone: false })).toEqual({
+      canStepBack: true,
+      canStepForward: false,
+    });
+  });
+
+  it("steps nowhere in a run of one entry", () => {
+    expect(readSittingSteps({ itemId: "a", ordinal: 1, total: 1, isDone: false })).toEqual({
+      canStepBack: false,
+      canStepForward: false,
+    });
+  });
+
+  it("counts entries rather than videos, so a last range of a repeated video is still the last", () => {
+    const items = [ITEMS[0], ITEMS[1], { ...ITEMS[1], id: "b-later", startSec: 50, endSec: 60 }];
+    const { state, effects } = run([{ kind: "start" }, { kind: "skip" }, { kind: "skip" }], items);
+    expect(effects.at(-2)).toMatchObject({ kind: "seek", index: 2 });
+    expect(readSittingSteps(readSittingPosition(state, items))).toEqual({
+      canStepBack: true,
+      canStepForward: false,
+    });
+  });
+
+  it("steps back past the entry the run ended on once it is over, and no further forward", () => {
+    expect(readSittingSteps({ itemId: null, ordinal: null, total: 5, isDone: true })).toEqual({
+      canStepBack: true,
+      canStepForward: false,
+    });
+  });
+
+  it("steps nowhere once a run of one entry is over", () => {
+    expect(readSittingSteps({ itemId: null, ordinal: null, total: 1, isDone: true })).toEqual({
+      canStepBack: false,
+      canStepForward: false,
+    });
+  });
+
+  it("steps nowhere before the run has put an entry on screen", () => {
+    expect(readSittingSteps({ itemId: null, ordinal: null, total: 5, isDone: false })).toEqual({
+      canStepBack: false,
+      canStepForward: false,
+    });
+    expect(readSittingSteps(null)).toEqual({ canStepBack: false, canStepForward: false });
   });
 });
 

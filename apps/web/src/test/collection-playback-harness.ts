@@ -194,6 +194,7 @@ export function makeItem(
     endSec,
     videoTitle: `Title ${id}`,
     durationSec: VIDEO_DURATION_SEC[videoId],
+    aspectRatio: null,
     summary: null,
     summaryStatus: "ready",
     position,

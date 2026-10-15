@@ -1,18 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { CircleAlert, Loader2, Play, RotateCw, SkipForward, X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Ref,
+  type RefObject,
+} from "react";
+import { CircleAlert, Loader2, Minimize, Play, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useElementFullscreen } from "@/hooks/use-element-fullscreen";
+import { entryAspectRatio } from "@/lib/collection-entries";
 import { formatRange } from "@/lib/collection-item-input";
 import {
   BOUNDARY_POLL_INTERVAL_MS,
-  describePlaybackPosition,
   initialPlaybackState,
+  readSittingPosition,
   reducePlayback,
   type PlaybackEffect,
   type PlaybackEvent,
   type PlaybackState,
+  type SittingPosition,
 } from "@/lib/collection-playback";
+import { cn } from "@/lib/utils";
 import { loadYouTubeIframeApi } from "@/lib/youtube-iframe-api";
 
 export interface CollectionPlayerItem {
@@ -22,12 +36,48 @@ export interface CollectionPlayerItem {
   summary: string | null;
   startSec: number | null;
   endSec: number | null;
+  /** The video's frame shape as width divided by height, null when unknown. */
+  aspectRatio: number | null;
+}
+
+/**
+ * The moves the page carries for a run it does not own. Prev, skip, a jump to an
+ * entry and full screen are the only things outside the player that steer it;
+ * starting and stopping a run are the page's own, because they mount and unmount this
+ * component.
+ */
+export interface CollectionPlayerHandle {
+  skip: () => void;
+  prev: () => void;
+  /**
+   * Moves the run to the entry with this id and carries on from there. False when the
+   * run does not hold that entry or has not put its first one on screen yet, which is
+   * the page's cue to start a new run from the entry instead.
+   */
+  jumpTo: (itemId: string) => boolean;
+  toggleFullscreen: () => void;
 }
 
 interface CollectionPlayerProps {
   items: CollectionPlayerItem[];
-  onClose: () => void;
-  onCurrentItemChange?: (itemId: string | null) => void;
+  /** Index into `items` of the entry the run opens on; the first when absent. */
+  startIndex?: number;
+  /**
+   * Where the run stands, reported on every change and as null once the player goes,
+   * so the header's counter and the entries list follow the sitting.
+   */
+  onPositionChange?: (position: SittingPosition | null) => void;
+  /**
+   * Whether the frame fills the screen, reported on every change and as false if the
+   * player goes while it does, so the header's toggle reads the same as the frame.
+   */
+  onFullscreenChange?: (isFullscreen: boolean) => void;
+  /**
+   * The header's full screen toggle, which focus returns to when the frame leaves
+   * full screen.
+   */
+  fullscreenReturnFocusRef?: RefObject<HTMLElement | null>;
+  ref?: Ref<CollectionPlayerHandle>;
 }
 
 /**
@@ -43,10 +93,58 @@ interface CollectionPlayerProps {
 export interface ActiveSitting {
   key: number;
   items: CollectionPlayerItem[];
+  /** Index into `items` of the entry the run opens on. */
+  startIndex: number;
 }
+
+/**
+ * The dark field a wide screen's stage fills, with the frame or the cued entry's
+ * poster centred in it. Both live in one of these, so pressing Play swaps one for the
+ * other in a box of the same size and nothing on the page moves.
+ */
+export const STAGE_FIELD_CLASS =
+  "lg:flex lg:flex-1 lg:min-h-0 lg:items-center lg:justify-center lg:overflow-hidden lg:rounded-2xl lg:bg-black";
+
+/**
+ * The field measures itself for the frame. A size container is also the box a fixed
+ * descendant is drawn in, so the field drops it while the frame fills the screen.
+ */
+export const STAGE_FIELD_MEASURE_CLASS = "lg:[container-type:size]";
+
+/** The frame at its entry's own shape, as large as the stage's field allows. */
+export const STAGE_FRAME_CLASS =
+  "lg:w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] lg:aspect-[var(--frame-aspect)]";
 
 function itemLabel(item: CollectionPlayerItem): string {
   return item.videoTitle ?? item.videoId;
+}
+
+/**
+ * The entry whose shape the frame is drawn at, which is the one on screen wherever
+ * there is one.
+ *
+ * Before the first load that is the entry the run opens on, so a sitting that starts
+ * on a Short is laid out for it from the first paint instead of snapping out of 16:9
+ * a moment later. Once the run is over it is the entry it ended on, so the still the
+ * player leaves behind keeps the frame it was playing in.
+ */
+function frameItem(
+  items: CollectionPlayerItem[],
+  state: PlaybackState,
+  startIndex: number,
+): CollectionPlayerItem | null {
+  const playing = items[state.index];
+  if (playing) return playing;
+  if (state.index < 0) return items[startIndex] ?? items[0] ?? null;
+  return items[items.length - 1] ?? null;
+}
+
+/**
+ * The frame's shape, published to the CSS as well as applied to the frame, because a
+ * phone sizes a vertical frame from its own height and derives the width from this.
+ */
+interface FrameStyle extends CSSProperties {
+  "--frame-aspect": string;
 }
 
 /**
@@ -60,7 +158,15 @@ function itemLabel(item: CollectionPlayerItem): string {
  * exactly as asked: a `seek` is what lets the reducer recognise a second range of the
  * video already on screen, and turning one into a reload would take that away.
  */
-export function CollectionPlayer({ items, onClose, onCurrentItemChange }: CollectionPlayerProps) {
+export function CollectionPlayer({
+  items,
+  startIndex = 0,
+  onPositionChange,
+  onFullscreenChange,
+  fullscreenReturnFocusRef,
+  ref,
+}: CollectionPlayerProps) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YT.Player | null>(null);
   const stateRef = useRef<PlaybackState>(initialPlaybackState());
@@ -78,6 +184,10 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
   const [apiFailed, setApiFailed] = useState(false);
   /** Bumped by the Try again control to build the player over from scratch. */
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const fullscreen = useElementFullscreen(frameRef, {
+    onChange: onFullscreenChange,
+    returnFocusRef: fullscreenReturnFocusRef,
+  });
 
   const clearArmingTimer = useCallback(() => {
     if (armingTimerRef.current !== null) {
@@ -170,6 +280,30 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
     dispatchRef.current = dispatch;
   }, [dispatch]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      skip: () => dispatch({ kind: "skip" }),
+      prev: () => dispatch({ kind: "prev" }),
+      jumpTo: (itemId: string) => {
+        const index = items.findIndex((item) => item.id === itemId);
+        if (index < 0) return false;
+        // The reducer hands back the very state it was given for a jump it will not
+        // take, so a new state is the run having moved.
+        const before = stateRef.current;
+        dispatch({ kind: "jump", index });
+        return stateRef.current !== before;
+      },
+      toggleFullscreen: fullscreen.toggle,
+    }),
+    [dispatch, fullscreen.toggle, items],
+  );
+
+  /** The run's opening entry as of the moment the player is ready to open it. */
+  const startRun = useEffectEvent(() => {
+    dispatchRef.current({ kind: "start", index: startIndex });
+  });
+
   useEffect(() => {
     let mounted = true;
     const container = containerRef.current;
@@ -215,7 +349,7 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
             if (!mounted) return;
             // The Play control that mounted this component is the sitting's one real
             // user gesture, which is also what lets the run play unmuted.
-            dispatchRef.current({ kind: "start" });
+            startRun();
           },
           onStateChange: (event) => {
             const player = playerRef.current;
@@ -290,17 +424,15 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
     };
   }, [clearArmingTimer, loadAttempt]);
 
-  const currentItemId =
-    state.status === "idle" || state.status === "done"
-      ? null
-      : (items[state.index]?.id ?? null);
+  const position = readSittingPosition(state, items);
+  const { itemId, ordinal, total, isDone } = position;
 
   useEffect(() => {
-    onCurrentItemChange?.(currentItemId);
-  }, [currentItemId, onCurrentItemChange]);
+    onPositionChange?.({ itemId, ordinal, total, isDone });
+  }, [itemId, ordinal, total, isDone, onPositionChange]);
 
   const reportPlaybackEnded = useEffectEvent(() => {
-    onCurrentItemChange?.(null);
+    onPositionChange?.(null);
   });
 
   useEffect(() => {
@@ -311,14 +443,16 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
   }, []);
 
   const currentItem = state.index >= 0 ? (items[state.index] ?? null) : null;
-  const isDone = state.status === "done";
   const range = currentItem ? formatRange(currentItem.startSec, currentItem.endSec) : "";
+
+  const frameAspect = entryAspectRatio(frameItem(items, state, startIndex)?.aspectRatio ?? null);
+  const frameStyle: FrameStyle = { "--frame-aspect": String(frameAspect) };
 
   const handleRetryApi = () => {
     setApiFailed(false);
     setAutoplayBlocked(false);
     // Bumping the attempt rebuilds the player from scratch, so the sitting on screen
-    // goes back to the top with it.
+    // goes back to the entry it opened on with it.
     setState(initialPlaybackState());
     setLoadAttempt((attempt) => attempt + 1);
   };
@@ -328,55 +462,61 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
     playerRef.current?.playVideo();
   };
 
-  const handleClose = () => {
-    dispatch({ kind: "stop" });
-    onClose();
-  };
-
   return (
-    <section
-      aria-label="Collection playback"
-      className="mb-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4"
-    >
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <p className="text-sm text-[var(--color-text-secondary)]">
-          {describePlaybackPosition(state, items.length)}
-        </p>
-        <div className="flex items-center gap-2 shrink-0">
-          {isDone ? (
-            <Button size="sm" variant="outline" onClick={() => dispatch({ kind: "start" })}>
-              <Play className="w-4 h-4" />
-              Play again
-            </Button>
-          ) : (
+    <section aria-label="Collection playback" className="lg:flex lg:flex-1 lg:flex-col lg:min-h-0">
+      {/* One tree across the entry change, the breakpoint and full screen: the shape
+          is a class on a wrapper the iframe merely lives inside, the phone's
+          true-shape frame is the same element a tablet draws at 16:9 and a wide
+          screen draws at its true shape in the stage's field, and filling the screen
+          restyles that element where it stands rather than moving it. */}
+      <div className={cn(STAGE_FIELD_CLASS, fullscreen.mode === "off" && STAGE_FIELD_MEASURE_CLASS)}>
+        <div
+          ref={frameRef}
+          style={frameStyle}
+          data-frame-shape={frameAspect < 1 ? "vertical" : "landscape"}
+          data-fullscreen={fullscreen.mode === "off" ? undefined : fullscreen.mode}
+          className={cn(
+            "overflow-hidden bg-black",
+            fullscreen.mode === "off"
+              ? cn(
+                  "relative w-[calc(min(70vh,32rem)*var(--frame-aspect))] max-w-full mx-auto aspect-[var(--frame-aspect)] sm:w-full sm:aspect-video rounded-lg sm:rounded-xl",
+                  STAGE_FRAME_CLASS,
+                )
+              : "fixed inset-0 z-[100] [container-type:size]",
+          )}
+        >
+          {/* Full screen draws the video at its true shape, as large as the frame
+              allows, rather than handing a Short a landscape box to letterbox in. */}
+          <div
+            ref={containerRef}
+            className={cn(
+              "absolute inset-0",
+              fullscreen.mode === "off"
+                ? "w-full h-full"
+                : "m-auto w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] h-[min(100cqh,calc(100cqw/var(--frame-aspect)))]",
+            )}
+          />
+          {/* The header is out of reach while the frame fills the screen, so the way
+              back out is drawn inside it, and focus moves to it so a keyboard can
+              find it. */}
+          {fullscreen.mode !== "off" && (
             <Button
-              size="sm"
               variant="outline"
-              onClick={() => dispatch({ kind: "skip" })}
-              title="Skip to the next item"
+              size="icon-sm"
+              autoFocus
+              onClick={fullscreen.exit}
+              title="Exit full screen"
+              aria-label="Exit full screen"
+              className="absolute size-9 top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] rounded-full border-white/25 bg-black/60 text-white hover:bg-black/80 hover:text-white dark:bg-black/60 dark:hover:bg-black/80"
             >
-              <SkipForward className="w-4 h-4" />
-              Skip
+              <Minimize className="w-4 h-4" />
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={handleClose}
-            title="Close player"
-            aria-label="Close player"
-          >
-            <X className="w-4 h-4" />
-          </Button>
         </div>
       </div>
 
-      <div className="relative aspect-video rounded-lg overflow-hidden bg-black">
-        <div ref={containerRef} className="absolute inset-0 w-full h-full" />
-      </div>
-
       {apiFailed && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 mt-3">
           <p role="alert" className="text-sm text-red-500">
             The YouTube player could not be loaded.
           </p>
@@ -388,7 +528,7 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
       )}
 
       {autoplayBlocked && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 mt-3">
           <p className="text-sm text-[var(--color-text-secondary)]">
             Your browser blocked playback from starting on its own.
           </p>
@@ -399,37 +539,36 @@ export function CollectionPlayer({ items, onClose, onCurrentItemChange }: Collec
         </div>
       )}
 
-      <div className="mt-3 min-h-10">
-        {currentItem ? (
-          <>
-            <div className="flex items-baseline gap-2">
-              <p className="font-medium text-[var(--color-text-primary)] line-clamp-1">
-                {itemLabel(currentItem)}
-              </p>
-              {range && (
-                <span className="font-mono text-xs text-[var(--color-text-tertiary)] shrink-0">
-                  {range}
-                </span>
-              )}
-            </div>
-            {currentItem.summary && (
-              <p className="mt-1 text-sm text-[var(--color-text-secondary)] whitespace-pre-wrap">
-                {currentItem.summary}
-              </p>
+      {/* A fixed block whatever the entry's text runs to, so skipping never reflows
+          the entries list underneath the player. A wide screen captions the stage
+          from the page instead, idle and playing alike. */}
+      <div className="mt-3.5 lg:hidden">
+        <div className="flex items-baseline gap-2 h-[1.4em]">
+          <p className="min-w-0 truncate font-medium leading-[1.4] text-[var(--color-text-primary)]">
+            {currentItem ? (
+              itemLabel(currentItem)
+            ) : isDone ? (
+              "Playback complete."
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[var(--color-text-tertiary)]">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Starting playback…
+              </span>
             )}
-          </>
-        ) : isDone ? (
-          <p className="text-sm text-[var(--color-text-secondary)]">Playback complete.</p>
-        ) : (
-          <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Starting playback…
           </p>
-        )}
+          {range && (
+            <span className="shrink-0 font-mono text-xs text-[var(--color-text-tertiary)]">
+              {range}
+            </span>
+          )}
+        </div>
+        <p className="h-[3em] line-clamp-2 text-sm sm:text-[0.9375rem] leading-[1.5] text-[var(--color-text-secondary)]">
+          {currentItem?.summary ?? ""}
+        </p>
       </div>
 
       {state.failures.length > 0 && (
-        <ul className="mt-3 space-y-1.5">
+        <ul className="mt-1 space-y-1.5">
           {state.failures.map((failure) => {
             const failed = items.find((item) => item.id === failure.itemId);
             return (

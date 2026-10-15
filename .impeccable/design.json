@@ -1,0 +1,945 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-14T19:01:30.998Z",
+  "title": "Design System: Brief",
+  "extensions": {
+    "themes": {
+      "default": "dark",
+      "light": {
+        "name": "Warm Linen",
+        "neutralHue": 55,
+        "inkHue": 40,
+        "selector": ":root"
+      },
+      "dark": {
+        "name": "Cool Slate",
+        "neutralHue": 270,
+        "selector": ".dark"
+      },
+      "note": "Frontmatter tokens prefixed linen-, walnut-, umber, dust, terracotta (unsuffixed) and playing-gold are the light theme; slate-, frost, fog, haze, *-night are the dark theme. Components reference the light values; the live CSS variables switch per theme."
+    },
+    "colorMeta": {
+      "terracotta": {
+        "role": "primary",
+        "displayName": "Terracotta",
+        "canonical": "oklch(58% 0.19 25)",
+        "theme": "light",
+        "cssVariable": "--color-accent",
+        "tonalRamp": [
+          "oklch(15% 0.095 25)",
+          "oklch(26% 0.095 25)",
+          "oklch(38% 0.19 25)",
+          "oklch(50% 0.19 25)",
+          "oklch(62% 0.19 25)",
+          "oklch(74% 0.19 25)",
+          "oklch(85% 0.19 25)",
+          "oklch(95% 0.095 25)"
+        ]
+      },
+      "terracotta-deep": {
+        "role": "primary",
+        "displayName": "Terracotta Deep",
+        "canonical": "oklch(52% 0.21 25)",
+        "theme": "light",
+        "cssVariable": "--color-accent-hover",
+        "tonalRamp": [
+          "oklch(15% 0.105 25)",
+          "oklch(26% 0.105 25)",
+          "oklch(38% 0.21 25)",
+          "oklch(50% 0.21 25)",
+          "oklch(62% 0.21 25)",
+          "oklch(74% 0.21 25)",
+          "oklch(85% 0.21 25)",
+          "oklch(95% 0.105 25)"
+        ]
+      },
+      "terracotta-ember": {
+        "role": "primary",
+        "displayName": "Terracotta Ember",
+        "canonical": "oklch(46% 0.22 25)",
+        "theme": "light",
+        "cssVariable": "--color-accent-dark",
+        "tonalRamp": [
+          "oklch(15% 0.11 25)",
+          "oklch(26% 0.11 25)",
+          "oklch(38% 0.22 25)",
+          "oklch(50% 0.22 25)",
+          "oklch(62% 0.22 25)",
+          "oklch(74% 0.22 25)",
+          "oklch(85% 0.22 25)",
+          "oklch(95% 0.11 25)"
+        ]
+      },
+      "terracotta-blush": {
+        "role": "primary",
+        "displayName": "Terracotta Blush",
+        "canonical": "oklch(93% 0.04 25)",
+        "theme": "light",
+        "cssVariable": "--color-accent-subtle",
+        "tonalRamp": [
+          "oklch(15% 0.02 25)",
+          "oklch(26% 0.02 25)",
+          "oklch(38% 0.04 25)",
+          "oklch(50% 0.04 25)",
+          "oklch(62% 0.04 25)",
+          "oklch(74% 0.04 25)",
+          "oklch(85% 0.04 25)",
+          "oklch(95% 0.02 25)"
+        ]
+      },
+      "playing-gold": {
+        "role": "secondary",
+        "displayName": "Playing Gold",
+        "canonical": "oklch(62% 0.13 75)",
+        "theme": "light",
+        "cssVariable": "--color-playing",
+        "tonalRamp": [
+          "oklch(15% 0.065 75)",
+          "oklch(26% 0.065 75)",
+          "oklch(38% 0.13 75)",
+          "oklch(50% 0.13 75)",
+          "oklch(62% 0.13 75)",
+          "oklch(74% 0.13 75)",
+          "oklch(85% 0.13 75)",
+          "oklch(95% 0.065 75)"
+        ]
+      },
+      "tangent-amber": {
+        "role": "tertiary",
+        "displayName": "Tangent Amber",
+        "canonical": "oklch(75% 0.15 85)",
+        "theme": "both",
+        "cssVariable": "--color-warning",
+        "tonalRamp": [
+          "oklch(15% 0.075 85)",
+          "oklch(26% 0.075 85)",
+          "oklch(38% 0.15 85)",
+          "oklch(50% 0.15 85)",
+          "oklch(62% 0.15 85)",
+          "oklch(74% 0.15 85)",
+          "oklch(85% 0.15 85)",
+          "oklch(95% 0.075 85)"
+        ]
+      },
+      "linen": {
+        "role": "neutral",
+        "displayName": "Linen",
+        "canonical": "oklch(97% 0.007 55)",
+        "theme": "light",
+        "cssVariable": "--color-bg-primary",
+        "tonalRamp": [
+          "oklch(15% 0.004 55)",
+          "oklch(26% 0.004 55)",
+          "oklch(38% 0.007 55)",
+          "oklch(50% 0.007 55)",
+          "oklch(62% 0.007 55)",
+          "oklch(74% 0.007 55)",
+          "oklch(85% 0.007 55)",
+          "oklch(95% 0.004 55)"
+        ]
+      },
+      "linen-paper": {
+        "role": "neutral",
+        "displayName": "Linen Paper",
+        "canonical": "oklch(98% 0.005 55)",
+        "theme": "light",
+        "cssVariable": "--card",
+        "tonalRamp": [
+          "oklch(15% 0.003 55)",
+          "oklch(26% 0.003 55)",
+          "oklch(38% 0.005 55)",
+          "oklch(50% 0.005 55)",
+          "oklch(62% 0.005 55)",
+          "oklch(74% 0.005 55)",
+          "oklch(85% 0.005 55)",
+          "oklch(95% 0.003 55)"
+        ]
+      },
+      "linen-shelf": {
+        "role": "neutral",
+        "displayName": "Linen Shelf",
+        "canonical": "oklch(94% 0.012 55)",
+        "theme": "light",
+        "cssVariable": "--color-bg-secondary",
+        "tonalRamp": [
+          "oklch(15% 0.006 55)",
+          "oklch(26% 0.006 55)",
+          "oklch(38% 0.012 55)",
+          "oklch(50% 0.012 55)",
+          "oklch(62% 0.012 55)",
+          "oklch(74% 0.012 55)",
+          "oklch(85% 0.012 55)",
+          "oklch(95% 0.006 55)"
+        ]
+      },
+      "linen-well": {
+        "role": "neutral",
+        "displayName": "Linen Well",
+        "canonical": "oklch(90.5% 0.015 55)",
+        "theme": "light",
+        "cssVariable": "--color-bg-tertiary",
+        "tonalRamp": [
+          "oklch(15% 0.008 55)",
+          "oklch(26% 0.008 55)",
+          "oklch(38% 0.015 55)",
+          "oklch(50% 0.015 55)",
+          "oklch(62% 0.015 55)",
+          "oklch(74% 0.015 55)",
+          "oklch(85% 0.015 55)",
+          "oklch(95% 0.008 55)"
+        ]
+      },
+      "linen-seam": {
+        "role": "neutral",
+        "displayName": "Linen Seam",
+        "canonical": "oklch(88% 0.012 55)",
+        "theme": "light",
+        "cssVariable": "--color-border",
+        "tonalRamp": [
+          "oklch(15% 0.006 55)",
+          "oklch(26% 0.006 55)",
+          "oklch(38% 0.012 55)",
+          "oklch(50% 0.012 55)",
+          "oklch(62% 0.012 55)",
+          "oklch(74% 0.012 55)",
+          "oklch(85% 0.012 55)",
+          "oklch(95% 0.006 55)"
+        ]
+      },
+      "linen-seam-strong": {
+        "role": "neutral",
+        "displayName": "Linen Seam Strong",
+        "canonical": "oklch(80% 0.018 55)",
+        "theme": "light",
+        "cssVariable": "--color-border-hover",
+        "tonalRamp": [
+          "oklch(15% 0.009 55)",
+          "oklch(26% 0.009 55)",
+          "oklch(38% 0.018 55)",
+          "oklch(50% 0.018 55)",
+          "oklch(62% 0.018 55)",
+          "oklch(74% 0.018 55)",
+          "oklch(85% 0.018 55)",
+          "oklch(95% 0.009 55)"
+        ]
+      },
+      "walnut-ink": {
+        "role": "neutral",
+        "displayName": "Walnut Ink",
+        "canonical": "oklch(18% 0.02 40)",
+        "theme": "light",
+        "cssVariable": "--color-text-primary",
+        "tonalRamp": [
+          "oklch(15% 0.01 40)",
+          "oklch(26% 0.01 40)",
+          "oklch(38% 0.02 40)",
+          "oklch(50% 0.02 40)",
+          "oklch(62% 0.02 40)",
+          "oklch(74% 0.02 40)",
+          "oklch(85% 0.02 40)",
+          "oklch(95% 0.01 40)"
+        ]
+      },
+      "walnut-button": {
+        "role": "neutral",
+        "displayName": "Walnut Button",
+        "canonical": "oklch(22% 0.02 40)",
+        "theme": "light",
+        "cssVariable": "--primary",
+        "tonalRamp": [
+          "oklch(15% 0.01 40)",
+          "oklch(26% 0.01 40)",
+          "oklch(38% 0.02 40)",
+          "oklch(50% 0.02 40)",
+          "oklch(62% 0.02 40)",
+          "oklch(74% 0.02 40)",
+          "oklch(85% 0.02 40)",
+          "oklch(95% 0.01 40)"
+        ]
+      },
+      "umber": {
+        "role": "neutral",
+        "displayName": "Umber",
+        "canonical": "oklch(38% 0.02 40)",
+        "theme": "light",
+        "cssVariable": "--color-text-secondary",
+        "tonalRamp": [
+          "oklch(15% 0.01 40)",
+          "oklch(26% 0.01 40)",
+          "oklch(38% 0.02 40)",
+          "oklch(50% 0.02 40)",
+          "oklch(62% 0.02 40)",
+          "oklch(74% 0.02 40)",
+          "oklch(85% 0.02 40)",
+          "oklch(95% 0.01 40)"
+        ]
+      },
+      "dust": {
+        "role": "neutral",
+        "displayName": "Dust",
+        "canonical": "oklch(52% 0.015 40)",
+        "theme": "light",
+        "cssVariable": "--color-text-tertiary",
+        "tonalRamp": [
+          "oklch(15% 0.008 40)",
+          "oklch(26% 0.008 40)",
+          "oklch(38% 0.015 40)",
+          "oklch(50% 0.015 40)",
+          "oklch(62% 0.015 40)",
+          "oklch(74% 0.015 40)",
+          "oklch(85% 0.015 40)",
+          "oklch(95% 0.008 40)"
+        ]
+      },
+      "terracotta-night": {
+        "role": "primary",
+        "displayName": "Terracotta (Night)",
+        "canonical": "oklch(65% 0.16 25)",
+        "theme": "dark",
+        "cssVariable": "--color-accent",
+        "tonalRamp": [
+          "oklch(15% 0.08 25)",
+          "oklch(26% 0.08 25)",
+          "oklch(38% 0.16 25)",
+          "oklch(50% 0.16 25)",
+          "oklch(62% 0.16 25)",
+          "oklch(74% 0.16 25)",
+          "oklch(85% 0.16 25)",
+          "oklch(95% 0.08 25)"
+        ]
+      },
+      "terracotta-night-bright": {
+        "role": "primary",
+        "displayName": "Terracotta Bright (Night)",
+        "canonical": "oklch(72% 0.18 25)",
+        "theme": "dark",
+        "cssVariable": "--color-accent-hover",
+        "tonalRamp": [
+          "oklch(15% 0.09 25)",
+          "oklch(26% 0.09 25)",
+          "oklch(38% 0.18 25)",
+          "oklch(50% 0.18 25)",
+          "oklch(62% 0.18 25)",
+          "oklch(74% 0.18 25)",
+          "oklch(85% 0.18 25)",
+          "oklch(95% 0.09 25)"
+        ]
+      },
+      "terracotta-night-deep": {
+        "role": "primary",
+        "displayName": "Terracotta Deep (Night)",
+        "canonical": "oklch(55% 0.18 25)",
+        "theme": "dark",
+        "cssVariable": "--color-accent-dark",
+        "tonalRamp": [
+          "oklch(15% 0.09 25)",
+          "oklch(26% 0.09 25)",
+          "oklch(38% 0.18 25)",
+          "oklch(50% 0.18 25)",
+          "oklch(62% 0.18 25)",
+          "oklch(74% 0.18 25)",
+          "oklch(85% 0.18 25)",
+          "oklch(95% 0.09 25)"
+        ]
+      },
+      "terracotta-night-wash": {
+        "role": "primary",
+        "displayName": "Terracotta Wash (Night)",
+        "canonical": "oklch(22% 0.06 25)",
+        "theme": "dark",
+        "cssVariable": "--color-accent-subtle",
+        "tonalRamp": [
+          "oklch(15% 0.03 25)",
+          "oklch(26% 0.03 25)",
+          "oklch(38% 0.06 25)",
+          "oklch(50% 0.06 25)",
+          "oklch(62% 0.06 25)",
+          "oklch(74% 0.06 25)",
+          "oklch(85% 0.06 25)",
+          "oklch(95% 0.03 25)"
+        ]
+      },
+      "playing-gold-night": {
+        "role": "secondary",
+        "displayName": "Playing Gold (Night)",
+        "canonical": "oklch(80% 0.13 80)",
+        "theme": "dark",
+        "cssVariable": "--color-playing",
+        "tonalRamp": [
+          "oklch(15% 0.065 80)",
+          "oklch(26% 0.065 80)",
+          "oklch(38% 0.13 80)",
+          "oklch(50% 0.13 80)",
+          "oklch(62% 0.13 80)",
+          "oklch(74% 0.13 80)",
+          "oklch(85% 0.13 80)",
+          "oklch(95% 0.065 80)"
+        ]
+      },
+      "slate-night": {
+        "role": "neutral",
+        "displayName": "Slate Night",
+        "canonical": "oklch(12% 0.008 270)",
+        "theme": "dark",
+        "cssVariable": "--color-bg-primary",
+        "tonalRamp": [
+          "oklch(15% 0.004 270)",
+          "oklch(26% 0.004 270)",
+          "oklch(38% 0.008 270)",
+          "oklch(50% 0.008 270)",
+          "oklch(62% 0.008 270)",
+          "oklch(74% 0.008 270)",
+          "oklch(85% 0.008 270)",
+          "oklch(95% 0.004 270)"
+        ]
+      },
+      "slate-shelf": {
+        "role": "neutral",
+        "displayName": "Slate Shelf",
+        "canonical": "oklch(14% 0.01 270)",
+        "theme": "dark",
+        "cssVariable": "--color-bg-secondary",
+        "tonalRamp": [
+          "oklch(15% 0.005 270)",
+          "oklch(26% 0.005 270)",
+          "oklch(38% 0.01 270)",
+          "oklch(50% 0.01 270)",
+          "oklch(62% 0.01 270)",
+          "oklch(74% 0.01 270)",
+          "oklch(85% 0.01 270)",
+          "oklch(95% 0.005 270)"
+        ]
+      },
+      "slate-well": {
+        "role": "neutral",
+        "displayName": "Slate Well",
+        "canonical": "oklch(18% 0.012 270)",
+        "theme": "dark",
+        "cssVariable": "--color-bg-tertiary",
+        "tonalRamp": [
+          "oklch(15% 0.006 270)",
+          "oklch(26% 0.006 270)",
+          "oklch(38% 0.012 270)",
+          "oklch(50% 0.012 270)",
+          "oklch(62% 0.012 270)",
+          "oklch(74% 0.012 270)",
+          "oklch(85% 0.012 270)",
+          "oklch(95% 0.006 270)"
+        ]
+      },
+      "slate-raise": {
+        "role": "neutral",
+        "displayName": "Slate Raise",
+        "canonical": "oklch(22% 0.012 270)",
+        "theme": "dark",
+        "cssVariable": "--secondary",
+        "tonalRamp": [
+          "oklch(15% 0.006 270)",
+          "oklch(26% 0.006 270)",
+          "oklch(38% 0.012 270)",
+          "oklch(50% 0.012 270)",
+          "oklch(62% 0.012 270)",
+          "oklch(74% 0.012 270)",
+          "oklch(85% 0.012 270)",
+          "oklch(95% 0.006 270)"
+        ]
+      },
+      "slate-seam": {
+        "role": "neutral",
+        "displayName": "Slate Seam",
+        "canonical": "oklch(22% 0.018 270)",
+        "theme": "dark",
+        "cssVariable": "--color-border",
+        "tonalRamp": [
+          "oklch(15% 0.009 270)",
+          "oklch(26% 0.009 270)",
+          "oklch(38% 0.018 270)",
+          "oklch(50% 0.018 270)",
+          "oklch(62% 0.018 270)",
+          "oklch(74% 0.018 270)",
+          "oklch(85% 0.018 270)",
+          "oklch(95% 0.009 270)"
+        ]
+      },
+      "slate-seam-strong": {
+        "role": "neutral",
+        "displayName": "Slate Seam Strong",
+        "canonical": "oklch(30% 0.022 270)",
+        "theme": "dark",
+        "cssVariable": "--color-border-hover",
+        "tonalRamp": [
+          "oklch(15% 0.011 270)",
+          "oklch(26% 0.011 270)",
+          "oklch(38% 0.022 270)",
+          "oklch(50% 0.022 270)",
+          "oklch(62% 0.022 270)",
+          "oklch(74% 0.022 270)",
+          "oklch(85% 0.022 270)",
+          "oklch(95% 0.011 270)"
+        ]
+      },
+      "frost": {
+        "role": "neutral",
+        "displayName": "Frost",
+        "canonical": "oklch(96% 0.004 270)",
+        "theme": "dark",
+        "cssVariable": "--color-text-primary",
+        "tonalRamp": [
+          "oklch(15% 0.002 270)",
+          "oklch(26% 0.002 270)",
+          "oklch(38% 0.004 270)",
+          "oklch(50% 0.004 270)",
+          "oklch(62% 0.004 270)",
+          "oklch(74% 0.004 270)",
+          "oklch(85% 0.004 270)",
+          "oklch(95% 0.002 270)"
+        ]
+      },
+      "fog": {
+        "role": "neutral",
+        "displayName": "Fog",
+        "canonical": "oklch(65% 0.006 270)",
+        "theme": "dark",
+        "cssVariable": "--color-text-secondary",
+        "tonalRamp": [
+          "oklch(15% 0.003 270)",
+          "oklch(26% 0.003 270)",
+          "oklch(38% 0.006 270)",
+          "oklch(50% 0.006 270)",
+          "oklch(62% 0.006 270)",
+          "oklch(74% 0.006 270)",
+          "oklch(85% 0.006 270)",
+          "oklch(95% 0.003 270)"
+        ]
+      },
+      "haze": {
+        "role": "neutral",
+        "displayName": "Haze",
+        "canonical": "oklch(50% 0.005 270)",
+        "theme": "dark",
+        "cssVariable": "--color-text-tertiary",
+        "tonalRamp": [
+          "oklch(15% 0.003 270)",
+          "oklch(26% 0.003 270)",
+          "oklch(38% 0.005 270)",
+          "oklch(50% 0.005 270)",
+          "oklch(62% 0.005 270)",
+          "oklch(74% 0.005 270)",
+          "oklch(85% 0.005 270)",
+          "oklch(95% 0.003 270)"
+        ]
+      },
+      "on-terracotta": {
+        "role": "neutral",
+        "displayName": "On Terracotta (white)",
+        "canonical": "oklch(100% 0 0)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(26% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "video-black": {
+        "role": "neutral",
+        "displayName": "Video Black",
+        "canonical": "oklch(0% 0 0)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(26% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "error-red": {
+        "role": "tertiary",
+        "displayName": "Error Red (Tailwind red-500)",
+        "canonical": "oklch(63.7% 0.237 25.331)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15% 0.119 25.331)",
+          "oklch(26% 0.119 25.331)",
+          "oklch(38% 0.237 25.331)",
+          "oklch(50% 0.237 25.331)",
+          "oklch(62% 0.237 25.331)",
+          "oklch(74% 0.237 25.331)",
+          "oklch(85% 0.237 25.331)",
+          "oklch(95% 0.119 25.331)"
+        ]
+      },
+      "destructive": {
+        "role": "tertiary",
+        "displayName": "Destructive (shadcn)",
+        "canonical": "oklch(57.7% 0.245 27.325)",
+        "theme": "light",
+        "cssVariable": "--destructive",
+        "tonalRamp": [
+          "oklch(15% 0.123 27.325)",
+          "oklch(26% 0.123 27.325)",
+          "oklch(38% 0.245 27.325)",
+          "oklch(50% 0.245 27.325)",
+          "oklch(62% 0.245 27.325)",
+          "oklch(74% 0.245 27.325)",
+          "oklch(85% 0.245 27.325)",
+          "oklch(95% 0.123 27.325)"
+        ]
+      },
+      "destructive-night": {
+        "role": "tertiary",
+        "displayName": "Destructive (shadcn, Night)",
+        "canonical": "oklch(70.4% 0.191 22.216)",
+        "theme": "dark",
+        "cssVariable": "--destructive",
+        "tonalRamp": [
+          "oklch(15% 0.096 22.216)",
+          "oklch(26% 0.096 22.216)",
+          "oklch(38% 0.191 22.216)",
+          "oklch(50% 0.191 22.216)",
+          "oklch(62% 0.191 22.216)",
+          "oklch(74% 0.191 22.216)",
+          "oklch(85% 0.191 22.216)",
+          "oklch(95% 0.096 22.216)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Signed-out landing headline only; 3rem phone, 3.75rem md, 4.5rem lg."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The page's one h1: collection title 1.625rem to 2rem, brief title 1.25rem to 1.5rem. Shrinks while a collection plays."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Seam-ruled section headings and collection entry titles."
+      },
+      "body-reading": {
+        "displayName": "Body Reading",
+        "purpose": "The brief's gist, chapter titles and key points."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI copy, collection ledes, card titles at weight 500."
+      },
+      "body-note": {
+        "displayName": "Body Note",
+        "purpose": "Collection entry notes and the player caption."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Mono facts: bylines, runtimes, offsets, ranges, position counter, timestamps."
+      },
+      "ordinal": {
+        "displayName": "Ordinal",
+        "purpose": "Zero-padded rail marker numerals with tabular figures."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-sm (token)",
+        "value": "0 1px 2px oklch(25% 0.015 40 / 0.06)",
+        "darkValue": "0 1px 2px oklch(0% 0 0 / 0.25)",
+        "purpose": "Defined as --shadow-sm; not referenced by components today."
+      },
+      {
+        "name": "shadow-md (token)",
+        "value": "0 4px 12px oklch(25% 0.015 40 / 0.09)",
+        "darkValue": "0 4px 12px oklch(0% 0 0 / 0.35)",
+        "purpose": "Card lift on hover for brief, collection and topic cards."
+      },
+      {
+        "name": "shadow-lg (token)",
+        "value": "0 12px 32px oklch(25% 0.015 40 / 0.14)",
+        "darkValue": "0 12px 32px oklch(0% 0 0 / 0.45)",
+        "purpose": "Defined as --shadow-lg; not referenced by components today."
+      },
+      {
+        "name": "tw-shadow-xs",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "Tailwind default on outline buttons and inputs."
+      },
+      {
+        "name": "tw-shadow-sm",
+        "value": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+        "purpose": "Tailwind default on the resting collection section and shadcn Card."
+      },
+      {
+        "name": "tw-shadow-md",
+        "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+        "purpose": "Tailwind default on the hero Play control, the dragged entry, and popovers."
+      },
+      {
+        "name": "tw-shadow-lg",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "Tailwind default on dialogs."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-sheet",
+        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "The system's signature ease: sidebar (--sidebar-transition, 200ms) and the collection header fold (340ms)."
+      },
+      {
+        "name": "header-fold",
+        "value": "340ms cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "Collection header transforming in place when a run starts or stops: grid rows 0fr/1fr, Play control size, title font size, player opacity and an 8px rise. Disabled under reduced motion."
+      },
+      {
+        "name": "rail-crossfade",
+        "value": "300ms color",
+        "purpose": "Rail markers and segments changing to and from Playing Gold. Color only, nothing travels."
+      },
+      {
+        "name": "sidebar",
+        "value": "200ms ease-out",
+        "purpose": "Library sidebar width and slide."
+      },
+      {
+        "name": "accordion",
+        "value": "200ms ease-out",
+        "purpose": "Chapter rows opening and closing (Radix height)."
+      },
+      {
+        "name": "chip",
+        "value": "150ms",
+        "purpose": "Filter chip hover and selection."
+      },
+      {
+        "name": "thumbnail-zoom",
+        "value": "300ms transform scale(1.05)",
+        "purpose": "Card and entry thumbnails on hover."
+      },
+      {
+        "name": "overlay-enter",
+        "value": "200ms fade-in + zoom-in-95",
+        "purpose": "Dialogs, popovers and tooltips (tw-animate-css)."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "header-new-brief-label",
+        "value": "340px"
+      },
+      {
+        "name": "header-wordmark",
+        "value": "400px"
+      },
+      {
+        "name": "header-nav-labels",
+        "value": "520px"
+      },
+      {
+        "name": "toolbar-compact-filters",
+        "value": "540px"
+      },
+      {
+        "name": "sm",
+        "value": "640px",
+        "purpose": "Rail ordinal column appears; player frame switches from true shape to 16:9."
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "toolbar-inline-tags",
+        "value": "780px"
+      },
+      {
+        "name": "toolbar-single-line",
+        "value": "900px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px",
+        "purpose": "A collection leaves the single column: stage left, shelf right, filling the viewport under the header."
+      },
+      {
+        "name": "xl",
+        "value": "1280px",
+        "purpose": "Inline date presets appear."
+      }
+    ],
+    "layout": {
+      "gutter": "16px",
+      "header": "56px sticky, 95% page ground with backdrop blur",
+      "columns": {
+        "brief": "48rem",
+        "collection": "50rem single column below lg. From lg the page fills the viewport under the header: the stage (video, caption, transport) left and the shelf (head and entries) right, the shelf 25rem, 27rem at xl and 31rem at 2xl, in an article capped at 96rem, 112rem at 2xl.",
+        "index": "64rem"
+      },
+      "phonePlayer": "Vertical frames sized min(70vh, 32rem) tall times aspect ratio, centred; landscape fills width. sm and up always 16:9."
+    }
+  },
+  "components": [
+    {
+      "name": "Call to Action Button",
+      "kind": "button",
+      "refersTo": "button-cta",
+      "description": "The one terracotta-filled call to action on a view: New Brief in the header.",
+      "html": "<button class=\"ds-btn-cta\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg><span>New Brief</span></button>",
+      "css": ".ds-btn-cta { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px 0 12px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; font-family: var(--font-sans); font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 150ms cubic-bezier(0.32, 0.72, 0, 1); } .ds-btn-cta:hover { background: var(--color-accent-hover); } .ds-btn-cta:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Ink Button",
+      "kind": "button",
+      "refersTo": "button-ink",
+      "description": "The default shadcn button: quiet confirmations inside a flow, such as Save note or Resume.",
+      "html": "<button class=\"ds-btn-ink\">Save note</button>",
+      "css": ".ds-btn-ink { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: none; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-sans); font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 150ms cubic-bezier(0.32, 0.72, 0, 1); } .ds-btn-ink:hover { background: color-mix(in oklab, var(--primary) 90%, transparent); } .ds-btn-ink:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Quiet Icon Button",
+      "kind": "button",
+      "refersTo": "button-quiet-icon",
+      "description": "Outlined 32px icon control used for transport (previous, next, full screen) and per-entry curator actions.",
+      "html": "<button class=\"ds-btn-icon\" aria-label=\"Next entry\" title=\"Next entry\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polygon points=\"5 4 15 12 5 20 5 4\"/><line x1=\"19\" x2=\"19\" y1=\"5\" y2=\"19\"/></svg></button>",
+      "css": ".ds-btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--background); color: var(--color-text-secondary); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); cursor: pointer; transition: color 150ms, border-color 150ms, background-color 150ms; } .ds-btn-icon:hover { color: var(--color-accent); border-color: color-mix(in oklab, var(--color-accent) 50%, transparent); background: var(--color-bg-tertiary); } .ds-btn-icon:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Hero Play Control",
+      "kind": "button",
+      "refersTo": "button-play-hero",
+      "description": "The 56px terracotta circle that starts a collection run; it shrinks to a 32px Stop while the run plays.",
+      "html": "<button class=\"ds-play-hero\" aria-label=\"Play the whole collection\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"currentColor\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polygon points=\"6 3 20 12 6 21 6 3\"/></svg></button>",
+      "css": ".ds-play-hero { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border: none; border-radius: 9999px; background: var(--color-accent); color: #fff; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); cursor: pointer; transition: width 340ms cubic-bezier(0.32, 0.72, 0, 1), height 340ms cubic-bezier(0.32, 0.72, 0, 1), background-color 340ms cubic-bezier(0.32, 0.72, 0, 1); } .ds-play-hero svg { margin-left: 2px; } .ds-play-hero:hover { background: var(--color-accent-hover); } .ds-play-hero:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Library Search",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "The library toolbar's search field: Shelf fill, 12px radius, inset search glyph.",
+      "html": "<label class=\"ds-search\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input type=\"text\" placeholder=\"Search briefs...\" /></label>",
+      "css": ".ds-search { position: relative; display: block; width: 320px; } .ds-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--color-text-tertiary); pointer-events: none; } .ds-search input { width: 100%; padding: 10px 16px 10px 40px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg-secondary); color: var(--color-text-primary); font-family: var(--font-sans); font-size: 16px; outline: none; transition: box-shadow 150ms; } .ds-search input::placeholder { color: var(--color-text-tertiary); } .ds-search input:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip-filter",
+      "description": "Round tag and date filter pills in the library toolbar; selected fills with terracotta.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip\">design<span class=\"ds-chip-count\">12</span></button><button class=\"ds-chip ds-chip-active\" aria-pressed=\"true\">ai<span class=\"ds-chip-count\">8</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg></button><button class=\"ds-chip\">This week</button></div>",
+      "css": ".ds-chips { display: flex; gap: 6px; } .ds-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: none; border-radius: 9999px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-family: var(--font-sans); font-size: 14px; white-space: nowrap; cursor: pointer; transition: all 150ms; } .ds-chip:hover { background: var(--color-border-hover); color: var(--color-text-primary); } .ds-chip:focus-visible { outline: 2px solid color-mix(in oklab, var(--ring) 50%, transparent); outline-offset: 2px; } .ds-chip-count { font-size: 10px; line-height: 1; position: relative; top: 1px; color: color-mix(in oklab, var(--color-text-tertiary) 60%, transparent); } .ds-chip-active, .ds-chip-active:hover { background: var(--color-accent); color: #fff; } .ds-chip-active .ds-chip-count { color: rgb(255 255 255 / 0.5); }"
+    },
+    {
+      "name": "Timestamp Chip",
+      "kind": "chip",
+      "refersTo": "timestamp-chip",
+      "description": "A mono timestamp link on a Blush wash; a play glyph fades in on hover.",
+      "html": "<a class=\"ds-timestamp\" href=\"#\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polygon points=\"6 3 20 12 6 21 6 3\"/></svg><span>12:34</span></a>",
+      "css": ".ds-timestamp { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 8px; background: var(--color-accent-subtle); color: var(--color-accent); font-family: var(--font-mono); font-size: 14px; text-decoration: none; transition: color 150ms, background-color 150ms; } .ds-timestamp svg { width: 12px; height: 12px; opacity: 0; transition: opacity 150ms; } .ds-timestamp:hover { color: var(--color-accent-hover); background: color-mix(in oklab, var(--color-accent) 20%, transparent); } .ds-timestamp:hover svg { opacity: 1; } .ds-timestamp:focus-visible { outline: 2px solid color-mix(in oklab, var(--ring) 50%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Brief Card",
+      "kind": "card",
+      "refersTo": "brief-card",
+      "description": "A library grid card: 16:9 thumbnail, two-line title, tags, seam-ruled channel and date footer. Lifts on hover.",
+      "html": "<a class=\"ds-card\" href=\"#\"><div class=\"ds-card-thumb\"></div><h3 class=\"ds-card-title\">Why the best interfaces feel slow on purpose</h3><div class=\"ds-card-foot\"><span>Channel Name</span><span>Oct 14, 2026</span></div></a>",
+      "css": ".ds-card { display: flex; flex-direction: column; width: 280px; padding: 16px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-secondary); text-decoration: none; transition: all 150ms; } .ds-card:hover { border-color: var(--color-border-hover); box-shadow: var(--shadow-md); } .ds-card:focus-visible { outline: 2px solid color-mix(in oklab, var(--ring) 50%, transparent); outline-offset: 2px; } .ds-card-thumb { aspect-ratio: 16 / 9; border-radius: 12px; background: var(--color-bg-tertiary); margin-bottom: 12px; } .ds-card-title { margin: 0; font-family: var(--font-sans); font-size: 16px; font-weight: 500; line-height: 1.375; letter-spacing: normal; color: var(--color-text-primary); transition: color 150ms; } .ds-card:hover .ds-card-title { color: var(--color-accent); } .ds-card-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--color-border); font-family: var(--font-sans); font-size: 14px; color: var(--color-text-secondary); }"
+    },
+    {
+      "name": "Collection Rail",
+      "kind": "custom",
+      "refersTo": "rail-marker",
+      "description": "The collection's track listing: 28px mono ordinal markers on a 1px line; the playing entry's marker and the segment below it cross-fade to Playing Gold.",
+      "html": "<ol class=\"ds-rail\"><li class=\"ds-rail-row\"><span class=\"ds-rail-mark\">01</span><span class=\"ds-rail-title\">The first clip that formed the view</span><span class=\"ds-rail-meta\">at 0:00 / 4:10</span></li><li class=\"ds-rail-row ds-rail-playing\" aria-current=\"true\"><span class=\"ds-rail-mark\">02</span><span class=\"ds-rail-title\">The clip playing now</span><span class=\"ds-rail-meta\">now playing</span></li><li class=\"ds-rail-row ds-rail-last\"><span class=\"ds-rail-mark\">03</span><span class=\"ds-rail-title\">What comes next</span><span class=\"ds-rail-meta\">at 6:45 / 3:02</span></li></ol>",
+      "css": ".ds-rail { list-style: none; margin: 0; padding: 0; width: 420px; } .ds-rail-row { position: relative; display: grid; grid-template-columns: 52px 1fr auto; align-items: center; column-gap: 16px; min-height: 36px; padding: 20px 0; } .ds-rail-row::before { content: \"\"; position: absolute; left: 14px; top: 48px; bottom: -20px; width: 1px; background: var(--color-border); transition: background-color 300ms; } .ds-rail-last::before { display: none; } .ds-rail-mark { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--color-border); border-radius: 9999px; background: var(--color-bg-secondary); color: var(--color-text-tertiary); font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; transition: background-color 300ms, border-color 300ms, color 300ms; } .ds-rail-title { font-family: var(--font-heading); font-size: 17px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.35; color: var(--color-text-primary); } .ds-rail-meta { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; color: var(--color-text-tertiary); } .ds-rail-playing::before { background: var(--color-playing); } .ds-rail-playing .ds-rail-mark { border-color: var(--color-playing); background: var(--color-playing); color: var(--color-bg-secondary); } .ds-rail-playing .ds-rail-meta { color: var(--color-playing); } .ds-rail-row:hover .ds-rail-title { color: var(--color-accent); } @media (prefers-reduced-motion: reduce) { .ds-rail-row::before, .ds-rail-mark { transition: none; } }"
+    },
+    {
+      "name": "Sidebar Nav Link",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Library sidebar and header links: Umber at rest, Ink on a Well fill when hovered or active.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link ds-nav-active\" href=\"#\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z\"/><path d=\"m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65\"/><path d=\"m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65\"/></svg><span>Collections</span></a><a class=\"ds-nav-link ds-nav-sub\" href=\"#\"><span>Why I trust slow software</span><span class=\"ds-nav-count\">7</span></a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 2px; width: 240px; padding: 16px; background: var(--color-bg-secondary); border-right: 1px solid var(--color-border); } .ds-nav-link { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; font-family: var(--font-sans); font-size: 14px; color: var(--color-text-secondary); text-decoration: none; transition: color 150ms, background-color 150ms; } .ds-nav-link:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); } .ds-nav-link:focus-visible { outline: 2px solid color-mix(in oklab, var(--ring) 50%, transparent); outline-offset: 1px; } .ds-nav-active { background: var(--color-bg-tertiary); color: var(--color-text-primary); font-weight: 500; } .ds-nav-sub { padding-left: 32px; } .ds-nav-count { margin-left: auto; font-size: 12px; color: var(--color-text-tertiary); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Liner Notes",
+    "overview": "Brief is the sleeve around the record, never the record. A video is the music; the brief, the collection header, the numbered entries and their mono timings are the liner notes printed around it: set in careful type, ruled with hairlines, numbered like a track listing, and quiet enough that the eye goes straight to the clip. Every surface answers \"worth it?\" first and then rewards whoever keeps reading, the way good liner notes reward a second listen.\n\nThe system is restrained. Neutrals carry almost all of every screen, one terracotta accent marks the single action or link that matters, and a warm gold exists for exactly one meaning: this is the entry playing now. Depth comes from tonal shelves and 1px seams, not shadows. Density is moderate and editorial: generous line height for reading, compact mono for facts. Motion is a slow, confident ease (`cubic-bezier(0.32, 0.72, 0, 1)`) that transforms things in place rather than adding things to the page.\n\nTwo themes, deliberately not mirror images. Light is **Warm Linen**: paper-toned neutrals on hue 55 with walnut ink on hue 40, for a recipient opening a shared collection at a desk in daylight. Dark is **Cool Slate**: near-black neutrals on hue 270, for Mark triaging a forty-minute video in the evening, which is why dark is the default theme (system preference is honored). The terracotta and gold are shared across both; only their lightness shifts.\n\nThe system rejects, by name, everything in PRODUCT.md's anti-references: a YouTube clone (\"red-and-white video-site chrome, thumbnail walls, recommendation-feed energy\"), generic SaaS (\"cream backgrounds, gradient buttons, hero metrics, identical card grids\"), a dense admin panel (\"gray tables, tiny type, everything boxed in\"), and AI-product gloss (\"purple gradients, sparkle icons, 'powered by AI' announcements\").\n\nLayout lives in a single reading column. A brief is a 48rem article; a collection is a 50rem article; library and collections indexes widen to 64rem grids. Page gutters are 16px at every width. A sticky 56px header (and on the library a sticky toolbar under it) sits on a 95% opaque page color with a backdrop blur, the only blur in the system, used so content scrolling under it stays legible rather than for gloss. Breakpoints follow Tailwind (`sm` 640px, `md` 768px, `xl` 1280px) plus content-driven steps for the toolbar (540px, 780px, 900px) and header labels (340px, 400px, 520px).",
+    "keyCharacteristics": [
+      "Restrained palette: tinted neutrals, one terracotta accent, one gold state color.",
+      "Three type voices: Plus Jakarta Sans names things, Source Sans 3 is read, JetBrains Mono states facts.",
+      "Flat tonal shelves (page, shelf, well) separated by 1px seams.",
+      "Transform in place: playing folds the header down instead of appending a player.",
+      "Warm Linen light theme, Cool Slate dark theme, dark by default.",
+      "Phone is a first-class layout, not a squeezed desktop."
+    ],
+    "rules": [
+      {
+        "name": "The Clip Is the Main Event Rule",
+        "body": "Nothing on a collection or brief page may compete with the video frame for attention: no decorative imagery, no accent-filled panels, no motion near the frame while it plays.",
+        "section": "overview"
+      },
+      {
+        "name": "The One Ember Rule",
+        "body": "Terracotta covers no more than about 10% of any screen. On a given view exactly one control is filled with it (the Play control on a collection, New Brief in the header); everything else uses it only as text or on hover. A second filled terracotta button on the same view is prohibited.",
+        "section": "colors"
+      },
+      {
+        "name": "The Gold Means Now Rule",
+        "body": "Playing Gold appears only on the entry being played. It is never a button, a badge, a highlight, or a decoration, and it is never used when nothing is playing.",
+        "section": "colors"
+      },
+      {
+        "name": "The Paper, Not Cream Rule",
+        "body": "Light neutrals stay at chroma 0.015 or below on hue 55 so the page reads as linen paper, not as SaaS cream. Dark neutrals stay at chroma 0.022 or below on hue 270. Raising neutral chroma to \"warm it up\" is prohibited.",
+        "section": "colors"
+      },
+      {
+        "name": "The Three Voices Rule",
+        "body": "Plus Jakarta names things, Source Sans is read, JetBrains Mono states facts. A heading in mono, a number in the heading face, or a paragraph in mono is prohibited. Every global `h1` to `h6` gets the heading face at 600 and -0.025em automatically; do not restyle them back to the body face.",
+        "section": "typography"
+      },
+      {
+        "name": "The Facts in Mono Rule",
+        "body": "Anything a viewer could copy as data (a timestamp, a range, a runtime, an entry count, a share URL, a video id placeholder) is set in JetBrains Mono at 0.75rem or smaller, in Dust/Haze unless it is an active link.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Shelf Rule",
+        "body": "Surfaces are flat at rest and separated by tone plus a 1px seam. A shadow is a response to state (hover, drag, overlay) or marks the single floating control. If two adjacent resting surfaces both carry shadows, one of them is wrong.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Cross-Fade Rule",
+        "body": "The playing state moves down the rail by color alone. Markers and segments cross-fade to and from Playing Gold over 300ms; a lit bar sliding, growing, or travelling between entries is prohibited.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "**Do** keep terracotta to one filled control per view and use it otherwise only as text, hover, and the focus ring (The One Ember Rule).",
+      "**Do** reserve Playing Gold (`oklch(62% 0.13 75)` light, `oklch(80% 0.13 80)` dark) for the entry being played, and move it by a 300ms color cross-fade, never by sliding.",
+      "**Do** separate surfaces with the page, Shelf and Well tones plus a 1px Seam before reaching for any shadow.",
+      "**Do** set every fact (time, range, count, ordinal, URL) in JetBrains Mono at 0.75rem or smaller.",
+      "**Do** transform existing elements in place on state changes, using `cubic-bezier(0.32, 0.72, 0, 1)` and `motion-reduce:transition-none`.",
+      "**Do** design the phone layout as its own composition: drop the ordinal column, let a vertical Short take its true shape at `min(70vh, 32rem)` tall, and stack the title under the controls.",
+      "**Do** read colors from the `--color-*` tokens in both themes; check every new pairing in light and dark against WCAG 2.2 AA, as PRODUCT.md requires.",
+      "**Do** give every icon-only control a `title` and an `aria-label`, and return focus to the control that opened a mode when it closes."
+    ],
+    "donts": [
+      "**Don't** build anything that reads as a YouTube clone: no \"red-and-white video-site chrome, thumbnail walls, recommendation-feed energy\". Thumbnails stay subordinate to the note beside them.",
+      "**Don't** drift toward generic SaaS: no \"cream backgrounds, gradient buttons, hero metrics, identical card grids\". Linen must stay at chroma 0.015 or below, and cards stay confined to the index grids.",
+      "**Don't** become a dense admin panel: no \"gray tables, tiny type, everything boxed in\". No readable text below 0.75rem except ordinals and counts (0.625rem to 0.6875rem), and nothing inside a brief or collection gets boxed.",
+      "**Don't** add AI-product gloss: no \"purple gradients, sparkle icons, 'powered by AI' announcements\".",
+      "**Don't** use a second accent hue, or terracotta for state; \"playing\" is gold, errors are red, tangents are amber.",
+      "**Don't** use `border-left` or `border-right` wider than 1px as a colored stripe on cards, rows or callouts; the phone's 2px playing bar is a detached mark, not a border.",
+      "**Don't** use gradient text, glassmorphism, or blur anywhere except the sticky header and toolbar.",
+      "**Don't** use pure `#000` or `#fff` outside the video frame, the full-screen exit control, and text on a terracotta fill.",
+      "**Don't** animate layout properties for new work; the collection header's fold (its grid rows, the Play control's size, the title's font size) is the one sanctioned exception.",
+      "**Don't** reach for a modal first: notes edit inline, the player opens inline, and sharing lives in a popover."
+    ]
+  }
+}

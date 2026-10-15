@@ -3,14 +3,21 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 import { SharedCollection } from "@/components/collections/shared-collection";
 import { buildSitting, type EntryVideoFacts } from "@/lib/collection-entries";
+import { isEmailAllowed } from "@/lib/access";
 import {
   getSharedCollectionBySlug,
   getSharedCollectionVideoFacts,
+  listCollections,
   type CollectionWithItems,
 } from "@/lib/collections";
-import { sharedCollectionDescription, unfurlThumbnailUrl } from "@/lib/shared-collection-meta";
+import {
+  invitesViewerToBuild,
+  sharedCollectionDescription,
+  unfurlThumbnailUrl,
+} from "@/lib/shared-collection-meta";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -85,33 +92,65 @@ export default async function SharedCollectionPage({ params }: PageProps) {
   }
 
   const { collection, videoFacts } = view;
+  const { user } = await withAuth();
+  const showInvitation = invitesViewerToBuild({
+    signedIn: user !== null,
+    allowed: isEmailAllowed(user?.email),
+    collectionCount: user ? (await listCollections(user.id)).length : 0,
+  });
   const updatedLabel = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
   }).format(new Date(collection.updatedAt));
 
   return (
-    <main className="flex-1 px-4 py-4 pb-20">
-      <article className="max-w-[50rem] mx-auto">
+    // A wide screen gives the collection exactly the viewport under the 57px header
+    // (56px and its seam), so the page holds still and the rail scrolls instead.
+    <main className="flex-1 px-4 py-4 pb-20 lg:flex-none lg:flex lg:flex-col lg:h-[calc(100dvh-57px)] lg:pb-4">
+      <article className="max-w-[50rem] mx-auto lg:flex lg:flex-col lg:flex-1 lg:min-h-0 lg:w-full lg:max-w-[96rem] 2xl:max-w-[112rem]">
         <SharedCollection
           collection={collection}
           videoFacts={videoFacts}
           updatedLabel={updatedLabel}
+          shelfFooter={
+            // The invitation stays quiet beside the stage: one line and a text link,
+            // so Play is the only filled control in view. Small text on the shelf
+            // needs the deeper terracotta in light to read, and the base one in dark.
+            showInvitation && (
+              <div className="hidden lg:block">
+                <p className="text-sm leading-[1.5] text-[var(--color-text-secondary)]">
+                  Build your own collections from AI summaries of any YouTube video.
+                </p>
+                <Link
+                  href="/collections"
+                  prefetch={false}
+                  className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-accent-hover)] hover:text-[var(--color-accent-dark)] dark:text-[var(--color-accent)] dark:hover:text-[var(--color-accent-hover)] transition-colors"
+                >
+                  Get Started
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            )
+          }
         />
 
-        <section className="mt-10 py-6 px-4 rounded-2xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-center">
-          <p className="text-[var(--color-text-secondary)] mb-4">
-            Build your own collections from AI summaries of any YouTube video.
-          </p>
-          <Link
-            href="/auth"
-            prefetch={false}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-base font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer"
-          >
-            Get Started
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </section>
+        {/* Below lg the invitation is a quiet box after the collection, carrying the
+            same text link as the shelf, so Play stays the only filled control. */}
+        {showInvitation && (
+          <section className="mt-10 py-6 px-4 rounded-2xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-center lg:hidden">
+            <p className="text-[var(--color-text-secondary)] mb-4">
+              Build your own collections from AI summaries of any YouTube video.
+            </p>
+            <Link
+              href="/collections"
+              prefetch={false}
+              className="inline-flex items-center gap-1.5 text-base font-medium text-[var(--color-accent-hover)] hover:text-[var(--color-accent-dark)] dark:text-[var(--color-accent)] dark:hover:text-[var(--color-accent-hover)] transition-colors"
+            >
+              Get Started
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </section>
+        )}
       </article>
     </main>
   );

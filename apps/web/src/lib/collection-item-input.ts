@@ -36,31 +36,38 @@ export interface ReorderNeighbors {
 }
 
 /**
- * Given the current ordered item ids and the index of the item being moved one
- * slot up or down, returns the neighbor ids the reorder PATCH needs so the server
- * can compute a fractional midpoint. `afterItemId` is the item the moved item
- * should follow; `beforeItemId` is the item it should precede. Returns null when
- * the move would run off either end (already first and moving up, already last and
- * moving down).
+ * Settles a drag: returns the order that results from dropping `movedId` onto
+ * the slot `overId` occupies, with everything between them shifting one place to
+ * make room. Returns the given order unchanged when either id is unknown or an
+ * item was dropped on itself, so a drag that ends where it began costs nothing.
+ *
+ * Pure and non-mutating, so the caller can render the settled order optimistically
+ * and still hold the previous one to fall back to if the write fails.
  */
-export function reorderNeighbors(
-  ids: string[],
-  index: number,
-  direction: "up" | "down",
-): ReorderNeighbors | null {
-  if (index < 0 || index >= ids.length) return null;
+export function reorderById(ids: string[], movedId: string, overId: string): string[] {
+  const from = ids.indexOf(movedId);
+  const to = ids.indexOf(overId);
+  if (from === -1 || to === -1 || from === to) return ids;
 
-  if (direction === "up") {
-    if (index === 0) return null;
-    return {
-      afterItemId: ids[index - 2] ?? null,
-      beforeItemId: ids[index - 1],
-    };
-  }
+  const next = [...ids];
+  next.splice(from, 1);
+  next.splice(to, 0, movedId);
+  return next;
+}
 
-  if (index === ids.length - 1) return null;
+/**
+ * Reads an item's neighbours out of an order that has already settled, which is
+ * what the reorder PATCH needs so the server can compute a fractional midpoint.
+ * `afterItemId` is the item it should follow; `beforeItemId` is the item it should
+ * precede. Both are null for the only item in a collection. Returns null for an id
+ * the order does not contain.
+ */
+export function neighborsOf(ids: string[], itemId: string): ReorderNeighbors | null {
+  const index = ids.indexOf(itemId);
+  if (index === -1) return null;
+
   return {
-    afterItemId: ids[index + 1],
-    beforeItemId: ids[index + 2] ?? null,
+    afterItemId: ids[index - 1] ?? null,
+    beforeItemId: ids[index + 1] ?? null,
   };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summaryTier, buildSummaryPrompt } from "./summary-prompt";
+import { summaryTier, buildSummaryPrompt, SUMMARY_MAX_OUTPUT_TOKENS } from "./summary-prompt";
 
 describe("summaryTier", () => {
   it("maps a null range (whole Short) to the whole-short tier", () => {
@@ -19,14 +19,13 @@ describe("summaryTier", () => {
     expect(summaryTier(seconds).id).toBe(expected);
   });
 
-  it("scales the output-token ceiling up with the tier length", () => {
-    const micro = summaryTier(20).maxOutputTokens;
-    const brief = summaryTier(90).maxOutputTokens;
-    const standard = summaryTier(300).maxOutputTokens;
-    const extended = summaryTier(1200).maxOutputTokens;
-    expect(micro).toBeLessThan(brief);
-    expect(brief).toBeLessThan(standard);
-    expect(standard).toBeLessThan(extended);
+  it("leaves the output-token ceiling out of the tier entirely", () => {
+    // The word budget makes a note short. A per-tier ceiling would say the
+    // opposite, and a ceiling near the length of the note buys an empty
+    // completion rather than a shorter one.
+    for (const seconds of [null, 20, 90, 300, 1200]) {
+      expect(summaryTier(seconds)).not.toHaveProperty("maxOutputTokens");
+    }
   });
 
   it("imposes no chapter or bullet quota in any tier's guidance", () => {
@@ -41,13 +40,29 @@ describe("summaryTier", () => {
     expect(summaryTier(20).guidance.toLowerCase()).toMatch(/sentence/);
   });
 
-  it("holds the token ceilings at their proportional values", () => {
-    expect(summaryTier(null).maxOutputTokens).toBe(160);
-    expect(summaryTier(20).maxOutputTokens).toBe(120);
-    expect(summaryTier(90).maxOutputTokens).toBe(200);
-    expect(summaryTier(300).maxOutputTokens).toBe(400);
-    expect(summaryTier(1200).maxOutputTokens).toBe(600);
+  it("keeps the runaway guard far above the note it has to allow", () => {
+    // The model reasons out of this same budget before writing prose, so a
+    // ceiling anywhere near thirty words returns nothing at all.
+    expect(SUMMARY_MAX_OUTPUT_TOKENS).toBeGreaterThanOrEqual(500);
   });
+
+  it("caps every tier at two sentences, however long the range", () => {
+    for (const seconds of [null, 20, 90, 300, 1200]) {
+      const guidance = summaryTier(seconds).guidance.toLowerCase();
+      expect(guidance).not.toMatch(/three sentences|four sentences/);
+    }
+    expect(summaryTier(300).guidance.toLowerCase()).toMatch(/two sentences at most/);
+    expect(summaryTier(1200).guidance.toLowerCase()).toMatch(/two sentences at most/);
+  });
+
+  it("gives every tier a word budget, since sentences alone do not bound the length", () => {
+    for (const seconds of [null, 20, 90, 300, 1200]) {
+      expect(summaryTier(seconds).guidance).toMatch(/\d+ words at most/);
+    }
+    expect(summaryTier(20).guidance).toMatch(/20 words at most/);
+    expect(summaryTier(1200).guidance).toMatch(/30 words at most/);
+  });
+
 
   it("keeps the micro tier at a single sentence", () => {
     expect(summaryTier(20).guidance.toLowerCase()).toMatch(/single sentence|one sentence/);
@@ -159,10 +174,11 @@ describe("buildSummaryPrompt curator voice", () => {
     expect(system.toLowerCase()).toMatch(/why it belongs/);
   });
 
-  it("asks for a short, direct note of one to three sentences", () => {
+  it("asks for a short, direct note of no more than two sentences", () => {
     const { system } = built();
     expect(system.toLowerCase()).toMatch(/short and direct|short, direct/);
-    expect(system.toLowerCase()).toMatch(/one to three sentences|1-3 sentences/);
+    expect(system.toLowerCase()).toMatch(/one or two sentences|1-2 sentences/);
+    expect(system.toLowerCase()).toMatch(/never more than two/);
   });
 
   it("bans throat-clearing openers by quoting them", () => {
@@ -183,7 +199,9 @@ describe("buildSummaryPrompt curator voice", () => {
   it("does not inflate length while changing the voice", () => {
     for (const seconds of [null, 20, 90, 300, 1200]) {
       const { tier } = buildSummaryPrompt({ rangeSeconds: seconds, transcriptText: "x" });
-      expect(tier.maxOutputTokens).toBeLessThanOrEqual(600);
+      const words = tier.guidance.match(/(\d+) words at most/);
+      expect(words).not.toBeNull();
+      expect(Number(words![1])).toBeLessThanOrEqual(30);
     }
   });
 });

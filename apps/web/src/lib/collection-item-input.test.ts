@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRange, formatSeconds, reorderNeighbors } from "./collection-item-input";
+import { formatRange, formatSeconds, neighborsOf, reorderById } from "./collection-item-input";
 
 describe("formatSeconds", () => {
   it("formats sub-minute offsets as M:SS", () => {
@@ -37,34 +37,53 @@ describe("formatRange", () => {
   });
 });
 
-describe("reorderNeighbors", () => {
+describe("reorderById", () => {
   const ids = ["a", "b", "c", "d"];
 
-  it("returns null when moving the first item up", () => {
-    expect(reorderNeighbors(ids, 0, "up")).toBeNull();
+  it("drops an item onto a later one by taking that one's place", () => {
+    expect(reorderById(ids, "a", "c")).toEqual(["b", "c", "a", "d"]);
   });
 
-  it("returns null when moving the last item down", () => {
-    expect(reorderNeighbors(ids, 3, "down")).toBeNull();
+  it("drops an item onto an earlier one by taking that one's place", () => {
+    expect(reorderById(ids, "d", "b")).toEqual(["a", "d", "b", "c"]);
   });
 
-  it("moves an interior item up between its two preceding neighbors", () => {
-    expect(reorderNeighbors(ids, 2, "up")).toEqual({ afterItemId: "a", beforeItemId: "b" });
+  it("leaves the order alone when an item is dropped on itself", () => {
+    expect(reorderById(ids, "b", "b")).toEqual(ids);
   });
 
-  it("moves an item to the very top with a null after-neighbor", () => {
-    expect(reorderNeighbors(ids, 1, "up")).toEqual({ afterItemId: null, beforeItemId: "a" });
+  it("leaves the order alone when either id is not in the list", () => {
+    expect(reorderById(ids, "z", "b")).toEqual(ids);
+    expect(reorderById(ids, "b", "z")).toEqual(ids);
   });
 
-  it("moves an interior item down between its two following neighbors", () => {
-    expect(reorderNeighbors(ids, 1, "down")).toEqual({ afterItemId: "c", beforeItemId: "d" });
+  it("does not mutate the order it was given", () => {
+    const original = [...ids];
+    reorderById(ids, "a", "d");
+    expect(ids).toEqual(original);
+  });
+});
+
+describe("neighborsOf", () => {
+  const ids = ["a", "b", "c", "d"];
+
+  it("reads an interior item's neighbours from the settled order", () => {
+    expect(neighborsOf(ids, "c")).toEqual({ afterItemId: "b", beforeItemId: "d" });
   });
 
-  it("moves an item to the very bottom with a null before-neighbor", () => {
-    expect(reorderNeighbors(ids, 2, "down")).toEqual({ afterItemId: "d", beforeItemId: null });
+  it("gives the first item a null after-neighbour", () => {
+    expect(neighborsOf(ids, "a")).toEqual({ afterItemId: null, beforeItemId: "b" });
   });
 
-  it("returns null for an out-of-range index", () => {
-    expect(reorderNeighbors(ids, 9, "up")).toBeNull();
+  it("gives the last item a null before-neighbour", () => {
+    expect(neighborsOf(ids, "d")).toEqual({ afterItemId: "c", beforeItemId: null });
+  });
+
+  it("returns null for an id that is not in the list", () => {
+    expect(neighborsOf(ids, "z")).toBeNull();
+  });
+
+  it("gives a lone item two null neighbours, which is a no-op move", () => {
+    expect(neighborsOf(["a"], "a")).toEqual({ afterItemId: null, beforeItemId: null });
   });
 });

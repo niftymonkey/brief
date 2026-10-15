@@ -1,20 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Loader2,
-  Pencil,
-  RotateCw,
-  Trash2,
-} from "lucide-react";
+import { useState, type CSSProperties } from "react";
+import { GripVertical, Loader2, Pencil, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { EditItemDialog } from "@/components/collections/edit-item-dialog";
 import { cn } from "@/lib/utils";
 import { formatSeconds } from "@/lib/collection-item-input";
+import { entryAspectRatio, isVerticalAspectRatio } from "@/lib/collection-entries";
 import type { CollectionEntry } from "@/lib/collection-entries";
 import type { CollectionItem } from "@/lib/collections";
 
@@ -24,29 +17,56 @@ import type { CollectionItem } from "@/lib/collections";
  * on a flag to keep the controls hidden.
  */
 export interface CollectionItemRowControls {
-  /** True while any entry in the collection is mid-reorder. */
-  reorderPending: boolean;
-  onReorder: (direction: "up" | "down") => Promise<void>;
   onRemove: () => Promise<void>;
   onSummarySave: (summary: string) => Promise<void>;
   onRetrySummary: () => Promise<void>;
   onSwap: (videoId: string, startSec: number | null, endSec: number | null) => Promise<void>;
 }
 
+/**
+ * What a sortable wrapper hands the row so it can be dragged. The row itself
+ * knows nothing about the drag library: it takes a ref for the element that
+ * moves, props to spread on the grip, and whether this row is the one in flight.
+ * A row rendered without this has no grip and cannot be reordered at all.
+ */
+export interface CollectionItemRowDrag {
+  setNodeRef: (node: HTMLElement | null) => void;
+  setGripRef: (node: HTMLElement | null) => void;
+  style: CSSProperties;
+  gripProps: Record<string, unknown>;
+  isDragging: boolean;
+}
+
 interface CollectionItemRowProps {
   item: CollectionItem;
   /** The same item read as one entry of the sitting: its place, title and links. */
   entry: CollectionEntry;
-  isFirst: boolean;
   isLast: boolean;
   /** True while the player is on this entry, so the list says where the sitting is. */
   isActive: boolean;
+  /** True for the entry a wide screen's stage shows while nothing plays. */
+  isCued?: boolean;
+  /**
+   * Puts this entry on the stage. Supplied by a page with a stage to put it on, which
+   * a wide screen offers from the whole row.
+   */
+  onJump?: () => void;
   /** The curator's controls. Omitted for a reader, whose entry is strictly read-only. */
   controls?: CollectionItemRowControls;
+  /** Supplied only where the list is sortable, which is the owner's page. */
+  drag?: CollectionItemRowDrag;
 }
 
 const controlClass =
   "text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]";
+
+/**
+ * The thumbnail's shape, published to the CSS as well, because a vertical
+ * thumbnail is sized from a capped height and its width is derived from this.
+ */
+interface ThumbnailStyle extends CSSProperties {
+  "--thumb-aspect": string;
+}
 
 /**
  * One entry of the collection: the ordinal column with its start position, the
@@ -56,23 +76,47 @@ const controlClass =
 export function CollectionItemRow({
   item,
   entry,
-  isFirst,
   isLast,
   isActive,
+  isCued = false,
+  onJump,
   controls,
+  drag,
 }: CollectionItemRowProps) {
   const [isEditingSummary, setIsEditingSummary] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState(item.summary ?? "");
   const [isSavingSummary, setIsSavingSummary] = useState(false);
-  const [isReordering, setIsReordering] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(null);
+  const [failedThumbnailUrls, setFailedThumbnailUrls] = useState<readonly string[]>([]);
 
-  // Held as the url that failed rather than a boolean, so swapping the entry to a
+  // Held as the urls that failed rather than a flag, so swapping the entry to a
   // different video shows its thumbnail again without a remount.
-  const thumbnailFailed = failedThumbnailUrl === entry.thumbnailUrl;
+  const thumbnailSrc =
+    [entry.thumbnailUrl, entry.thumbnailFallbackUrl].find(
+      (url): url is string => url !== null && !failedThumbnailUrls.includes(url),
+    ) ?? null;
+
+  const thumbnailAspect = entryAspectRatio(entry.aspectRatio);
+  const isVerticalThumbnail = isVerticalAspectRatio(entry.aspectRatio);
+  const thumbnailStyle: ThumbnailStyle = { "--thumb-aspect": String(thumbnailAspect) };
+
+  // What the mono slot says when this row is not the one playing: where the
+  // entry starts in its source video, and how long it runs.
+  const restingLabel = [
+    entry.offsetSec !== null ? `at ${formatSeconds(entry.offsetSec)}` : null,
+    entry.durationSec !== null ? formatSeconds(entry.durationSec) : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" / ");
+
+  // A wide screen's shelf gives the facts a line of their own under the title: whose
+  // video it is and how long the entry runs.
+  const sourceFacts = [
+    entry.channelName,
+    entry.durationSec !== null ? formatSeconds(entry.durationSec) : null,
+  ].filter((part): part is string => part !== null);
 
   const hasSummary = item.summary !== null && item.summary.trim().length > 0;
   const isGenerating = item.summaryStatus === "pending" && !hasSummary;
@@ -88,19 +132,6 @@ export function CollectionItemRow({
       setError("Could not generate a note. Please try again.");
     } finally {
       setIsRetrying(false);
-    }
-  };
-
-  const handleReorder = async (direction: "up" | "down") => {
-    if (!controls) return;
-    setError(null);
-    setIsReordering(true);
-    try {
-      await controls.onReorder(direction);
-    } catch {
-      setError("Could not reorder this entry. Please try again.");
-    } finally {
-      setIsReordering(false);
     }
   };
 
@@ -139,70 +170,138 @@ export function CollectionItemRow({
   return (
     <section
       id={entry.anchorId}
+      ref={drag?.setNodeRef}
+      style={drag?.style}
       aria-current={isActive ? "true" : undefined}
-      className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3.5 py-7.5 min-[621px]:grid-cols-[4.25rem_minmax(0,1fr)] min-[621px]:gap-6 min-[621px]:py-9 border-b border-[var(--color-border)] last:border-b-0 scroll-mt-20"
+      className={cn(
+        "group/row relative grid grid-cols-1 gap-3.5 py-4",
+        "sm:grid-cols-[3.25rem_minmax(0,1fr)] sm:gap-4 sm:py-5",
+        "lg:grid-cols-[2.25rem_minmax(0,1fr)] lg:gap-3 lg:py-3",
+        "scroll-mt-20",
+        // Lifted out of the list while it is in flight, so the rows it passes
+        // read as settling around it rather than as part of it.
+        drag?.isDragging && "z-10 opacity-90 bg-[var(--color-bg-tertiary)] rounded-lg shadow-md",
+      )}
     >
-      <div className="flex flex-col items-start pt-0.5">
+      {/* A phone has no ordinal column, so the rail cannot mark the sitting there.
+          This is the same mark in the only place a phone has room for it. */}
+      {isActive && (
         <span
-          className={cn(
-            "font-heading text-xl min-[621px]:text-2xl font-light leading-[1.2] tabular-nums",
-            isActive
-              ? "text-[var(--color-accent)]"
-              : "text-[var(--color-text-tertiary)]",
-          )}
-        >
-          {String(entry.ordinal).padStart(2, "0")}
-        </span>
-        {entry.offsetSec !== null && (
-          <span className="mt-[0.3125rem] font-mono text-[0.625rem] min-[621px]:text-[0.6875rem] whitespace-nowrap text-[var(--color-text-tertiary)]">
-            at {formatSeconds(entry.offsetSec)}
-          </span>
-        )}
+          aria-hidden="true"
+          className="sm:hidden absolute -left-2 top-1 bottom-1 w-0.5 rounded-full bg-[var(--color-playing)]"
+        />
+      )}
+
+      {/* The ordinal column is the first thing a phone gives up: the list is short
+          enough to read in order without it, and the width buys the title a line. */}
+      {/* Static on a wide screen, so the jump's hit area below spans the whole row
+          rather than this column. */}
+      <div className="relative hidden sm:flex flex-col items-start lg:static">
+        {/* Each row owns the rail below its own marker, reaching down through
+            both rows' padding to where the next marker starts. Read end to end
+            they are one line down the list; lit, one is exactly the entry being
+            played, and the next marker stays unlit. The last row owns nothing,
+            which is what ends the line. */}
         {!isLast && (
           <span
             aria-hidden="true"
-            className="block w-px grow min-h-6 mt-2.5 ml-[0.55rem] bg-[var(--color-border)]"
+            className={cn(
+              "absolute left-[0.875rem] w-px top-8 -bottom-11 transition-colors duration-300",
+              // Measured from the row instead of the column, through the row's padding.
+              "lg:top-[2.625rem] lg:-bottom-3.5",
+              isActive ? "bg-[var(--color-playing)]" : "bg-[var(--color-border)]",
+            )}
           />
         )}
+        {/* The marker rides the same band as the title and the controls, so the
+            rail's breaks land level with the row they belong to. */}
+        <span className="flex items-center min-h-9 lg:min-h-8">
+          <span
+            className={cn(
+              "relative flex items-center justify-center size-7 rounded-full border",
+              "font-mono text-[0.6875rem] tabular-nums transition-colors duration-300",
+              isActive
+                ? "border-[var(--color-playing)] bg-[var(--color-playing)] text-[var(--color-bg-secondary)]"
+                : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]",
+              onJump && "lg:hidden",
+            )}
+          >
+            {String(entry.ordinal).padStart(2, "0")}
+          </span>
+          {/* On a wide screen the marker is the jump, and its hit area stretches
+              over the row, so a press anywhere on it that is not one of the row's
+              own controls puts the entry on the stage. The cued entry is ringed
+              in a neutral tone: gold is only ever the entry playing. */}
+          {onJump && (
+            <button
+              type="button"
+              onClick={onJump}
+              aria-label={`Go to ${entry.title}`}
+              className={cn(
+                "hidden lg:flex items-center justify-center size-7 rounded-full border cursor-pointer",
+                "font-mono text-[0.6875rem] tabular-nums transition-colors duration-300",
+                "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                "after:absolute after:inset-0",
+                isActive
+                  ? "border-[var(--color-playing)] bg-[var(--color-playing)] text-[var(--color-bg-secondary)]"
+                  : isCued
+                    ? "border-[var(--color-text-secondary)] bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]"
+                    : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] group-hover/row:border-[var(--color-border-hover)] group-hover/row:text-[var(--color-text-secondary)]",
+              )}
+            >
+              {String(entry.ordinal).padStart(2, "0")}
+            </button>
+          )}
+        </span>
       </div>
 
       <div>
-        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-          <h3 className="basis-full min-[621px]:basis-auto min-[621px]:grow min-w-0 font-heading text-xl min-[621px]:text-[1.375rem] font-semibold leading-[1.3] tracking-tight text-[var(--color-text-primary)]">
+        {/* The controls are the tallest thing here, so the row is given their
+            height and everything centres on it. Top-aligning instead leaves the
+            title sitting visibly above its own marker and buttons. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:min-h-9 lg:min-h-8">
+          <h3 className="basis-full sm:basis-auto sm:grow min-w-0 font-heading text-base sm:text-[1.0625rem] lg:text-[0.9375rem] font-semibold leading-[1.35] tracking-tight text-[var(--color-text-primary)]">
+            {/* A pointer on a wide screen jumps from the title like the rest of the
+                row; the link stays in the tab order for a keyboard. */}
             <a
               href={entry.watchUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-[var(--color-accent)] transition-colors"
+              className="hover:text-[var(--color-accent)] transition-colors lg:pointer-events-none lg:group-hover/row:text-[var(--color-accent)]"
             >
               {entry.title}
             </a>
           </h3>
 
-          {controls && (
-            <div className="flex items-center gap-1 shrink-0">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => handleReorder("up")}
-                disabled={isFirst || isReordering || controls.reorderPending}
-                className={controlClass}
-                title="Move up"
-                aria-label="Move up"
-              >
-                <ChevronUp className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => handleReorder("down")}
-                disabled={isLast || isReordering || controls.reorderPending}
-                className={controlClass}
-                title="Move down"
-                aria-label="Move down"
-              >
-                <ChevronDown className="w-4 h-4" />
-              </Button>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <span
+              className={cn(
+                "font-mono text-xs whitespace-nowrap lg:hidden",
+                isActive
+                  ? // The lit rail already says which row is playing, so at phone
+                    // width the words go rather than crush the title.
+                    "hidden sm:inline text-[var(--color-playing)]"
+                  : "text-[var(--color-text-tertiary)]",
+              )}
+            >
+              {isActive ? "now playing" : restingLabel}
+            </span>
+
+            {controls && (
+            <div className="flex items-center gap-1 shrink-0 lg:relative lg:z-10">
+              {drag && (
+                <Button
+                  ref={drag.setGripRef}
+                  variant="outline"
+                  size="icon-sm"
+                  className={cn(controlClass, "touch-none cursor-grab active:cursor-grabbing")}
+                  title="Drag to reorder, or press space and use the arrow keys"
+                  {...drag.gripProps}
+                  aria-label={`Reorder ${entry.title}`}
+                >
+                  <GripVertical className="w-4 h-4" />
+                </Button>
+              )}
               <EditItemDialog
                 initialVideoId={item.videoId}
                 initialStartSec={item.startSec}
@@ -234,58 +333,74 @@ export function CollectionItemRow({
                   <Trash2 className="w-4 h-4" />
                 )}
               </Button>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mt-2 font-mono text-xs text-[var(--color-text-tertiary)]">
-          <span className="inline-flex items-center px-1.5 py-px rounded-sm bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] text-[0.6875rem] tracking-[0.02em]">
-            {entry.kindLabel}
-          </span>
-          {entry.channelName && (
-            <>
-              <span>{entry.channelName}</span>
-              <span className="opacity-50">/</span>
-            </>
+        {/* One line held whether or not there is anything to say, so "now playing"
+            arriving in it moves nothing below. */}
+        <p
+          className={cn(
+            "hidden lg:block lg:h-4 lg:truncate mt-0.5 font-mono text-xs",
+            isActive ? "text-[var(--color-playing)]" : "text-[var(--color-text-tertiary)]",
           )}
-          <span>{entry.rangeLabel}</span>
-          {entry.durationSec !== null && (
-            <>
-              <span className="opacity-50">/</span>
-              <span>{formatSeconds(entry.durationSec)}</span>
-            </>
-          )}
-        </div>
+        >
+          {isActive
+            ? "now playing"
+            : sourceFacts.map((part, index) => (
+                <span key={index}>
+                  {index > 0 && <span className="px-1.5 opacity-50">/</span>}
+                  {part}
+                </span>
+              ))}
+        </p>
 
-        <div className="mt-4.5">
-          {/* The heading link above already names this entry and points at the same
-              video, so this one is a pointing device only and stays out of the
-              accessibility tree and the tab order. */}
-          <a
-            href={entry.watchUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-hidden="true"
-            tabIndex={-1}
-            className="group relative block float-none w-full max-w-[14rem] mb-3.5 min-[621px]:float-right min-[621px]:w-34 min-[621px]:mt-1 min-[621px]:mb-3 min-[621px]:ml-6 aspect-video rounded-lg overflow-hidden bg-[var(--color-bg-tertiary)]"
+        {/* `flow-root` contains the thumbnail's float, so a note shorter than the
+            still cannot let it escape the row. */}
+        <div className="flow-root mt-2.5 lg:mt-1.5">
+          {/* A fixed-width slot with the still centred inside it, so a 9:16 entry and
+              a 16:9 entry both leave the note wrapping at the same x. A wide screen's
+              shelf has no width to spare for that, so there the slot is the still's. */}
+          <span
+            style={thumbnailStyle}
+            className="block float-right w-19 mb-2 ml-4 sm:w-26 sm:ml-5 lg:w-auto lg:ml-3 lg:mb-0"
           >
-            <span className="absolute inset-0 flex items-center justify-center font-mono text-[0.625rem] tracking-[0.04em] text-[var(--color-text-tertiary)]">
-              {entry.videoId}
-            </span>
-            <img
-              src={entry.thumbnailUrl}
-              alt=""
-              loading="lazy"
-              onError={() => setFailedThumbnailUrl(entry.thumbnailUrl)}
+            {/* The heading link above already names this entry and points at the same
+                video, so this one is a pointing device only and stays out of the
+                accessibility tree and the tab order. */}
+            <a
+              href={entry.watchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-hidden="true"
+              tabIndex={-1}
               className={cn(
-                "absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105",
-                thumbnailFailed && "hidden",
+                "group relative block mx-auto aspect-[var(--thumb-aspect)] rounded-md sm:rounded-lg overflow-hidden bg-[var(--color-bg-tertiary)] lg:z-10",
+                isVerticalThumbnail
+                  ? // Sized from a capped height so a vertical entry's still stands
+                    // about as tall as the landscape one filling the same slot.
+                    "w-[calc(3.5rem*var(--thumb-aspect))] sm:w-[calc(4.75rem*var(--thumb-aspect))] lg:w-[calc(3rem*var(--thumb-aspect))]"
+                  : "w-full lg:w-20",
               )}
-            />
-          </a>
+            >
+              <span className="absolute inset-0 flex items-center justify-center font-mono text-[0.625rem] tracking-[0.04em] text-[var(--color-text-tertiary)]">
+                {entry.videoId}
+              </span>
+              {thumbnailSrc !== null && (
+                <img
+                  src={thumbnailSrc}
+                  alt=""
+                  loading="lazy"
+                  onError={() => setFailedThumbnailUrls((failed) => [...failed, thumbnailSrc])}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              )}
+            </a>
+          </span>
 
           {isEditingSummary ? (
-            <div className="space-y-2">
+            <div className="space-y-2 lg:relative lg:z-10">
               <Textarea
                 value={summaryDraft}
                 onChange={(event) => setSummaryDraft(event.target.value)}
@@ -316,14 +431,14 @@ export function CollectionItemRow({
             </div>
           ) : hasSummary ? (
             <div>
-              <p className="text-base min-[621px]:text-[1.0625rem] leading-[1.7] text-[var(--color-text-secondary)] whitespace-pre-wrap">
+              <p className="text-sm sm:text-[0.9375rem] lg:text-sm leading-[1.55] text-[var(--color-text-secondary)] whitespace-pre-wrap lg:line-clamp-2">
                 {item.summary}
               </p>
               {controls && (
                 <button
                   type="button"
                   onClick={startEditingSummary}
-                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer lg:relative lg:z-10"
                 >
                   <Pencil className="w-3 h-3" />
                   Edit note
@@ -336,7 +451,7 @@ export function CollectionItemRow({
               Writing a note...
             </p>
           ) : controls && generationFailed ? (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 lg:relative lg:z-10">
               <span className="text-sm text-[var(--color-text-tertiary)] italic">
                 Couldn&apos;t write a note.
               </span>
@@ -366,7 +481,7 @@ export function CollectionItemRow({
             <button
               type="button"
               onClick={startEditingSummary}
-              className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer lg:relative lg:z-10"
             >
               <Pencil className="w-3.5 h-3.5" />
               Add a note
@@ -376,17 +491,6 @@ export function CollectionItemRow({
               {item.summaryStatus === "failed" ? "Note unavailable" : "No note yet"}
             </p>
           )}
-
-          <a
-            href={entry.watchUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Watch ${entry.title}`}
-            className="clear-both inline-flex items-center gap-1.5 mt-4.5 text-sm font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors"
-          >
-            Watch this entry
-            <ChevronRight className="w-3.5 h-3.5" />
-          </a>
         </div>
 
         {error && (

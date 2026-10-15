@@ -50,6 +50,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: "The Real YouTube Title",
       durationSec: 330,
+      aspectRatio: null,
     });
     expect(mockedFetchMetadata).toHaveBeenCalledTimes(1);
     expect(mockedFetchMetadata).toHaveBeenCalledWith("dQw4w9WgXcQ", {
@@ -75,6 +76,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: "The Real YouTube Title",
       durationSec: null,
+      aspectRatio: null,
     });
   });
 
@@ -84,6 +86,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: null,
       durationSec: null,
+      aspectRatio: null,
     });
     expect(mockedFetchMetadata).not.toHaveBeenCalled();
   });
@@ -94,6 +97,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: null,
       durationSec: null,
+      aspectRatio: null,
     });
     expect(mockedFetchMetadata).not.toHaveBeenCalled();
   });
@@ -108,6 +112,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: null,
       durationSec: null,
+      aspectRatio: null,
     });
   });
 
@@ -121,6 +126,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: null,
       durationSec: null,
+      aspectRatio: null,
     });
   });
 
@@ -134,6 +140,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: null,
       durationSec: null,
+      aspectRatio: null,
     });
   });
 
@@ -143,6 +150,7 @@ describe("fetchYouTubeVideoFacts", () => {
     await expect(fetchYouTubeVideoFacts("dQw4w9WgXcQ")).resolves.toEqual({
       title: null,
       durationSec: null,
+      aspectRatio: null,
     });
   });
 
@@ -155,6 +163,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: null,
       durationSec: 330,
+      aspectRatio: null,
     });
   });
 
@@ -165,7 +174,7 @@ describe("fetchYouTubeVideoFacts", () => {
     try {
       const pending = fetchYouTubeVideoFacts("dQw4w9WgXcQ");
       await vi.advanceTimersByTimeAsync(METADATA_TIMEOUT_MS);
-      await expect(pending).resolves.toEqual({ title: null, durationSec: null });
+      await expect(pending).resolves.toEqual({ title: null, durationSec: null, aspectRatio: null });
     } finally {
       vi.useRealTimers();
     }
@@ -181,6 +190,7 @@ describe("fetchYouTubeVideoFacts", () => {
       await expect(pending).resolves.toEqual({
         title: "The Real YouTube Title",
         durationSec: 330,
+        aspectRatio: null,
       });
     } finally {
       vi.useRealTimers();
@@ -193,6 +203,7 @@ describe("fetchYouTubeVideoFacts", () => {
     expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
       title: null,
       durationSec: 330,
+      aspectRatio: null,
     });
   });
 
@@ -203,6 +214,7 @@ describe("fetchYouTubeVideoFacts", () => {
       expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
         title: "The Real YouTube Title",
         durationSec: null,
+        aspectRatio: null,
       });
     }
   });
@@ -214,6 +226,42 @@ describe("fetchYouTubeVideoFacts", () => {
       expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
         title: null,
         durationSec: 330,
+        aspectRatio: null,
+      });
+    }
+  });
+
+  it("keeps the aspect ratio the lookup reported", async () => {
+    mockedFetchMetadata.mockResolvedValue(okWithFields({ aspectRatio: 0.5625 }));
+
+    expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
+      title: "The Real YouTube Title",
+      durationSec: 330,
+      aspectRatio: 0.5625,
+    });
+  });
+
+  it("keeps a 4:3 ratio as itself rather than rounding it towards 16:9", async () => {
+    mockedFetchMetadata.mockResolvedValue(okWithFields({ aspectRatio: 1.3333 }));
+
+    expect((await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).aspectRatio).toBeCloseTo(1.3333, 4);
+  });
+
+  it("treats an absent aspect ratio as unknown", async () => {
+    mockedFetchMetadata.mockResolvedValue({ kind: "ok", metadata: sampleMetadata });
+
+    expect((await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).aspectRatio).toBeNull();
+  });
+
+  it("keeps the other facts when an unusable aspect ratio arrives", async () => {
+    const unusable = [0, -1.7778, Number.NaN, Number.POSITIVE_INFINITY, "1.7778", null];
+    for (const aspectRatio of unusable) {
+      mockedFetchMetadata.mockResolvedValue(okWithFields({ aspectRatio }));
+
+      expect(await fetchYouTubeVideoFacts("dQw4w9WgXcQ")).toEqual({
+        title: "The Real YouTube Title",
+        durationSec: 330,
+        aspectRatio: null,
       });
     }
   });
