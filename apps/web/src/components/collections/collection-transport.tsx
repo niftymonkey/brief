@@ -190,8 +190,9 @@ function StageCaption({
   return (
     // Rows pack to the top, and the title holds the lines it may take, so the note
     // starts at the same place for every entry. Below `xl` the stage is narrow enough
-    // that the title gets a second line.
-    <div className="hidden lg:grid shrink-0 h-[10.75rem] xl:h-[9.25rem] content-start grid-cols-[minmax(0,1fr)_auto] gap-x-6 px-1">
+    // that the title gets a second line. The stage sets the height and the width,
+    // which is the field's, so the caption lines up under it.
+    <div className="hidden lg:grid shrink-0 lg:h-[var(--stage-caption-h)] lg:w-[var(--stage-field-w)] content-start grid-cols-[minmax(0,1fr)_auto] gap-x-6 px-1">
       <div className="min-w-0">
         <p className="font-mono text-xs leading-[1.4] text-[var(--color-text-tertiary)]">
           {isLive && position ? (
@@ -259,7 +260,7 @@ function StageCaption({
         </div>
       )}
 
-      <p className="col-span-2 mt-2 max-w-[68ch] line-clamp-4 text-[0.9375rem] leading-[1.55] text-[var(--color-text-secondary)]">
+      <p className="col-span-2 mt-2 line-clamp-4 text-[0.9375rem] leading-[1.55] text-[var(--color-text-secondary)]">
         {note ?? ""}
       </p>
     </div>
@@ -471,17 +472,25 @@ export function CollectionTransport({
         </div>
 
         {/* The stage on a wide screen: the dark field the video or the cued entry's
-            poster sits in, and the caption under it. */}
+            poster sits in, and the caption under it. The column measures itself so
+            the field can be a 16:9 box as wide as the column, or as tall as the
+            height left above the caption when that runs out first. A landscape video
+            fills it exactly and only a narrower one is barred at the sides. The field
+            and the caption pack to the top, centred, so spare height falls below the
+            caption. Full screen drops the measuring for the reason the field does. */}
         <div
           data-collection-stage
           className={cn(
             "grid transition-[grid-template-rows]",
             MOTION,
             isPlaying ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-            "lg:col-start-1 lg:row-[1/-1] lg:flex lg:flex-col lg:gap-4 lg:min-h-0",
+            "lg:col-start-1 lg:row-[1/-1] lg:flex lg:flex-col lg:items-center lg:gap-4 lg:min-h-0",
+            "lg:[--stage-caption-h:10.75rem] xl:[--stage-caption-h:9.25rem]",
+            "lg:[--stage-field-h:min(100cqw*9/16,100cqh_-_var(--stage-caption-h)_-_1rem)] lg:[--stage-field-w:calc(var(--stage-field-h)*16/9)]",
+            !isFullscreen && "lg:[container-type:size]",
           )}
         >
-          <div className="min-h-0 overflow-hidden lg:flex lg:flex-1 lg:flex-col">
+          <div className="min-h-0 overflow-hidden lg:flex lg:flex-none lg:flex-col lg:w-[var(--stage-field-w)] lg:h-[var(--stage-field-h)]">
             {/* Any translate, even a zero one, would make this the box a filled
                 player is fixed to instead of the viewport, so full screen drops it,
                 and a wide screen, which never slides the player in, has none. */}
