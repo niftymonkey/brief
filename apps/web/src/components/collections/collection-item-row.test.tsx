@@ -195,6 +195,57 @@ describe("CollectionItemRow active entry", () => {
   });
 });
 
+describe("CollectionItemRow drag grip", () => {
+  afterEach(cleanup);
+
+  it("names the entry it reorders", () => {
+    const item: CollectionItem = {
+      id: "item-a",
+      videoId: "vid",
+      startSec: null,
+      endSec: null,
+      videoTitle: "An entry",
+      durationSec: 90,
+      aspectRatio: null,
+      summary: "A note.",
+      summaryStatus: "ready",
+      position: 0,
+    };
+    const [entry] = buildSitting([item], {
+      vid: { title: null, channelName: null, durationSec: 90 },
+    }).entries;
+    const settled = async () => {};
+
+    render(
+      <CollectionItemRow
+        item={item}
+        entry={entry}
+        isLast
+        isActive={false}
+        controls={{
+          onRemove: settled,
+          onSummarySave: settled,
+          onRetrySummary: settled,
+          onSwap: settled,
+        }}
+        drag={{
+          setNodeRef: () => {},
+          setGripRef: () => {},
+          style: {},
+          gripProps: { role: "button", tabIndex: 0, "aria-roledescription": "sortable" },
+          isDragging: false,
+        }}
+      />,
+    );
+
+    const grip = screen.getByRole("button", { name: "Reorder An entry" });
+    expect(grip.getAttribute("aria-roledescription")).toBe("sortable");
+    expect(grip.getAttribute("title")).toBe(
+      "Drag to reorder, or press space and use the arrow keys",
+    );
+  });
+});
+
 // The jump is a wide-screen control: below lg the marker stays a plain span, which
 // is the one the tests above read.
 describe("CollectionItemRow jump", () => {

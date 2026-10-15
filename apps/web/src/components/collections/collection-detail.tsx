@@ -36,7 +36,10 @@ import {
 import { neighborsOf, reorderById } from "@/lib/collection-item-input";
 import {
   buildSitting,
+  cueAt,
   resolveActiveEntryId,
+  resolveCuedIndex,
+  type EntryCue,
   type EntryVideoFacts,
 } from "@/lib/collection-entries";
 import type { SittingPosition } from "@/lib/collection-playback";
@@ -90,7 +93,7 @@ export function CollectionDetail({
   const [position, setPosition] = useState<SittingPosition | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   /** The entry a wide screen's stage shows while nothing plays, and Play starts from. */
-  const [cuedIndex, setCuedIndex] = useState(0);
+  const [cue, setCue] = useState<EntryCue>({ entryId: null, index: 0 });
   /** The run on screen, for the prev, skip, jump and full screen controls the page carries for it. */
   const playerRef = useRef<CollectionPlayerHandle>(null);
   const fullscreenToggles = useFullscreenToggles();
@@ -119,7 +122,7 @@ export function CollectionDetail({
   const startSitting = useCallback(
     (startIndex: number) => {
       setPosition(null);
-      setCuedIndex(startIndex);
+      setCue(cueAt(items, startIndex));
       setActiveSitting((previous) => ({
         key: (previous?.key ?? 0) + 1,
         items: [...items],
@@ -315,13 +318,13 @@ export function CollectionDetail({
   const entryCount = sitting.entries.length;
   const canPlay = entryCount > 0;
   const activeEntryId = resolveActiveEntryId(sitting.entries, position?.itemId ?? null);
-  const cued = Math.min(cuedIndex, Math.max(entryCount - 1, 0));
+  const cued = resolveCuedIndex(sitting.entries, cue);
 
   /** Stops the run and cues the entry it was on, so Play picks up there. */
   const closePlayer = () => {
     const onScreen = sitting.entries.findIndex((entry) => entry.id === position?.itemId);
-    if (onScreen >= 0) setCuedIndex(onScreen);
-    else if (position?.isDone) setCuedIndex(0);
+    if (onScreen >= 0) setCue(cueAt(sitting.entries, onScreen));
+    else if (position?.isDone) setCue(cueAt(sitting.entries, 0));
     setActiveSitting(null);
     setPosition(null);
   };
@@ -331,7 +334,7 @@ export function CollectionDetail({
     const entry = sitting.entries[index];
     if (!entry) return;
     if (openSitting === null) {
-      setCuedIndex(index);
+      setCue(cueAt(sitting.entries, index));
       return;
     }
     if (!playerRef.current?.jumpTo(entry.id)) startSitting(index);

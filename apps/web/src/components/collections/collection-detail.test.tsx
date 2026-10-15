@@ -433,6 +433,19 @@ describe("CollectionDetail stage", () => {
     expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_B, toSec: 0 }]);
   });
 
+  it("keeps the cued entry on the stage when an entry above it is removed", async () => {
+    renderDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Go to Title item-b" }));
+    await settle();
+    expect(within(stage()).getByText("02 of 03")).toBeTruthy();
+
+    await removeEntry(0);
+
+    expect(within(stage()).getByText("Title item-b")).toBeTruthy();
+    expect(within(stage()).queryByText("Title item-c")).toBeNull();
+    expect(within(stage()).getByText("01 of 02")).toBeTruthy();
+  });
+
   it("starts a new run from an entry added after the playing run began", async () => {
     renderDetail();
     await startSitting();

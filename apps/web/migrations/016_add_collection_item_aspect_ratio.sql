@@ -21,6 +21,8 @@
 
 ALTER TABLE collection_items ADD COLUMN IF NOT EXISTS aspect_ratio DOUBLE PRECISION;
 
+ALTER TABLE collection_items DROP CONSTRAINT IF EXISTS collection_items_aspect_ratio_check;
+
 ALTER TABLE collection_items
   ADD CONSTRAINT collection_items_aspect_ratio_check
   CHECK (aspect_ratio IS NULL OR aspect_ratio > 0);

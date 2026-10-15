@@ -730,6 +730,10 @@
     ],
     "breakpoints": [
       {
+        "name": "header-new-brief-label",
+        "value": "340px"
+      },
+      {
         "name": "header-wordmark",
         "value": "400px"
       },
@@ -759,6 +763,11 @@
         "value": "900px"
       },
       {
+        "name": "lg",
+        "value": "1024px",
+        "purpose": "A collection leaves the single column: stage left, shelf right, filling the viewport under the header."
+      },
+      {
         "name": "xl",
         "value": "1280px",
         "purpose": "Inline date presets appear."
@@ -769,7 +778,7 @@
       "header": "56px sticky, 95% page ground with backdrop blur",
       "columns": {
         "brief": "48rem",
-        "collection": "50rem",
+        "collection": "50rem single column below lg. From lg the page fills the viewport under the header: the stage (video, caption, transport) left and the shelf (head and entries) right, the shelf 25rem, 27rem at xl and 31rem at 2xl, in an article capped at 96rem, 112rem at 2xl.",
         "index": "64rem"
       },
       "phonePlayer": "Vertical frames sized min(70vh, 32rem) tall times aspect ratio, centred; landscape fills width. sm and up always 16:9."
@@ -780,8 +789,8 @@
       "name": "Call to Action Button",
       "kind": "button",
       "refersTo": "button-cta",
-      "description": "The one terracotta-filled control on a view: Play from the top, Get Started, New Brief.",
-      "html": "<button class=\"ds-btn-cta\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polygon points=\"6 3 20 12 6 21 6 3\"/></svg><span>Play from the top</span></button>",
+      "description": "The one terracotta-filled call to action on a view: New Brief in the header.",
+      "html": "<button class=\"ds-btn-cta\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg><span>New Brief</span></button>",
       "css": ".ds-btn-cta { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px 0 12px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; font-family: var(--font-sans); font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 150ms cubic-bezier(0.32, 0.72, 0, 1); } .ds-btn-cta:hover { background: var(--color-accent-hover); } .ds-btn-cta:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
     },
     {

@@ -231,6 +231,31 @@ export function resolveActiveEntryId(
   return entries.some((entry) => entry.id === playingItemId) ? playingItemId : null;
 }
 
+/**
+ * The entry a wide screen's stage shows while nothing plays, and Play starts from:
+ * its id, and the position it held when it was cued.
+ */
+export interface EntryCue {
+  entryId: string | null;
+  index: number;
+}
+
+/** Cues the entry at this position of the list, or the bare position past its end. */
+export function cueAt(list: { id: string }[], index: number): EntryCue {
+  return { entryId: list[index]?.id ?? null, index };
+}
+
+/**
+ * Finds the cued entry in the sitting as it stands now. The id follows the entry
+ * through a reorder or a removal above it. Once the entry itself is gone, the cue
+ * falls back to the position it held, pulled in to the last entry left.
+ */
+export function resolveCuedIndex(entries: CollectionEntry[], cue: EntryCue): number {
+  const found = entries.findIndex((entry) => entry.id === cue.entryId);
+  if (found >= 0) return found;
+  return Math.min(cue.index, Math.max(entries.length - 1, 0));
+}
+
 /** Whether the track draws this entry's segment filled. */
 export function isEntryActive(entry: CollectionEntry, activeEntryId: string | null): boolean {
   return activeEntryId !== null && entry.id === activeEntryId;

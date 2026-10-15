@@ -89,6 +89,17 @@ describe("Shared collection page invitation", () => {
     expect(screen.getAllByText(INVITATION)).toHaveLength(2);
   });
 
+  it("offers Get Started as a text link at every width, so Play is the only filled call to action", async () => {
+    signIn(true, 0);
+    await renderPage();
+
+    for (const link of screen.getAllByRole("link", { name: "Get Started" })) {
+      expect(link.className).not.toMatch(/(^|\s)bg-/);
+      expect(link.className).toContain("text-[var(--color-accent-hover)]");
+      expect(link.className).toContain("dark:text-[var(--color-accent)]");
+    }
+  });
+
   it("shows a signed-out reader no invitation", async () => {
     await renderPage();
     expectNoInvitation();

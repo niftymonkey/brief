@@ -297,6 +297,7 @@ export function CollectionItemRow({
                   className={cn(controlClass, "touch-none cursor-grab active:cursor-grabbing")}
                   title="Drag to reorder, or press space and use the arrow keys"
                   {...drag.gripProps}
+                  aria-label={`Reorder ${entry.title}`}
                 >
                   <GripVertical className="w-4 h-4" />
                 </Button>

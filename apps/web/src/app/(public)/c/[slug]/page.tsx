@@ -134,6 +134,8 @@ export default async function SharedCollectionPage({ params }: PageProps) {
           }
         />
 
+        {/* Below lg the invitation is a quiet box after the collection, carrying the
+            same text link as the shelf, so Play stays the only filled control. */}
         {showInvitation && (
           <section className="mt-10 py-6 px-4 rounded-2xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-center lg:hidden">
             <p className="text-[var(--color-text-secondary)] mb-4">
@@ -142,7 +144,7 @@ export default async function SharedCollectionPage({ params }: PageProps) {
             <Link
               href="/collections"
               prefetch={false}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-base font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-base font-medium text-[var(--color-accent-hover)] hover:text-[var(--color-accent-dark)] dark:text-[var(--color-accent)] dark:hover:text-[var(--color-accent-hover)] transition-colors"
             >
               Get Started
               <ArrowRight className="w-4 h-4" />

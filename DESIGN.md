@@ -206,7 +206,7 @@ Two themes, deliberately not mirror images. Light is **Warm Linen**: paper-toned
 
 The system rejects, by name, everything in PRODUCT.md's anti-references: a YouTube clone ("red-and-white video-site chrome, thumbnail walls, recommendation-feed energy"), generic SaaS ("cream backgrounds, gradient buttons, hero metrics, identical card grids"), a dense admin panel ("gray tables, tiny type, everything boxed in"), and AI-product gloss ("purple gradients, sparkle icons, 'powered by AI' announcements").
 
-Layout lives in a single reading column. A brief is a 48rem article; a collection is a 50rem article; library and collections indexes widen to 64rem grids. Page gutters are 16px at every width. A sticky 56px header (and on the library a sticky toolbar under it) sits on a 95% opaque page color with a backdrop blur, the only blur in the system, used so content scrolling under it stays legible rather than for gloss. Breakpoints follow Tailwind (`sm` 640px, `md` 768px, `xl` 1280px) plus content-driven steps for the toolbar (540px, 780px, 900px) and header labels (340px, 400px, 520px).
+A brief is a 48rem reading column, and library and collections indexes widen to 64rem grids. Below `lg` (1024px) a collection is a 50rem single column too. From `lg` the collection page fills the viewport under the header instead: the stage (the video, its caption and its transport) on the left and the shelf (the collection's head and its entries) on the right, the shelf 25rem wide, 27rem at `xl` and 31rem at `2xl`, inside an article capped at 96rem, 112rem at `2xl`. [The collection desktop brief](docs/collection-desktop-brief.md) sets out that layout. Page gutters are 16px at every width. A sticky 56px header (and on the library a sticky toolbar under it) sits on a 95% opaque page color with a backdrop blur, the only blur in the system, used so content scrolling under it stays legible rather than for gloss. Breakpoints follow Tailwind (`sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px, `2xl` 1536px) plus content-driven steps for the toolbar (540px, 780px, 900px) and header labels (340px, 400px, 520px).
 
 **The Clip Is the Main Event Rule.** Nothing on a collection or brief page may compete with the video frame for attention: no decorative imagery, no accent-filled panels, no motion near the frame while it plays.
 
@@ -223,7 +223,7 @@ Layout lives in a single reading column. A brief is a 48rem article; a collectio
 Restrained: neutrals tinted toward the brand hue carry the page, terracotta is the only accent, and gold is a state, not a decoration. Values are OKLCH and canonical, light theme first and its dark counterpart beside it.
 
 ### Primary
-- **Terracotta** (oklch(58% 0.19 25) light, oklch(65% 0.16 25) dark): the one accent. Fills the hero Play control, the "Play from the top" and "Get Started" calls to action, active filter chips, the avatar fallback, and the copy-link button. As text it colors timestamps, back links, related-link titles, and the hover state of titles and quiet icon buttons. It is also the focus ring color.
+- **Terracotta** (oklch(58% 0.19 25) light, oklch(65% 0.16 25) dark): the one accent. Fills the collection's Play control and New Brief in the header, the calls to action. Colors the Get Started link on a shared collection, which shows only to a signed-in, allow-listed viewer with no collections of their own: a terracotta text link with no fill at every width, inside a quiet Shelf box after the collection below `lg` and at the foot of the shelf from `lg`. Also fills active filter chips, the avatar fallback, and the copy-link button, none of which is a call to action. As text it colors timestamps, back links, related-link titles, and the hover state of titles and quiet icon buttons. It is also the focus ring color.
 - **Terracotta Deep** (oklch(52% 0.21 25) light, oklch(72% 0.18 25) dark): hover for terracotta fills and terracotta text. Light theme hovers darker, dark theme hovers brighter; both move away from the background.
 - **Terracotta Ember** (oklch(46% 0.22 25) light, oklch(55% 0.18 25) dark): the resting fill of the header's New Brief button, which hovers up to Terracotta. Used nowhere else.
 - **Terracotta Blush** (oklch(93% 0.04 25) light, oklch(22% 0.06 25) dark): the background wash behind timestamp chips and the text selection color.
@@ -240,7 +240,7 @@ Restrained: neutrals tinted toward the brand hue carry the page, terracotta is t
 ### Neutral
 - **Linen / Slate Night** (oklch(97% 0.007 55) light, oklch(12% 0.008 270) dark): the page ground and header/toolbar ground.
 - **Linen Paper** (oklch(98% 0.005 55) light, oklch(14% 0.01 270) dark): shadcn card and popover surfaces, a hair lighter than the page.
-- **Linen Shelf / Slate Shelf** (oklch(94% 0.012 55) light, oklch(14% 0.01 270) dark): the first raised tone. Brief cards, collection cards, the collection section, the closing block, chapter rows, the sidebar, the search field.
+- **Linen Shelf / Slate Shelf** (oklch(94% 0.012 55) light, oklch(14% 0.01 270) dark): the first raised tone. Brief cards, collection cards, the collection section, chapter rows, the sidebar, the search field.
 - **Linen Well / Slate Well** (oklch(90.5% 0.015 55) light, oklch(18% 0.012 270) dark): the second tone. Hover fill for rows, nav links and quiet buttons; resting fill for filter chips; thumbnail placeholders; the active sidebar link.
 - **Slate Raise** (oklch(22% 0.012 270), dark only): shadcn `secondary` and `muted` in dark mode, one step above Slate Well.
 - **Linen Seam / Slate Seam** (oklch(88% 0.012 55) light, oklch(22% 0.018 270) dark): every 1px border and divider, the resting rail, input strokes.
@@ -252,11 +252,11 @@ Restrained: neutrals tinted toward the brand hue carry the page, terracotta is t
 - **Video Black** (oklch(0% 0 0), both themes): the letterbox behind every video frame and the full-screen backdrop. The only pure black allowed, because it must match the YouTube player's own frame.
 
 ### Named Rules
-**The One Ember Rule.** Terracotta covers no more than about 10% of any screen. On a given view exactly one control is filled with it (the Play control on a collection, New Brief in the header); everything else uses it only as text or on hover. A second filled terracotta button on the same view is prohibited.
+**The One Ember Rule.** Terracotta covers no more than about 10% of any screen. On a given view exactly one filled primary call to action carries it (the Play control on a collection, New Brief in the header). Active filter chips, the avatar fallback and the copy-link button are terracotta fills that are not calls to action. Everything else uses terracotta only as text or on hover. A second filled terracotta call to action on the same view is prohibited.
 
 **The Gold Means Now Rule.** Playing Gold appears only on the entry being played. It is never a button, a badge, a highlight, or a decoration, and it is never used when nothing is playing.
 
-**The Paper, Not Cream Rule.** Light neutrals stay at chroma 0.015 or below on hue 55 so the page reads as linen paper, not as SaaS cream. Dark neutrals stay at chroma 0.022 or below on hue 270. Raising neutral chroma to "warm it up" is prohibited.
+**The Paper, Not Cream Rule.** Light neutral surfaces stay at chroma 0.015 or below on hue 55 so the page reads as linen paper, not as SaaS cream. The strong seam (`linen-seam-strong`, 0.018) is the one tone allowed above that cap, because it never fills a resting surface: it is a 1px hover stroke, and otherwise only the hover fill of a small chip, the scrollbar thumb and the sidebar's resize bar, none of which reads as a cream surface. Dark neutrals stay at chroma 0.022 or below on hue 270. Raising neutral chroma to "warm it up" is prohibited.
 
 ## 3. Typography
 
@@ -297,7 +297,7 @@ Brief is flat by default and layers by tone. The page ground, the shelf, and the
 ## 5. Components
 
 ### Buttons
-Quiet, precise, and mostly outlined. The weight of a screen sits in one filled control.
+Quiet, precise, and mostly outlined. The weight of a screen sits in one filled call to action.
 - **Shape:** gently rounded (8px) for rectangular buttons; fully round for the hero Play control and filter chips.
 - **Call to action (terracotta):** Terracotta fill, white label, 36px tall, 16px horizontal padding, 14px medium label with a 16px leading icon. Hover to Terracotta Deep. There is no `accent` variant on the shared Button; each call to action overrides the default variant's colors in place.
 - **Default (ink):** Walnut Button fill with Linen text (inverted to Frost fill in dark). For quiet confirmations inside a flow: "Save note", "Resume". Hover drops the fill to 90%.
@@ -312,11 +312,11 @@ Quiet, precise, and mostly outlined. The weight of a screen sits in one filled c
 - **Timestamp chip:** mono 14px in terracotta on a Blush wash, 8px radius; a 12px play glyph fades in on hover.
 
 ### Cards / Containers
-- **Corner Style:** brief and collection cards 16px; the collection section and its closing block 24px (the collection section's `sm` step, `rounded-3xl`, resolves to 22px); thumbnails 8px to 12px; chapter rows 12px.
+- **Corner Style:** brief and collection cards 16px; the collection section 24px (its `sm` step, `rounded-3xl`, resolves to 22px); thumbnails 8px to 12px; chapter rows 12px.
 - **Background:** Shelf on the page ground; Well for placeholders inside them.
 - **Shadow Strategy:** flat at rest; card lift on hover (see Elevation).
 - **Border:** always 1px Seam; Seam Strong on hover.
-- **Internal Padding:** 16px for cards; 16px phone and 24px `sm` for the collection section; 20px for the closing block.
+- **Internal Padding:** 16px for cards; 16px phone and 24px `sm` for the collection section.
 - **Brief card:** 16:9 thumbnail on top that scales to 105% on hover over 300ms, a two-line 500-weight title that turns terracotta on hover, up to three tag badges plus a "+N", and a seam-ruled footer with channel and date.
 - Cards appear only in the library and collections index grids. Inside a brief or a collection, content sits on rules, not in boxes.
 
@@ -344,11 +344,11 @@ The rail is the collection's track listing: a thin line running down the left co
 
 ### Collection Header and Player (signature)
 - **Transform in place:** the collection is one 24px-radius Shelf section. Pressing Play does not append a player; the header folds down. The Play control shrinks to Stop, the title and lede shrink, the mono byline collapses and the mono position counter takes exactly its slot, and the player opens into the height the header gives up (opacity in and an 8px rise). All of it runs on `cubic-bezier(0.32, 0.72, 0, 1)` over 340ms by animating grid rows between `0fr` and `1fr`, and all of it is disabled under reduced motion.
+- **From `lg`:** the header does not fold. Play and Stop live in the stage, and the caption under it carries the transport.
 - **Transport cluster:** while playing, Previous, Next and a full-screen toggle (Maximize / Minimize glyphs) join the header's icon cluster, separated from share and owner controls by a 1px by 24px seam divider that appears only when there is something on the far side.
 - **Frame:** Video Black, 12px radius on phone and 16px from `sm`. From `sm` up the frame is always 16:9 at full column width. On a phone only, the frame takes the video's true shape: a vertical Short is drawn `min(70vh, 32rem)` tall with its width derived from the aspect ratio and centred, while a landscape video fills the width.
 - **Full screen:** the same frame element restyles in place (fixed, inset 0, above everything) rather than moving, so the playing iframe never remounts. Inside it the video is drawn at its true shape as large as the screen allows. It uses the browser's full screen where offered and a page-drawn fill otherwise (iPhone), which locks page scroll and answers Escape. A 36px round exit control sits top-right inside safe-area insets: Video Black at 60% with a white 25% border, hovering to 80%. Focus moves to it on entry and returns to the header toggle on exit.
 - **Caption:** under the frame, a fixed-height block (one title line plus two note lines) so skipping never reflows the entries below: the entry title at 500 weight, its mono range, and the note in Umber.
-- **Closing block:** after the entries, a 24px-radius Shelf block with the total runtime as a title, one line of Umber copy, a terracotta "Play from the top" and an outline share button.
 
 ### Brief Chapters
 - An accordion of Shelf rows (12px radius, 1px seam, 6px apart) under a seam-ruled "Chapters" heading with an expand-all text button. Each trigger shows a rotating 16px chevron, a light-weight 1.125rem chapter title, and a terracotta mono timestamp that seeks the embedded player. Key points are 1.125rem bulleted body; tangents are italic Dust with an amber `[tangent]` prefix.
@@ -356,7 +356,7 @@ The rail is the collection's track listing: a thin line running down the left co
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** keep terracotta to one filled control per view and use it otherwise only as text, hover, and the focus ring (The One Ember Rule).
+- **Do** keep terracotta to one filled call to action per view and use it otherwise only as text, hover, and the focus ring (The One Ember Rule).
 - **Do** reserve Playing Gold (`oklch(62% 0.13 75)` light, `oklch(80% 0.13 80)` dark) for the entry being played, and move it by a 300ms color cross-fade, never by sliding.
 - **Do** separate surfaces with the page, Shelf and Well tones plus a 1px Seam before reaching for any shadow.
 - **Do** set every fact (time, range, count, ordinal, URL) in JetBrains Mono at 0.75rem or smaller.
@@ -367,7 +367,7 @@ The rail is the collection's track listing: a thin line running down the left co
 
 ### Don't:
 - **Don't** build anything that reads as a YouTube clone: no "red-and-white video-site chrome, thumbnail walls, recommendation-feed energy". Thumbnails stay subordinate to the note beside them.
-- **Don't** drift toward generic SaaS: no "cream backgrounds, gradient buttons, hero metrics, identical card grids". Linen must stay at chroma 0.015 or below, and cards stay confined to the index grids.
+- **Don't** drift toward generic SaaS: no "cream backgrounds, gradient buttons, hero metrics, identical card grids". Linen surfaces must stay at chroma 0.015 or below, and cards stay confined to the index grids.
 - **Don't** become a dense admin panel: no "gray tables, tiny type, everything boxed in". No readable text below 0.75rem except ordinals and counts (0.625rem to 0.6875rem), and nothing inside a brief or collection gets boxed.
 - **Don't** add AI-product gloss: no "purple gradients, sparkle icons, 'powered by AI' announcements".
 - **Don't** use a second accent hue, or terracotta for state; "playing" is gold, errors are red, tangents are amber.
