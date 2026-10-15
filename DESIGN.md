@@ -252,7 +252,7 @@ Restrained: neutrals tinted toward the brand hue carry the page, terracotta is t
 - **Video Black** (oklch(0% 0 0), both themes): the letterbox behind every video frame and the full-screen backdrop. The only pure black allowed, because it must match the YouTube player's own frame.
 
 ### Named Rules
-**The One Ember Rule.** Terracotta covers no more than about 10% of any screen. On a given view exactly one filled primary call to action carries it (the Play control on a collection, New Brief in the header). Active filter chips, the avatar fallback and the copy-link button are terracotta fills that are not calls to action. Everything else uses terracotta only as text or on hover. A second filled terracotta call to action on the same view is prohibited.
+**The One Ember Rule.** Terracotta covers no more than about 10% of any screen. A view's own content carries exactly one filled primary call to action (the Play control on a collection). The header's New Brief is app chrome present on every page, not part of any view: it rests in the darker Terracotta Ember fill precisely so it sits below the view's call to action, and it does not count against the view. Active filter chips, the avatar fallback and the copy-link button are terracotta fills that are not calls to action. Everything else uses terracotta only as text or on hover. A second filled terracotta call to action in the same view's content is prohibited.
 
 **The Gold Means Now Rule.** Playing Gold appears only on the entry being played. It is never a button, a badge, a highlight, or a decoration, and it is never used when nothing is playing.
 
@@ -297,7 +297,7 @@ Brief is flat by default and layers by tone. The page ground, the shelf, and the
 ## 5. Components
 
 ### Buttons
-Quiet, precise, and mostly outlined. The weight of a screen sits in one filled call to action.
+Quiet, precise, and mostly outlined. The weight of a view sits in one filled call to action of its own, above the header's darker New Brief (The One Ember Rule).
 - **Shape:** gently rounded (8px) for rectangular buttons; fully round for the hero Play control and filter chips.
 - **Call to action (terracotta):** Terracotta fill, white label, 36px tall, 16px horizontal padding, 14px medium label with a 16px leading icon. Hover to Terracotta Deep. There is no `accent` variant on the shared Button; each call to action overrides the default variant's colors in place.
 - **Default (ink):** Walnut Button fill with Linen text (inverted to Frost fill in dark). For quiet confirmations inside a flow: "Save note", "Resume". Hover drops the fill to 90%.
@@ -346,7 +346,7 @@ The rail is the collection's track listing: a thin line running down the left co
 - **Transform in place:** the collection is one 24px-radius Shelf section. Pressing Play does not append a player; the header folds down. The Play control shrinks to Stop, the title and lede shrink, the mono byline collapses and the mono position counter takes exactly its slot, and the player opens into the height the header gives up (opacity in and an 8px rise). All of it runs on `cubic-bezier(0.32, 0.72, 0, 1)` over 340ms by animating grid rows between `0fr` and `1fr`, and all of it is disabled under reduced motion.
 - **From `lg`:** the header does not fold. Play and Stop live in the stage, and the caption under it carries the transport.
 - **Transport cluster:** while playing, Previous, Next and a full-screen toggle (Maximize / Minimize glyphs) join the header's icon cluster, separated from share and owner controls by a 1px by 24px seam divider that appears only when there is something on the far side.
-- **Frame:** Video Black, 12px radius on phone and 16px from `sm`. From `sm` up the frame is always 16:9 at full column width. On a phone only, the frame takes the video's true shape: a vertical Short is drawn `min(70vh, 32rem)` tall with its width derived from the aspect ratio and centred, while a landscape video fills the width.
+- **Frame:** Video Black, 12px radius on phone and 16px from `sm`. On a phone the frame takes the video's true shape: a vertical Short is drawn `min(70vh, 32rem)` tall with its width derived from the aspect ratio and centred, while a landscape video fills the width. From `sm` to below `lg` the frame is always 16:9 at full column width. From `lg` the frame sits in the stage's field, a Video Black box with a 24px radius that is 16:9 at the stage column's full width, capped by the height left above the caption and then centred, and that keeps one size for every entry so nothing moves on a skip, on Play or on a jump. Inside the field the frame takes the video's true shape as large as fits: a landscape video fills the field exactly, and a Short or a 4:3 video is drawn at the field's height and centred, with side bars. The caption sits directly under the field, sharing its left edge and width, and any spare height falls below the caption.
 - **Full screen:** the same frame element restyles in place (fixed, inset 0, above everything) rather than moving, so the playing iframe never remounts. Inside it the video is drawn at its true shape as large as the screen allows. It uses the browser's full screen where offered and a page-drawn fill otherwise (iPhone), which locks page scroll and answers Escape. A 36px round exit control sits top-right inside safe-area insets: Video Black at 60% with a white 25% border, hovering to 80%. Focus moves to it on entry and returns to the header toggle on exit.
 - **Caption:** under the frame, a fixed-height block (one title line plus two note lines) so skipping never reflows the entries below: the entry title at 500 weight, its mono range, and the note in Umber.
 
@@ -356,7 +356,7 @@ The rail is the collection's track listing: a thin line running down the left co
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** keep terracotta to one filled call to action per view and use it otherwise only as text, hover, and the focus ring (The One Ember Rule).
+- **Do** keep terracotta to one filled call to action in each view's own content, and use it otherwise only as text, hover, and the focus ring (The One Ember Rule). The header's New Brief, resting in Terracotta Ember, is app chrome and does not count against the view.
 - **Do** reserve Playing Gold (`oklch(62% 0.13 75)` light, `oklch(80% 0.13 80)` dark) for the entry being played, and move it by a 300ms color cross-fade, never by sliding.
 - **Do** separate surfaces with the page, Shelf and Well tones plus a 1px Seam before reaching for any shadow.
 - **Do** set every fact (time, range, count, ordinal, URL) in JetBrains Mono at 0.75rem or smaller.

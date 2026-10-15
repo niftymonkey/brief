@@ -778,10 +778,10 @@
       "header": "56px sticky, 95% page ground with backdrop blur",
       "columns": {
         "brief": "48rem",
-        "collection": "50rem single column below lg. From lg the page fills the viewport under the header: the stage (video, caption, transport) left and the shelf (head and entries) right, the shelf 25rem, 27rem at xl and 31rem at 2xl, in an article capped at 96rem, 112rem at 2xl.",
+        "collection": "50rem single column below lg. From lg the page fills the viewport under the header: the stage (a 16:9 video field, then the caption and transport under it, top-aligned with the shelf) left and the shelf (head and entries) right, the shelf 25rem, 27rem at xl and 31rem at 2xl, in an article capped at 96rem, 112rem at 2xl.",
         "index": "64rem"
       },
-      "phonePlayer": "Vertical frames sized min(70vh, 32rem) tall times aspect ratio, centred; landscape fills width. sm and up always 16:9."
+      "phonePlayer": "Phone: vertical frames sized min(70vh, 32rem) tall times aspect ratio, centred; landscape fills width. sm to below lg: always 16:9 at full column width. From lg: the frame sits in the stage field, 16:9 at the stage column's full width, capped by the height left above the caption and then centred, one size for every entry; a landscape video fills it exactly, a Short or 4:3 video is drawn at field height and centred with side bars; the caption sits directly under the field and spare height falls below it."
     }
   },
   "components": [
@@ -789,7 +789,7 @@
       "name": "Call to Action Button",
       "kind": "button",
       "refersTo": "button-cta",
-      "description": "The one terracotta-filled call to action on a view: New Brief in the header.",
+      "description": "The filled call to action button, shown as New Brief in the header, which is app chrome resting in Terracotta Ember and does not count against a view's one call to action.",
       "html": "<button class=\"ds-btn-cta\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg><span>New Brief</span></button>",
       "css": ".ds-btn-cta { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px 0 12px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; font-family: var(--font-sans); font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 150ms cubic-bezier(0.32, 0.72, 0, 1); } .ds-btn-cta:hover { background: var(--color-accent-hover); } .ds-btn-cta:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
     },
@@ -885,7 +885,7 @@
       },
       {
         "name": "The One Ember Rule",
-        "body": "Terracotta covers no more than about 10% of any screen. On a given view exactly one control is filled with it (the Play control on a collection, New Brief in the header); everything else uses it only as text or on hover. A second filled terracotta button on the same view is prohibited.",
+        "body": "Terracotta covers no more than about 10% of any screen. A view's own content carries exactly one filled primary call to action (the Play control on a collection). The header's New Brief is app chrome present on every page, not part of any view: it rests in the darker Terracotta Ember fill precisely so it sits below the view's call to action, and it does not count against the view. Active filter chips, the avatar fallback and the copy-link button are terracotta fills that are not calls to action. Everything else uses terracotta only as text or on hover. A second filled terracotta call to action in the same view's content is prohibited.",
         "section": "colors"
       },
       {
@@ -920,7 +920,7 @@
       }
     ],
     "dos": [
-      "**Do** keep terracotta to one filled control per view and use it otherwise only as text, hover, and the focus ring (The One Ember Rule).",
+      "**Do** keep terracotta to one filled call to action in each view's own content, and use it otherwise only as text, hover, and the focus ring (The One Ember Rule). The header's New Brief, resting in Terracotta Ember, is app chrome and does not count against the view.",
       "**Do** reserve Playing Gold (`oklch(62% 0.13 75)` light, `oklch(80% 0.13 80)` dark) for the entry being played, and move it by a 300ms color cross-fade, never by sliding.",
       "**Do** separate surfaces with the page, Shelf and Well tones plus a 1px Seam before reaching for any shadow.",
       "**Do** set every fact (time, range, count, ordinal, URL) in JetBrains Mono at 0.75rem or smaller.",

@@ -98,9 +98,10 @@ export interface ActiveSitting {
 }
 
 /**
- * The dark field a wide screen's stage fills, with the frame or the cued entry's
- * poster centred in it. Both live in one of these, so pressing Play swaps one for the
- * other in a box of the same size and nothing on the page moves.
+ * The dark field of a wide screen's stage, filling the 16:9 box the stage gives it,
+ * with the frame or the cued entry's poster centred in it. Both live in one of these,
+ * so pressing Play swaps one for the other in a box of the same size and nothing on
+ * the page moves.
  */
 export const STAGE_FIELD_CLASS =
   "lg:flex lg:flex-1 lg:min-h-0 lg:items-center lg:justify-center lg:overflow-hidden lg:rounded-2xl lg:bg-black";
