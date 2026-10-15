@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { CollectionSitting } from "./collection-entries";
-import { sharedCollectionDescription, unfurlThumbnailUrl } from "./shared-collection-meta";
+import {
+  invitesViewerToBuild,
+  sharedCollectionDescription,
+  unfurlThumbnailUrl,
+} from "./shared-collection-meta";
 
 function sitting(entryCount: number, totalRuntimeSec: number | null): CollectionSitting {
   return {
@@ -104,5 +108,38 @@ describe("unfurlThumbnailUrl", () => {
 
   it("has nothing to show when there is no first entry", () => {
     expect(unfurlThumbnailUrl(undefined)).toBeNull();
+  });
+});
+
+describe("invitesViewerToBuild", () => {
+  it("invites a signed-in, allowed viewer who has no collections yet", () => {
+    expect(invitesViewerToBuild({ signedIn: true, allowed: true, collectionCount: 0 })).toBe(true);
+  });
+
+  it("stays quiet for a signed-out reader", () => {
+    expect(invitesViewerToBuild({ signedIn: false, allowed: false, collectionCount: 0 })).toBe(
+      false,
+    );
+  });
+
+  it("stays quiet for a signed-in viewer who cannot build collections", () => {
+    expect(invitesViewerToBuild({ signedIn: true, allowed: false, collectionCount: 0 })).toBe(
+      false,
+    );
+  });
+
+  it("stays quiet for a viewer who already builds collections", () => {
+    expect(invitesViewerToBuild({ signedIn: true, allowed: true, collectionCount: 1 })).toBe(
+      false,
+    );
+    expect(invitesViewerToBuild({ signedIn: true, allowed: true, collectionCount: 7 })).toBe(
+      false,
+    );
+  });
+
+  it("never treats an allowance without a sign-in as an invitation", () => {
+    expect(invitesViewerToBuild({ signedIn: false, allowed: true, collectionCount: 0 })).toBe(
+      false,
+    );
   });
 });

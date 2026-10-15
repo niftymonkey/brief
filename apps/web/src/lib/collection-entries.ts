@@ -156,6 +156,39 @@ export function entryThumbnail(videoId: string, aspectRatio: number | null): Ent
 }
 
 /**
+ * The stills to try for an entry's poster in the stage, largest first.
+ *
+ * Every size here is a 4:3 or 16:9 landscape JPEG whatever the video's shape, so a
+ * vertical video arrives pillarboxed with blurred panels either side. Drawn with
+ * `object-fit: cover` in a box at the video's own shape, the panels crop away and
+ * the real frame fills the box, which is why one chain serves every shape.
+ *
+ * `maxresdefault.jpg` (1280x720) and `sddefault.jpg` (640x480) exist only for
+ * some videos; `hqdefault.jpg` (480x360) exists for every one. A missing size is
+ * answered with HTTP 404 and a real 120x90 placeholder JPEG, so the poster steps
+ * down on a load that is that small as well as on an error.
+ */
+export function entryPosterSources(videoId: string): string[] {
+  return ["maxresdefault", "sddefault", "hqdefault"].map(
+    (size) => `https://i.ytimg.com/vi/${videoId}/${size}.jpg`,
+  );
+}
+
+/** The accessible name of a control that starts the collection playing. */
+export function playCollectionLabel(totalRuntimeSec: number | null): string {
+  return totalRuntimeSec !== null
+    ? `Play the whole collection, ${formatRuntimeWords(totalRuntimeSec)}`
+    : "Play the whole collection";
+}
+
+/** The visible caption under the stage's Play: the entry count, then the runtime where known. */
+export function playAllLabel(entryCount: number, totalRuntimeSec: number | null): string {
+  return totalRuntimeSec !== null
+    ? `Play all ${entryCount} / ${formatRuntimeWords(totalRuntimeSec)}`
+    : `Play all ${entryCount}`;
+}
+
+/**
  * Spells a runtime out in words for the transport hero, where it reads as prose
  * rather than as a clock ("32 min 56 sec", "1 hr 4 min").
  */

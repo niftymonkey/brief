@@ -124,6 +124,24 @@ describe("start", () => {
     expect(loads(restarted.effects)).toEqual([0]);
   });
 
+  it("opens the run on the entry it is asked to start from", () => {
+    const { state, effects } = run([{ kind: "start", index: 2 }]);
+    expect(state.status).toBe("loading");
+    expect(state.index).toBe(2);
+    expect(effects).toEqual([
+      { kind: "load", index: 2, item: ITEMS[2], generation: state.generation },
+      { kind: "scheduleArmingTimeout", generation: state.generation, delayMs: ARMING_TIMEOUT_MS },
+      { kind: "play" },
+    ]);
+  });
+
+  it("opens on the first entry when asked to start from one the run does not hold", () => {
+    const { state, effects } = run([{ kind: "start", index: ITEMS.length }]);
+    expect(state.status).toBe("loading");
+    expect(state.index).toBe(0);
+    expect(loads(effects)).toEqual([0]);
+  });
+
   it("puts the first item back on screen with a load, not a seek within a player it left", () => {
     const done = run(
       [{ kind: "start" }, playing(0, "n3V3LZh_r40"), ended(10, "n3V3LZh_r40")],
@@ -840,6 +858,79 @@ describe("prev", () => {
 
   it("has nothing to go back to before the sitting has started", () => {
     const { state, effects } = run([{ kind: "prev" }]);
+    expect(state.status).toBe("idle");
+    expect(effects).toEqual([]);
+  });
+});
+
+describe("jump", () => {
+  it("moves a live run to the entry asked for, as a fresh load of it", () => {
+    const started = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
+    const jumped = run([{ kind: "jump", index: 3 }], ITEMS, started.state);
+
+    expect(jumped.state.status).toBe("loading");
+    expect(jumped.state.index).toBe(3);
+    expect(jumped.state.armed).toBe(false);
+    expect(jumped.state.generation).toBeGreaterThan(started.state.generation);
+    expect(jumped.effects).toEqual([
+      { kind: "load", index: 3, item: ITEMS[3], generation: jumped.state.generation },
+      {
+        kind: "scheduleArmingTimeout",
+        generation: jumped.state.generation,
+        delayMs: ARMING_TIMEOUT_MS,
+      },
+    ]);
+  });
+
+  it("moves within the video already on screen with a seek", () => {
+    const items = [ITEMS[0], ITEMS[1], { ...ITEMS[1], id: "b-later", startSec: 50, endSec: 60 }];
+    const onSecond = run([{ kind: "start" }, { kind: "skip" }], items);
+    const jumped = run([{ kind: "jump", index: 2 }], items, onSecond.state);
+
+    expect(jumped.effects[0]).toEqual({
+      kind: "seek",
+      index: 2,
+      item: items[2],
+      generation: jumped.state.generation,
+      toSec: 50,
+    });
+  });
+
+  it("takes a finished run back to the entry asked for", () => {
+    const skip: PlaybackEvent = { kind: "skip" };
+    const done = run([{ kind: "start" }, ...Array.from({ length: ITEMS.length }, () => skip)]);
+    expect(done.state.status).toBe("done");
+
+    const jumped = run([{ kind: "jump", index: 1 }], ITEMS, done.state);
+    expect(jumped.state.status).toBe("loading");
+    expect(jumped.state.index).toBe(1);
+    expect(loads(jumped.effects)).toEqual([1]);
+  });
+
+  it("leaves a failed entry's pending advance behind", () => {
+    const failed = run([{ kind: "start" }, { kind: "playerError", code: 150, videoId: "aqz-KE-bpKQ" }]);
+    const jumped = run([{ kind: "jump", index: 3 }], ITEMS, failed.state);
+    const staleAdvance = run(
+      [{ kind: "failureAdvance", generation: failed.state.generation }],
+      ITEMS,
+      jumped.state,
+    );
+
+    expect(staleAdvance.state.index).toBe(3);
+    expect(staleAdvance.effects).toEqual([]);
+  });
+
+  it("ignores an entry the run does not hold", () => {
+    const started = run([{ kind: "start" }, playing(30, "aqz-KE-bpKQ")]);
+    for (const index of [-1, ITEMS.length, 1.5]) {
+      const jumped = run([{ kind: "jump", index }], ITEMS, started.state);
+      expect(jumped.state).toBe(started.state);
+      expect(jumped.effects).toEqual([]);
+    }
+  });
+
+  it("has nothing to move before the run has started", () => {
+    const { state, effects } = run([{ kind: "jump", index: 2 }]);
     expect(state.status).toBe("idle");
     expect(effects).toEqual([]);
   });

@@ -1,14 +1,24 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { CollectionItemRow } from "@/components/collections/collection-item-row";
 import { buildSitting } from "@/lib/collection-entries";
 import type { CollectionItem } from "@/lib/collections";
 
 const VERTICAL = 0.5625;
 
-function renderRow(aspectRatio: number | null, isActive = false, isLast = true): void {
+interface RowOptions {
+  isCued?: boolean;
+  onJump?: () => void;
+}
+
+function renderRow(
+  aspectRatio: number | null,
+  isActive = false,
+  isLast = true,
+  { isCued = false, onJump }: RowOptions = {},
+): void {
   const item: CollectionItem = {
     id: "item-a",
     videoId: "vid",
@@ -26,7 +36,14 @@ function renderRow(aspectRatio: number | null, isActive = false, isLast = true):
   }).entries;
 
   render(
-    <CollectionItemRow item={item} entry={entry} isLast={isLast} isActive={isActive} />,
+    <CollectionItemRow
+      item={item}
+      entry={entry}
+      isLast={isLast}
+      isActive={isActive}
+      isCued={isCued}
+      onJump={onJump}
+    />,
   );
 }
 
@@ -175,5 +192,60 @@ describe("CollectionItemRow active entry", () => {
 
     expect(marker()?.className).toContain("bg-[var(--color-playing)]");
     expect(rail()).toBeUndefined();
+  });
+});
+
+// The jump is a wide-screen control: below lg the marker stays a plain span, which
+// is the one the tests above read.
+describe("CollectionItemRow jump", () => {
+  afterEach(cleanup);
+
+  function jumpButton(): HTMLElement {
+    return screen.getByRole("button", { name: "Go to An entry" });
+  }
+
+  it("jumps to the entry from its marker", () => {
+    const onJump = vi.fn();
+    renderRow(null, false, true, { onJump });
+
+    fireEvent.click(jumpButton());
+
+    expect(onJump).toHaveBeenCalledTimes(1);
+    expect(jumpButton().textContent).toBe("01");
+  });
+
+  it("offers no jump where the page has nowhere to jump to", () => {
+    renderRow(null);
+
+    expect(screen.queryByRole("button", { name: /^Go to/ })).toBeNull();
+  });
+
+  it("rings the cued entry's marker in a neutral tone, never gold", () => {
+    renderRow(null, false, true, { isCued: true, onJump: () => {} });
+
+    expect(jumpButton().className).toContain("border-[var(--color-text-secondary)]");
+    expect(jumpButton().className).toContain("text-[var(--color-text-primary)]");
+    expect(jumpButton().className).not.toContain("--color-playing");
+    expect(document.querySelector('[aria-current="true"]')).toBeNull();
+  });
+
+  it("lights the marker gold, not the cue ring, on the entry playing", () => {
+    renderRow(null, true, true, { isCued: true, onJump: () => {} });
+
+    expect(jumpButton().className).toContain("bg-[var(--color-playing)]");
+    expect(jumpButton().className).not.toContain("border-[var(--color-text-secondary)]");
+  });
+
+  it("says the channel and runtime under the title, and now playing in their place", () => {
+    renderRow(null, false, true, { onJump: () => {} });
+    expect(document.body.textContent).toContain("1:30");
+    cleanup();
+
+    renderRow(null, true, true, { onJump: () => {} });
+    const lines = [...document.querySelectorAll("p")].filter(
+      (node) => node.textContent === "now playing",
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.className).toContain("text-[var(--color-playing)]");
   });
 });

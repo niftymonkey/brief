@@ -213,8 +213,11 @@ export type PlaybackEffect =
   | { kind: "finish" };
 
 export type PlaybackEvent =
-  /** The one real user gesture that opens the sitting. */
-  | { kind: "start" }
+  /**
+   * The one real user gesture that opens the sitting, on the entry at `index` (the
+   * first when absent, or when the run holds no entry there).
+   */
+  | { kind: "start"; index?: number }
   | {
       kind: "playerState";
       state: number;
@@ -247,6 +250,8 @@ export type PlaybackEvent =
   | { kind: "skip" }
   /** Back one entry, and back to the top of the first one where there is no earlier. */
   | { kind: "prev" }
+  /** Straight to the entry at `index`, from anywhere a run has started. */
+  | { kind: "jump"; index: number }
   | { kind: "stop" };
 
 export interface PlaybackTransition {
@@ -514,6 +519,11 @@ function recordFailure(state: PlaybackState, item: PlaybackItem, code: number): 
   };
 }
 
+/** True when `index` names an entry the run holds. */
+function holdsIndex(index: number | undefined, items: PlaybackItem[]): index is number {
+  return index !== undefined && Number.isInteger(index) && index >= 0 && index < items.length;
+}
+
 function advance(state: PlaybackState, items: PlaybackItem[]): PlaybackTransition {
   return loadIndex(state, state.index + 1, items);
 }
@@ -645,7 +655,7 @@ export function reducePlayback(
     case "start": {
       if (state.status !== "idle" && state.status !== "done") return unchanged(state);
       const fresh: PlaybackState = { ...state, failures: [] };
-      const started = loadIndex(fresh, 0, items);
+      const started = loadIndex(fresh, holdsIndex(event.index, items) ? event.index : 0, items);
       if (started.state.status !== "loading") return started;
       return { state: started.state, effects: [...started.effects, { kind: "play" }] };
     }
@@ -684,6 +694,13 @@ export function reducePlayback(
       // back from the top is a restart of the top.
       const from = Math.min(state.index, items.length - 1);
       return loadIndex(state, Math.max(from - 1, 0), items);
+    }
+
+    case "jump": {
+      // A run that has not started has no player to move yet. Anywhere else, including
+      // a failed entry or a finished run, a jump moves the run exactly as prev does.
+      if (state.status === "idle" || !holdsIndex(event.index, items)) return unchanged(state);
+      return loadIndex(state, event.index, items);
     }
 
     case "failureAdvance": {

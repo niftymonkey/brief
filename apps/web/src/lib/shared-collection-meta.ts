@@ -60,3 +60,21 @@ export function sharedCollectionDescription(
 export function unfurlThumbnailUrl(videoId: string | undefined): string | null {
   return videoId === undefined ? null : `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 }
+
+/** What the shared page knows about whoever is reading it. */
+export interface SharedCollectionViewer {
+  signedIn: boolean;
+  /** Whether their email may build collections. */
+  allowed: boolean;
+  /** How many collections they own. */
+  collectionCount: number;
+}
+
+/**
+ * Whether the shared page invites its reader to build collections of their own:
+ * only someone signed in, allowed to build, and without a collection yet. Anyone
+ * else either cannot act on it or already has.
+ */
+export function invitesViewerToBuild(viewer: SharedCollectionViewer): boolean {
+  return viewer.signedIn && viewer.allowed && viewer.collectionCount === 0;
+}

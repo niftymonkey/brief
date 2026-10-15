@@ -14,6 +14,8 @@ interface SortableItemRowProps {
   entry: CollectionEntry;
   isLast: boolean;
   isActive: boolean;
+  isCued: boolean;
+  onJump: () => void;
   /** True while a reorder is in flight, so a second drag cannot race the write. */
   dragDisabled: boolean;
   controls: CollectionItemRowControls;
@@ -33,6 +35,8 @@ export function SortableItemRow({
   entry,
   isLast,
   isActive,
+  isCued,
+  onJump,
   dragDisabled,
   controls,
 }: SortableItemRowProps) {
@@ -52,6 +56,8 @@ export function SortableItemRow({
       entry={entry}
       isLast={isLast}
       isActive={isActive}
+      isCued={isCued}
+      onJump={onJump}
       controls={controls}
       drag={{
         setNodeRef,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { CollectionDetail } from "@/components/collections/collection-detail";
 import {
@@ -43,12 +43,31 @@ function renderDetail(collection = makeCollection()) {
   return render(detailElement(collection));
 }
 
+/** The stage column a wide screen draws the video, its caption and its transport in. */
+function stage(): HTMLElement {
+  const element = document.querySelector<HTMLElement>("[data-collection-stage]");
+  if (!element) throw new Error("No stage was rendered");
+  return element;
+}
+
+/**
+ * The header's control of this name. A wide screen carries a second set under the
+ * stage, and media queries do not resolve here, so both are in the document.
+ */
+function headerButton(name: string | RegExp): HTMLElement {
+  const button = screen
+    .queryAllByRole("button", { name })
+    .find((candidate) => !stage().contains(candidate));
+  if (!button) throw new Error(`No header control named ${String(name)}`);
+  return button;
+}
+
 function isDisabled(name: string): boolean {
-  return screen.getByRole("button", { name }).hasAttribute("disabled");
+  return headerButton(name).hasAttribute("disabled");
 }
 
 async function pressNext(): Promise<void> {
-  fireEvent.click(screen.getByRole("button", { name: "Next entry" }));
+  fireEvent.click(headerButton("Next entry"));
   await settle();
 }
 
@@ -62,7 +81,7 @@ function serverRenderedGripDescriptions(): (string | null)[] {
 }
 
 async function startSitting(): Promise<void> {
-  fireEvent.click(screen.getByRole("button", { name: /Play the whole collection/ }));
+  fireEvent.click(headerButton(/Play the whole collection/));
   await settle();
   await settle();
 }
@@ -102,6 +121,10 @@ function playerOnScreen(): boolean {
   return screen.queryByRole("region", { name: "Collection playback" }) !== null;
 }
 
+function playerRegion(): HTMLElement {
+  return screen.getByRole("region", { name: "Collection playback" });
+}
+
 describe("CollectionDetail playback while the collection is edited", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -138,7 +161,7 @@ describe("CollectionDetail playback while the collection is edited", () => {
       { kind: "seek", toSec: 30 },
     ]);
     expect(livePlayer().pauseCount).toBeGreaterThan(0);
-    expect(screen.getByText("Playback complete.")).toBeTruthy();
+    expect(within(playerRegion()).getByText("Playback complete.")).toBeTruthy();
   });
 
   it("lights the row again once the sitting reaches an entry the collection still holds", async () => {
@@ -168,7 +191,7 @@ describe("CollectionDetail playback while the collection is edited", () => {
     await playFor(30);
 
     expect(livePlayer().pauseCount).toBeGreaterThan(0);
-    expect(screen.getByText("Playback complete.")).toBeTruthy();
+    expect(within(playerRegion()).getByText("Playback complete.")).toBeTruthy();
     expect(screen.queryByText(/Starting playback/)).toBeNull();
   });
 
@@ -208,23 +231,27 @@ describe("CollectionDetail playback while the collection is edited", () => {
 
     await playFor(5);
     expect(playerOnScreen()).toBe(false);
-    expect(screen.getByRole("button", { name: "Play from the top" })).toBeTruthy();
+    expect(headerButton(/Play the whole collection/).hasAttribute("disabled")).toBe(false);
   });
 
-  it("restarts the sitting from the top while one is already running", async () => {
+  it("offers no closing Play from the top, idle or mid-run", async () => {
     renderDetail();
+    expect(screen.queryByRole("button", { name: "Play from the top" })).toBeNull();
+
     await startSitting();
-
     await playFor(12);
+
     expect(screen.getByText("2 of 3")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play from the top" })).toBeNull();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Play from the top" }));
-    await settle();
-    await settle();
+  it("ends at the add form, with no closing block after it", () => {
+    renderDetail();
 
-    expect(screen.getByText("1 of 3")).toBeTruthy();
-    expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_A, toSec: 0 }]);
-    expect(FakeYouTubePlayer.instances).toHaveLength(2);
+    expect(screen.queryByText(/Total runtime of/)).toBeNull();
+    const addField = screen.getByLabelText("Add a video");
+    const transport = document.querySelector("[data-collection-stage]")?.closest("section")?.parentElement;
+    expect(transport?.lastElementChild?.contains(addField)).toBe(true);
   });
 });
 
@@ -253,9 +280,9 @@ describe("CollectionDetail header controls", () => {
 
     await startSitting();
 
-    expect(screen.getByRole("button", { name: "Stop playback" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Previous entry" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Next entry" })).toBeTruthy();
+    expect(headerButton("Stop playback")).toBeTruthy();
+    expect(headerButton("Previous entry")).toBeTruthy();
+    expect(headerButton("Next entry")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Edit collection" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Delete collection" })).toBeTruthy();
   });
@@ -265,13 +292,13 @@ describe("CollectionDetail header controls", () => {
     await startSitting();
     expect(screen.getByText("1 of 3")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Next entry" }));
+    fireEvent.click(headerButton("Next entry"));
     await settle();
     expect(screen.getByText("2 of 3")).toBeTruthy();
     // The same player carried the sitting across, exactly as an entry boundary would.
     expect(FakeYouTubePlayer.instances).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Previous entry" }));
+    fireEvent.click(headerButton("Previous entry"));
     await settle();
     expect(screen.getByText("1 of 3")).toBeTruthy();
     expect(livePlayer().loads).toEqual([
@@ -327,12 +354,12 @@ describe("CollectionDetail header controls", () => {
     await startSitting();
     expect(playerOnScreen()).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Stop playback" }));
+    fireEvent.click(headerButton("Stop playback"));
     await settle();
 
     expect(playerOnScreen()).toBe(false);
     expect(FakeYouTubePlayer.instances.every((player) => player.destroyed)).toBe(true);
-    expect(screen.getByRole("button", { name: /Play the whole collection/ })).toBeTruthy();
+    expect(headerButton(/Play the whole collection/)).toBeTruthy();
     expect(document.querySelectorAll('[aria-current="true"]')).toHaveLength(0);
   });
 
@@ -341,7 +368,7 @@ describe("CollectionDetail header controls", () => {
     expect(screen.queryByRole("button", { name: "Enter full screen" })).toBeNull();
     await startSitting();
 
-    fireEvent.click(screen.getByRole("button", { name: "Enter full screen" }));
+    fireEvent.click(headerButton("Enter full screen"));
     await settle();
 
     const frame = document.querySelector("[data-frame-shape]");
@@ -354,7 +381,7 @@ describe("CollectionDetail header controls", () => {
 
     expect(frame?.hasAttribute("data-fullscreen")).toBe(false);
     expect(document.body.style.overflow).toBe("");
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Enter full screen" }));
+    expect(document.activeElement).toBe(headerButton("Enter full screen"));
   });
 
   it("reorders entries by dragging them, with no move buttons left to press", () => {
@@ -368,6 +395,57 @@ describe("CollectionDetail header controls", () => {
     const grips = document.querySelectorAll('[aria-roledescription="sortable"]');
     expect(grips).toHaveLength(3);
     expect(grips[0]?.getAttribute("tabindex")).toBe("0");
+  });
+});
+
+describe("CollectionDetail stage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body =
+        init?.method === "POST" ? makeItem("item-d", VIDEO_A, 0, 10, 3) : { success: true };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("cues the last entry left when the cued one is removed from the end", async () => {
+    renderDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Go to Title item-c" }));
+    await settle();
+    expect(within(stage()).getByText("03 of 03")).toBeTruthy();
+
+    await removeEntry(2);
+
+    expect(within(stage()).getByText("Title item-b")).toBeTruthy();
+    expect(within(stage()).getByText("02 of 02")).toBeTruthy();
+
+    fireEvent.click(within(stage()).getByRole("button", { name: /Play the whole collection/ }));
+    await settle();
+    await settle();
+    expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_B, toSec: 0 }]);
+  });
+
+  it("starts a new run from an entry added after the playing run began", async () => {
+    renderDetail();
+    await startSitting();
+    await addEntry();
+    expect(FakeYouTubePlayer.instances).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to Title item-d" }));
+    await settle();
+    await settle();
+
+    expect(FakeYouTubePlayer.instances).toHaveLength(2);
+    expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_A, toSec: 0 }]);
+    expect(screen.getByText("4 of 4")).toBeTruthy();
   });
 });
 

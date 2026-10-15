@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildSitting,
   entryAspectRatio,
+  entryPosterSources,
   entryThumbnail,
   formatRuntimeWords,
   isEntryActive,
   isVerticalAspectRatio,
+  playAllLabel,
+  playCollectionLabel,
   resolveActiveEntryId,
   type EntryVideoFacts,
   type SittingItem,
@@ -258,6 +261,36 @@ describe("entryThumbnail", () => {
   it("has nothing to fall back to when it already asked for mqdefault", () => {
     expect(entryThumbnail("wide", null).fallbackUrl).toBeNull();
     expect(entryThumbnail("wide", FOUR_THREE).fallbackUrl).toBeNull();
+  });
+});
+
+describe("entryPosterSources", () => {
+  it("asks for the largest still first and steps down to the one every video has", () => {
+    expect(entryPosterSources("short")).toEqual([
+      "https://i.ytimg.com/vi/short/maxresdefault.jpg",
+      "https://i.ytimg.com/vi/short/sddefault.jpg",
+      "https://i.ytimg.com/vi/short/hqdefault.jpg",
+    ]);
+  });
+});
+
+describe("playCollectionLabel", () => {
+  it("names the runtime in words when every length is known", () => {
+    expect(playCollectionLabel(90)).toBe("Play the whole collection, 1 min 30 sec");
+  });
+
+  it("leaves the runtime out when it is unknown", () => {
+    expect(playCollectionLabel(null)).toBe("Play the whole collection");
+  });
+});
+
+describe("playAllLabel", () => {
+  it("counts the entries and names the runtime in words", () => {
+    expect(playAllLabel(5, 1976)).toBe("Play all 5 / 32 min 56 sec");
+  });
+
+  it("counts the entries alone when the runtime is unknown", () => {
+    expect(playAllLabel(5, null)).toBe("Play all 5");
   });
 });
 

@@ -42,13 +42,15 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
     }
   };
 
+  // On a wide screen the form sits at the foot of the collection's shelf, which is
+  // its box already, and the narrower column gives the URL a row of its own.
   return (
     <form
       onSubmit={handleSubmit}
-      className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)]"
+      className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] lg:p-0 lg:rounded-none lg:border-0 lg:bg-transparent"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex-1 space-y-1.5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end lg:flex-wrap">
+        <div className="flex-1 space-y-1.5 lg:basis-full">
           <Label htmlFor="add-item-url">Add a video</Label>
           <Input
             id="add-item-url"
@@ -85,7 +87,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
             />
           </div>
         </div>
-        <Button type="submit" disabled={!url.trim() || isSubmitting}>
+        <Button type="submit" disabled={!url.trim() || isSubmitting} className="lg:ml-auto">
           {isSubmitting ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />

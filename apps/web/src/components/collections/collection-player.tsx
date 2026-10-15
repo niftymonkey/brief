@@ -41,18 +41,27 @@ export interface CollectionPlayerItem {
 }
 
 /**
- * The moves the header carries for a run it does not own. Prev, skip and full screen
- * are the only things outside the player that steer it; starting and stopping a run
- * are the page's own, because they mount and unmount this component.
+ * The moves the page carries for a run it does not own. Prev, skip, a jump to an
+ * entry and full screen are the only things outside the player that steer it;
+ * starting and stopping a run are the page's own, because they mount and unmount this
+ * component.
  */
 export interface CollectionPlayerHandle {
   skip: () => void;
   prev: () => void;
+  /**
+   * Moves the run to the entry with this id and carries on from there. False when the
+   * run does not hold that entry or has not put its first one on screen yet, which is
+   * the page's cue to start a new run from the entry instead.
+   */
+  jumpTo: (itemId: string) => boolean;
   toggleFullscreen: () => void;
 }
 
 interface CollectionPlayerProps {
   items: CollectionPlayerItem[];
+  /** Index into `items` of the entry the run opens on; the first when absent. */
+  startIndex?: number;
   /**
    * Where the run stands, reported on every change and as null once the player goes,
    * so the header's counter and the entries list follow the sitting.
@@ -84,7 +93,27 @@ interface CollectionPlayerProps {
 export interface ActiveSitting {
   key: number;
   items: CollectionPlayerItem[];
+  /** Index into `items` of the entry the run opens on. */
+  startIndex: number;
 }
+
+/**
+ * The dark field a wide screen's stage fills, with the frame or the cued entry's
+ * poster centred in it. Both live in one of these, so pressing Play swaps one for the
+ * other in a box of the same size and nothing on the page moves.
+ */
+export const STAGE_FIELD_CLASS =
+  "lg:flex lg:flex-1 lg:min-h-0 lg:items-center lg:justify-center lg:overflow-hidden lg:rounded-2xl lg:bg-black";
+
+/**
+ * The field measures itself for the frame. A size container is also the box a fixed
+ * descendant is drawn in, so the field drops it while the frame fills the screen.
+ */
+export const STAGE_FIELD_MEASURE_CLASS = "lg:[container-type:size]";
+
+/** The frame at its entry's own shape, as large as the stage's field allows. */
+export const STAGE_FRAME_CLASS =
+  "lg:w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] lg:aspect-[var(--frame-aspect)]";
 
 function itemLabel(item: CollectionPlayerItem): string {
   return item.videoTitle ?? item.videoId;
@@ -102,10 +131,12 @@ function itemLabel(item: CollectionPlayerItem): string {
 function frameItem(
   items: CollectionPlayerItem[],
   state: PlaybackState,
+  startIndex: number,
 ): CollectionPlayerItem | null {
   const playing = items[state.index];
   if (playing) return playing;
-  return (state.index < 0 ? items[0] : items[items.length - 1]) ?? null;
+  if (state.index < 0) return items[startIndex] ?? items[0] ?? null;
+  return items[items.length - 1] ?? null;
 }
 
 /**
@@ -129,6 +160,7 @@ interface FrameStyle extends CSSProperties {
  */
 export function CollectionPlayer({
   items,
+  startIndex = 0,
   onPositionChange,
   onFullscreenChange,
   fullscreenReturnFocusRef,
@@ -253,10 +285,24 @@ export function CollectionPlayer({
     () => ({
       skip: () => dispatch({ kind: "skip" }),
       prev: () => dispatch({ kind: "prev" }),
+      jumpTo: (itemId: string) => {
+        const index = items.findIndex((item) => item.id === itemId);
+        if (index < 0) return false;
+        // The reducer hands back the very state it was given for a jump it will not
+        // take, so a new state is the run having moved.
+        const before = stateRef.current;
+        dispatch({ kind: "jump", index });
+        return stateRef.current !== before;
+      },
       toggleFullscreen: fullscreen.toggle,
     }),
-    [dispatch, fullscreen.toggle],
+    [dispatch, fullscreen.toggle, items],
   );
+
+  /** The run's opening entry as of the moment the player is ready to open it. */
+  const startRun = useEffectEvent(() => {
+    dispatchRef.current({ kind: "start", index: startIndex });
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -303,7 +349,7 @@ export function CollectionPlayer({
             if (!mounted) return;
             // The Play control that mounted this component is the sitting's one real
             // user gesture, which is also what lets the run play unmuted.
-            dispatchRef.current({ kind: "start" });
+            startRun();
           },
           onStateChange: (event) => {
             const player = playerRef.current;
@@ -399,14 +445,14 @@ export function CollectionPlayer({
   const currentItem = state.index >= 0 ? (items[state.index] ?? null) : null;
   const range = currentItem ? formatRange(currentItem.startSec, currentItem.endSec) : "";
 
-  const frameAspect = entryAspectRatio(frameItem(items, state)?.aspectRatio ?? null);
+  const frameAspect = entryAspectRatio(frameItem(items, state, startIndex)?.aspectRatio ?? null);
   const frameStyle: FrameStyle = { "--frame-aspect": String(frameAspect) };
 
   const handleRetryApi = () => {
     setApiFailed(false);
     setAutoplayBlocked(false);
     // Bumping the attempt rebuilds the player from scratch, so the sitting on screen
-    // goes back to the top with it.
+    // goes back to the entry it opened on with it.
     setState(initialPlaybackState());
     setLoadAttempt((attempt) => attempt + 1);
   };
@@ -417,50 +463,56 @@ export function CollectionPlayer({
   };
 
   return (
-    <section aria-label="Collection playback">
+    <section aria-label="Collection playback" className="lg:flex lg:flex-1 lg:flex-col lg:min-h-0">
       {/* One tree across the entry change, the breakpoint and full screen: the shape
           is a class on a wrapper the iframe merely lives inside, the phone's
-          true-shape frame is the same element the desktop draws at 16:9, and filling
-          the screen restyles that element where it stands rather than moving it. */}
-      <div
-        ref={frameRef}
-        style={frameStyle}
-        data-frame-shape={frameAspect < 1 ? "vertical" : "landscape"}
-        data-fullscreen={fullscreen.mode === "off" ? undefined : fullscreen.mode}
-        className={cn(
-          "overflow-hidden bg-black",
-          fullscreen.mode === "off"
-            ? "relative w-[calc(min(70vh,32rem)*var(--frame-aspect))] max-w-full mx-auto aspect-[var(--frame-aspect)] sm:w-full sm:aspect-video rounded-lg sm:rounded-xl"
-            : "fixed inset-0 z-[100] [container-type:size]",
-        )}
-      >
-        {/* Full screen draws the video at its true shape, as large as the frame
-            allows, rather than handing a Short a landscape box to letterbox in. */}
+          true-shape frame is the same element a tablet draws at 16:9 and a wide
+          screen draws at its true shape in the stage's field, and filling the screen
+          restyles that element where it stands rather than moving it. */}
+      <div className={cn(STAGE_FIELD_CLASS, fullscreen.mode === "off" && STAGE_FIELD_MEASURE_CLASS)}>
         <div
-          ref={containerRef}
+          ref={frameRef}
+          style={frameStyle}
+          data-frame-shape={frameAspect < 1 ? "vertical" : "landscape"}
+          data-fullscreen={fullscreen.mode === "off" ? undefined : fullscreen.mode}
           className={cn(
-            "absolute inset-0",
+            "overflow-hidden bg-black",
             fullscreen.mode === "off"
-              ? "w-full h-full"
-              : "m-auto w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] h-[min(100cqh,calc(100cqw/var(--frame-aspect)))]",
+              ? cn(
+                  "relative w-[calc(min(70vh,32rem)*var(--frame-aspect))] max-w-full mx-auto aspect-[var(--frame-aspect)] sm:w-full sm:aspect-video rounded-lg sm:rounded-xl",
+                  STAGE_FRAME_CLASS,
+                )
+              : "fixed inset-0 z-[100] [container-type:size]",
           )}
-        />
-        {/* The header is out of reach while the frame fills the screen, so the way
-            back out is drawn inside it, and focus moves to it so a keyboard can
-            find it. */}
-        {fullscreen.mode !== "off" && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            autoFocus
-            onClick={fullscreen.exit}
-            title="Exit full screen"
-            aria-label="Exit full screen"
-            className="absolute size-9 top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] rounded-full border-white/25 bg-black/60 text-white hover:bg-black/80 hover:text-white dark:bg-black/60 dark:hover:bg-black/80"
-          >
-            <Minimize className="w-4 h-4" />
-          </Button>
-        )}
+        >
+          {/* Full screen draws the video at its true shape, as large as the frame
+              allows, rather than handing a Short a landscape box to letterbox in. */}
+          <div
+            ref={containerRef}
+            className={cn(
+              "absolute inset-0",
+              fullscreen.mode === "off"
+                ? "w-full h-full"
+                : "m-auto w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] h-[min(100cqh,calc(100cqw/var(--frame-aspect)))]",
+            )}
+          />
+          {/* The header is out of reach while the frame fills the screen, so the way
+              back out is drawn inside it, and focus moves to it so a keyboard can
+              find it. */}
+          {fullscreen.mode !== "off" && (
+            <Button
+              variant="outline"
+              size="icon-sm"
+              autoFocus
+              onClick={fullscreen.exit}
+              title="Exit full screen"
+              aria-label="Exit full screen"
+              className="absolute size-9 top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] rounded-full border-white/25 bg-black/60 text-white hover:bg-black/80 hover:text-white dark:bg-black/60 dark:hover:bg-black/80"
+            >
+              <Minimize className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {apiFailed && (
@@ -488,8 +540,9 @@ export function CollectionPlayer({
       )}
 
       {/* A fixed block whatever the entry's text runs to, so skipping never reflows
-          the entries list underneath the player. */}
-      <div className="mt-3.5">
+          the entries list underneath the player. A wide screen captions the stage
+          from the page instead, idle and playing alike. */}
+      <div className="mt-3.5 lg:hidden">
         <div className="flex items-baseline gap-2 h-[1.4em]">
           <p className="min-w-0 truncate font-medium leading-[1.4] text-[var(--color-text-primary)]">
             {currentItem ? (

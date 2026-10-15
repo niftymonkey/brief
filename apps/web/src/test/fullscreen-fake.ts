@@ -53,6 +53,35 @@ export function uninstallNativeFullscreen(): void {
   Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
 }
 
+/**
+ * Makes the installed full screen leave the way a real browser does: `exitFullscreen`
+ * hands the page back on a later task rather than at once, and until it has, nothing
+ * outside the full screen element can take focus.
+ */
+export function leaveNativeFullscreenLikeABrowser(): void {
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    writable: true,
+    value: vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          window.setTimeout(() => {
+            setFullscreenElement(null);
+            resolve();
+          }, 0);
+        }),
+    ),
+  });
+  const focus = HTMLElement.prototype.focus;
+  vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function focusOutsideRefused(
+    this: HTMLElement,
+    options?: FocusOptions,
+  ) {
+    if (fullscreenElement !== null && !fullscreenElement.contains(this)) return;
+    focus.call(this, options);
+  });
+}
+
 /** The viewer leaving full screen through the browser's own UI rather than ours. */
 export function leaveNativeFullscreenFromBrowser(): void {
   act(() => setFullscreenElement(null));

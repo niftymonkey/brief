@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { createRef, type RefObject } from "react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import {
   CollectionPlayer,
+  type CollectionPlayerHandle,
   type CollectionPlayerItem,
 } from "@/components/collections/collection-player";
 import {
@@ -127,6 +129,17 @@ describe("CollectionPlayer frame shape", () => {
     expect(frameShape()).toBe("vertical");
   });
 
+  it("opens on the shape of the entry the run is asked to start from", () => {
+    render(
+      <CollectionPlayer
+        items={[playerItem("item-a", VIDEO_A, LANDSCAPE), playerItem("item-b", VIDEO_B, VERTICAL)]}
+        startIndex={1}
+      />,
+    );
+
+    expect(frameShape()).toBe("vertical");
+  });
+
   // Media queries do not resolve in jsdom, so the breakpoint itself is asserted as the
   // classes that carry it: one element sized from its own height on a phone and handed
   // back to 16:9 at `sm`, never a second tree the iframe would have to move between.
@@ -139,5 +152,89 @@ describe("CollectionPlayer frame shape", () => {
     expect(className).toContain("mx-auto");
     expect(className).toContain("sm:w-full");
     expect(className).toContain("sm:aspect-video");
+  });
+});
+
+describe("CollectionPlayer starting point and jumps", () => {
+  const ITEMS: CollectionPlayerItem[] = [
+    playerItem("item-a", VIDEO_A, LANDSCAPE),
+    playerItem("item-b", VIDEO_B, LANDSCAPE),
+    { ...playerItem("item-c", VIDEO_B, LANDSCAPE), startSec: 30, endSec: 40 },
+  ];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  function renderWithHandle(startIndex?: number): RefObject<CollectionPlayerHandle | null> {
+    const handle = createRef<CollectionPlayerHandle>();
+    render(<CollectionPlayer items={ITEMS} startIndex={startIndex} ref={handle} />);
+    return handle;
+  }
+
+  function jumpTo(handle: RefObject<CollectionPlayerHandle | null>, itemId: string): boolean {
+    let moved = false;
+    act(() => {
+      moved = handle.current?.jumpTo(itemId) ?? false;
+    });
+    return moved;
+  }
+
+  it("starts the run on the entry it is asked to start from", async () => {
+    renderWithHandle(1);
+    await startSitting();
+
+    expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_B, toSec: 0 }]);
+  });
+
+  it("moves a live run to the entry asked for, in the player already built", async () => {
+    const handle = renderWithHandle();
+    await startSitting();
+    const player = livePlayer();
+
+    expect(jumpTo(handle, "item-c")).toBe(true);
+    await playFor(1);
+
+    expect(screen.getByText("Title item-c")).toBeTruthy();
+    expect(player.loads).toEqual([
+      { kind: "load", videoId: VIDEO_A, toSec: 0 },
+      { kind: "load", videoId: VIDEO_B, toSec: 30 },
+    ]);
+    expect(FakeYouTubePlayer.instances).toHaveLength(1);
+    expect(player.destroyed).toBe(false);
+  });
+
+  it("carries on from the entry it jumped to", async () => {
+    const handle = renderWithHandle();
+    await startSitting();
+
+    jumpTo(handle, "item-b");
+    // Past item-b's ten seconds, so the run has moved on to the entry after it.
+    await playFor(12);
+
+    expect(screen.getByText("Title item-c")).toBeTruthy();
+    expect(livePlayer().loads.at(-1)).toEqual({ kind: "seek", toSec: 30 });
+  });
+
+  it("says so when the run does not hold the entry, so the page can start one that does", async () => {
+    const handle = renderWithHandle();
+    await startSitting();
+
+    expect(jumpTo(handle, "not-in-this-run")).toBe(false);
+    expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_A, toSec: 0 }]);
+  });
+
+  it("says so when the run has not started yet, so the page can start one from the entry", () => {
+    const handle = renderWithHandle();
+
+    expect(jumpTo(handle, "item-c")).toBe(false);
   });
 });

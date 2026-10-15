@@ -75,8 +75,10 @@ export default async function CollectionPage({ params }: PageProps) {
   }).format(new Date(collection.updatedAt));
 
   return (
-    <main className="flex-1 px-4 py-4 pb-20">
-      <article className="max-w-[50rem] mx-auto">
+    // A wide screen gives the collection exactly the viewport under the 57px header
+    // (56px and its seam), so the page holds still and the rail scrolls instead.
+    <main className="flex-1 px-4 py-4 pb-20 lg:flex-none lg:flex lg:flex-col lg:h-[calc(100dvh-57px)] lg:pb-4">
+      <article className="max-w-[50rem] mx-auto lg:flex lg:flex-col lg:flex-1 lg:min-h-0 lg:w-full lg:max-w-[96rem] 2xl:max-w-[112rem]">
         <div className="mb-5">
           <Link
             href="/collections"

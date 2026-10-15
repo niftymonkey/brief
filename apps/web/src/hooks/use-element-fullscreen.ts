@@ -82,7 +82,13 @@ export function useElementFullscreen(
   }, [changeMode, targetRef]);
 
   const exit = useCallback(() => {
-    if (mode === "native") exitNativeFullscreen();
+    if (mode === "native" && typeof document.exitFullscreen === "function") {
+      // The browser keeps focus inside the element until it has handed the page back,
+      // so its change event ends the mode and returns focus then. A refusal means
+      // the browser had already left, and the mode ends here instead.
+      document.exitFullscreen().catch(() => changeMode("off"));
+      return;
+    }
     changeMode("off");
   }, [changeMode, mode]);
 

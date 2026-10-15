@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { CollectionClosing } from "@/components/collections/collection-closing";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { CollectionItemRow } from "@/components/collections/collection-item-row";
 import {
   CollectionPlayer,
   type ActiveSitting,
   type CollectionPlayerHandle,
 } from "@/components/collections/collection-player";
-import { CollectionTransport } from "@/components/collections/collection-transport";
+import {
+  CollectionTransport,
+  useFullscreenToggles,
+} from "@/components/collections/collection-transport";
 import {
   buildSitting,
   resolveActiveEntryId,
@@ -23,6 +25,8 @@ interface SharedCollectionProps {
   videoFacts: Record<string, EntryVideoFacts>;
   /** Server-formatted last-updated date, so the byline never mismatches on hydration. */
   updatedLabel: string | null;
+  /** Pinned to the foot of the shelf on a wide screen. */
+  shelfFooter?: ReactNode;
 }
 
 /**
@@ -37,13 +41,16 @@ export function SharedCollection({
   collection,
   videoFacts,
   updatedLabel,
+  shelfFooter,
 }: SharedCollectionProps) {
   const [activeSitting, setActiveSitting] = useState<ActiveSitting | null>(null);
   const [position, setPosition] = useState<SittingPosition | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  /** The run on screen, for the prev, skip and full screen controls the header carries for it. */
+  /** The entry a wide screen's stage shows while nothing plays, and Play starts from. */
+  const [cuedIndex, setCuedIndex] = useState(0);
+  /** The run on screen, for the prev, skip, jump and full screen controls the page carries for it. */
   const playerRef = useRef<CollectionPlayerHandle>(null);
-  const fullscreenToggleRef = useRef<HTMLButtonElement>(null);
+  const fullscreenToggles = useFullscreenToggles();
 
   const items = collection.items;
 
@@ -51,84 +58,103 @@ export function SharedCollection({
     setPosition(next);
   }, []);
 
-  /** Opens a run of the collection from the top, which is also what restarts one. */
-  const startSitting = useCallback(() => {
-    setPosition(null);
-    setActiveSitting((previous) => ({ key: (previous?.key ?? 0) + 1, items: [...items] }));
-  }, [items]);
-
-  const closePlayer = useCallback(() => {
-    setActiveSitting(null);
-    setPosition(null);
-  }, []);
+  /** Opens a run of the collection on one entry, which is also what restarts one. */
+  const startSitting = useCallback(
+    (startIndex: number) => {
+      setPosition(null);
+      setCuedIndex(startIndex);
+      setActiveSitting((previous) => ({
+        key: (previous?.key ?? 0) + 1,
+        items: [...items],
+        startIndex,
+      }));
+    },
+    [items],
+  );
 
   const sitting = buildSitting(items, videoFacts);
   const entryCount = sitting.entries.length;
   const canPlay = entryCount > 0;
   const activeEntryId = resolveActiveEntryId(sitting.entries, position?.itemId ?? null);
   const openSitting = activeSitting !== null && activeSitting.items.length > 0 ? activeSitting : null;
+  const cued = Math.min(cuedIndex, Math.max(entryCount - 1, 0));
+
+  /** Stops the run and cues the entry it was on, so Play picks up there. */
+  const closePlayer = () => {
+    const onScreen = sitting.entries.findIndex((entry) => entry.id === position?.itemId);
+    if (onScreen >= 0) setCuedIndex(onScreen);
+    else if (position?.isDone) setCuedIndex(0);
+    setActiveSitting(null);
+    setPosition(null);
+  };
+
+  /** Puts an entry on the stage: the run moves there, or it becomes the cued one. */
+  const jumpTo = (index: number) => {
+    const entry = sitting.entries[index];
+    if (!entry) return;
+    if (openSitting === null) {
+      setCuedIndex(index);
+      return;
+    }
+    if (!playerRef.current?.jumpTo(entry.id)) startSitting(index);
+  };
 
   return (
-    <div>
-      <CollectionTransport
-        title={collection.title}
-        lede={collection.description}
-        curator={null}
-        updatedLabel={updatedLabel}
-        sitting={sitting}
-        canPlay={canPlay}
-        isPlaying={openSitting !== null}
-        position={position}
-        isFullscreen={isFullscreen}
-        onPlay={startSitting}
-        onStop={closePlayer}
-        onPrev={() => playerRef.current?.prev()}
-        onSkip={() => playerRef.current?.skip()}
-        onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
-        fullscreenToggleRef={fullscreenToggleRef}
-        player={
-          openSitting && (
-            <CollectionPlayer
-              key={openSitting.key}
-              ref={playerRef}
-              items={openSitting.items}
-              onPositionChange={handlePositionChange}
-              onFullscreenChange={setIsFullscreen}
-              fullscreenReturnFocusRef={fullscreenToggleRef}
+    <CollectionTransport
+      title={collection.title}
+      lede={collection.description}
+      curator={null}
+      updatedLabel={updatedLabel}
+      sitting={sitting}
+      notes={items.map((item) => item.summary)}
+      canPlay={canPlay}
+      isPlaying={openSitting !== null}
+      position={position}
+      cuedIndex={cued}
+      isFullscreen={isFullscreen}
+      onPlay={startSitting}
+      onStop={closePlayer}
+      onPrev={() => playerRef.current?.prev()}
+      onSkip={() => playerRef.current?.skip()}
+      onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
+      fullscreenToggles={fullscreenToggles}
+      player={
+        openSitting && (
+          <CollectionPlayer
+            key={openSitting.key}
+            ref={playerRef}
+            items={openSitting.items}
+            startIndex={openSitting.startIndex}
+            onPositionChange={handlePositionChange}
+            onFullscreenChange={setIsFullscreen}
+            fullscreenReturnFocusRef={fullscreenToggles.returnFocus}
+          />
+        )
+      }
+      shelfFooter={shelfFooter}
+    >
+      {entryCount === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-[var(--color-text-secondary)]">No entries yet</p>
+          <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">
+            The curator hasn&apos;t added anything to this collection.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col">
+          {sitting.entries.map((entry, index) => (
+            <CollectionItemRow
+              key={entry.id}
+              item={items[index]}
+              entry={entry}
+              isLast={index === entryCount - 1}
+              isActive={entry.id === activeEntryId}
+              isCued={openSitting === null && index === cued}
+              onJump={() => jumpTo(index)}
             />
-          )
-        }
-      >
-        {entryCount === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-[var(--color-text-secondary)]">No entries yet</p>
-            <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">
-              The curator hasn&apos;t added anything to this collection.
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col">
-            {sitting.entries.map((entry, index) => (
-              <CollectionItemRow
-                key={entry.id}
-                item={items[index]}
-                entry={entry}
-                isLast={index === entryCount - 1}
-                isActive={entry.id === activeEntryId}
-              />
-            ))}
-          </div>
-        )}
-      </CollectionTransport>
-
-      {entryCount > 0 && (
-        <CollectionClosing
-          totalRuntimeSec={sitting.totalRuntimeSec}
-          entryCount={entryCount}
-          canPlay={canPlay}
-          onPlay={startSitting}
-        />
+          ))}
+        </div>
       )}
-    </div>
+    </CollectionTransport>
   );
 }

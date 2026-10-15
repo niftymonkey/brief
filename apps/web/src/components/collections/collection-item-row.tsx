@@ -44,6 +44,13 @@ interface CollectionItemRowProps {
   isLast: boolean;
   /** True while the player is on this entry, so the list says where the sitting is. */
   isActive: boolean;
+  /** True for the entry a wide screen's stage shows while nothing plays. */
+  isCued?: boolean;
+  /**
+   * Puts this entry on the stage. Supplied by a page with a stage to put it on, which
+   * a wide screen offers from the whole row.
+   */
+  onJump?: () => void;
   /** The curator's controls. Omitted for a reader, whose entry is strictly read-only. */
   controls?: CollectionItemRowControls;
   /** Supplied only where the list is sortable, which is the owner's page. */
@@ -71,6 +78,8 @@ export function CollectionItemRow({
   entry,
   isLast,
   isActive,
+  isCued = false,
+  onJump,
   controls,
   drag,
 }: CollectionItemRowProps) {
@@ -101,6 +110,13 @@ export function CollectionItemRow({
   ]
     .filter((part): part is string => part !== null)
     .join(" / ");
+
+  // A wide screen's shelf gives the facts a line of their own under the title: whose
+  // video it is and how long the entry runs.
+  const sourceFacts = [
+    entry.channelName,
+    entry.durationSec !== null ? formatSeconds(entry.durationSec) : null,
+  ].filter((part): part is string => part !== null);
 
   const hasSummary = item.summary !== null && item.summary.trim().length > 0;
   const isGenerating = item.summaryStatus === "pending" && !hasSummary;
@@ -158,8 +174,9 @@ export function CollectionItemRow({
       style={drag?.style}
       aria-current={isActive ? "true" : undefined}
       className={cn(
-        "relative grid grid-cols-1 gap-3.5 py-4",
+        "group/row relative grid grid-cols-1 gap-3.5 py-4",
         "sm:grid-cols-[3.25rem_minmax(0,1fr)] sm:gap-4 sm:py-5",
+        "lg:grid-cols-[2.25rem_minmax(0,1fr)] lg:gap-3 lg:py-3",
         "scroll-mt-20",
         // Lifted out of the list while it is in flight, so the rows it passes
         // read as settling around it rather than as part of it.
@@ -177,7 +194,9 @@ export function CollectionItemRow({
 
       {/* The ordinal column is the first thing a phone gives up: the list is short
           enough to read in order without it, and the width buys the title a line. */}
-      <div className="relative hidden sm:flex flex-col items-start">
+      {/* Static on a wide screen, so the jump's hit area below spans the whole row
+          rather than this column. */}
+      <div className="relative hidden sm:flex flex-col items-start lg:static">
         {/* Each row owns the rail below its own marker, reaching down through
             both rows' padding to where the next marker starts. Read end to end
             they are one line down the list; lit, one is exactly the entry being
@@ -188,13 +207,15 @@ export function CollectionItemRow({
             aria-hidden="true"
             className={cn(
               "absolute left-[0.875rem] w-px top-8 -bottom-11 transition-colors duration-300",
+              // Measured from the row instead of the column, through the row's padding.
+              "lg:top-[2.625rem] lg:-bottom-3.5",
               isActive ? "bg-[var(--color-playing)]" : "bg-[var(--color-border)]",
             )}
           />
         )}
         {/* The marker rides the same band as the title and the controls, so the
             rail's breaks land level with the row they belong to. */}
-        <span className="flex items-center min-h-9">
+        <span className="flex items-center min-h-9 lg:min-h-8">
           <span
             className={cn(
               "relative flex items-center justify-center size-7 rounded-full border",
@@ -202,10 +223,35 @@ export function CollectionItemRow({
               isActive
                 ? "border-[var(--color-playing)] bg-[var(--color-playing)] text-[var(--color-bg-secondary)]"
                 : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]",
+              onJump && "lg:hidden",
             )}
           >
             {String(entry.ordinal).padStart(2, "0")}
           </span>
+          {/* On a wide screen the marker is the jump, and its hit area stretches
+              over the row, so a press anywhere on it that is not one of the row's
+              own controls puts the entry on the stage. The cued entry is ringed
+              in a neutral tone: gold is only ever the entry playing. */}
+          {onJump && (
+            <button
+              type="button"
+              onClick={onJump}
+              aria-label={`Go to ${entry.title}`}
+              className={cn(
+                "hidden lg:flex items-center justify-center size-7 rounded-full border cursor-pointer",
+                "font-mono text-[0.6875rem] tabular-nums transition-colors duration-300",
+                "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                "after:absolute after:inset-0",
+                isActive
+                  ? "border-[var(--color-playing)] bg-[var(--color-playing)] text-[var(--color-bg-secondary)]"
+                  : isCued
+                    ? "border-[var(--color-text-secondary)] bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]"
+                    : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] group-hover/row:border-[var(--color-border-hover)] group-hover/row:text-[var(--color-text-secondary)]",
+              )}
+            >
+              {String(entry.ordinal).padStart(2, "0")}
+            </button>
+          )}
         </span>
       </div>
 
@@ -213,13 +259,15 @@ export function CollectionItemRow({
         {/* The controls are the tallest thing here, so the row is given their
             height and everything centres on it. Top-aligning instead leaves the
             title sitting visibly above its own marker and buttons. */}
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:min-h-9">
-          <h3 className="basis-full sm:basis-auto sm:grow min-w-0 font-heading text-base sm:text-[1.0625rem] font-semibold leading-[1.35] tracking-tight text-[var(--color-text-primary)]">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:min-h-9 lg:min-h-8">
+          <h3 className="basis-full sm:basis-auto sm:grow min-w-0 font-heading text-base sm:text-[1.0625rem] lg:text-[0.9375rem] font-semibold leading-[1.35] tracking-tight text-[var(--color-text-primary)]">
+            {/* A pointer on a wide screen jumps from the title like the rest of the
+                row; the link stays in the tab order for a keyboard. */}
             <a
               href={entry.watchUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-[var(--color-accent)] transition-colors"
+              className="hover:text-[var(--color-accent)] transition-colors lg:pointer-events-none lg:group-hover/row:text-[var(--color-accent)]"
             >
               {entry.title}
             </a>
@@ -228,7 +276,7 @@ export function CollectionItemRow({
           <div className="flex items-center gap-2.5 shrink-0">
             <span
               className={cn(
-                "font-mono text-xs whitespace-nowrap",
+                "font-mono text-xs whitespace-nowrap lg:hidden",
                 isActive
                   ? // The lit rail already says which row is playing, so at phone
                     // width the words go rather than crush the title.
@@ -240,7 +288,7 @@ export function CollectionItemRow({
             </span>
 
             {controls && (
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 shrink-0 lg:relative lg:z-10">
               {drag && (
                 <Button
                   ref={drag.setGripRef}
@@ -289,14 +337,33 @@ export function CollectionItemRow({
           </div>
         </div>
 
+        {/* One line held whether or not there is anything to say, so "now playing"
+            arriving in it moves nothing below. */}
+        <p
+          className={cn(
+            "hidden lg:block lg:h-4 lg:truncate mt-0.5 font-mono text-xs",
+            isActive ? "text-[var(--color-playing)]" : "text-[var(--color-text-tertiary)]",
+          )}
+        >
+          {isActive
+            ? "now playing"
+            : sourceFacts.map((part, index) => (
+                <span key={index}>
+                  {index > 0 && <span className="px-1.5 opacity-50">/</span>}
+                  {part}
+                </span>
+              ))}
+        </p>
+
         {/* `flow-root` contains the thumbnail's float, so a note shorter than the
             still cannot let it escape the row. */}
-        <div className="flow-root mt-2.5">
+        <div className="flow-root mt-2.5 lg:mt-1.5">
           {/* A fixed-width slot with the still centred inside it, so a 9:16 entry and
-              a 16:9 entry both leave the note wrapping at the same x. */}
+              a 16:9 entry both leave the note wrapping at the same x. A wide screen's
+              shelf has no width to spare for that, so there the slot is the still's. */}
           <span
             style={thumbnailStyle}
-            className="block float-right w-19 mb-2 ml-4 sm:w-26 sm:ml-5"
+            className="block float-right w-19 mb-2 ml-4 sm:w-26 sm:ml-5 lg:w-auto lg:ml-3 lg:mb-0"
           >
             {/* The heading link above already names this entry and points at the same
                 video, so this one is a pointing device only and stays out of the
@@ -308,12 +375,12 @@ export function CollectionItemRow({
               aria-hidden="true"
               tabIndex={-1}
               className={cn(
-                "group relative block mx-auto aspect-[var(--thumb-aspect)] rounded-md sm:rounded-lg overflow-hidden bg-[var(--color-bg-tertiary)]",
+                "group relative block mx-auto aspect-[var(--thumb-aspect)] rounded-md sm:rounded-lg overflow-hidden bg-[var(--color-bg-tertiary)] lg:z-10",
                 isVerticalThumbnail
                   ? // Sized from a capped height so a vertical entry's still stands
                     // about as tall as the landscape one filling the same slot.
-                    "w-[calc(3.5rem*var(--thumb-aspect))] sm:w-[calc(4.75rem*var(--thumb-aspect))]"
-                  : "w-full",
+                    "w-[calc(3.5rem*var(--thumb-aspect))] sm:w-[calc(4.75rem*var(--thumb-aspect))] lg:w-[calc(3rem*var(--thumb-aspect))]"
+                  : "w-full lg:w-20",
               )}
             >
               <span className="absolute inset-0 flex items-center justify-center font-mono text-[0.625rem] tracking-[0.04em] text-[var(--color-text-tertiary)]">
@@ -332,7 +399,7 @@ export function CollectionItemRow({
           </span>
 
           {isEditingSummary ? (
-            <div className="space-y-2">
+            <div className="space-y-2 lg:relative lg:z-10">
               <Textarea
                 value={summaryDraft}
                 onChange={(event) => setSummaryDraft(event.target.value)}
@@ -363,14 +430,14 @@ export function CollectionItemRow({
             </div>
           ) : hasSummary ? (
             <div>
-              <p className="text-sm sm:text-[0.9375rem] leading-[1.55] text-[var(--color-text-secondary)] whitespace-pre-wrap">
+              <p className="text-sm sm:text-[0.9375rem] lg:text-sm leading-[1.55] text-[var(--color-text-secondary)] whitespace-pre-wrap lg:line-clamp-2">
                 {item.summary}
               </p>
               {controls && (
                 <button
                   type="button"
                   onClick={startEditingSummary}
-                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer lg:relative lg:z-10"
                 >
                   <Pencil className="w-3 h-3" />
                   Edit note
@@ -383,7 +450,7 @@ export function CollectionItemRow({
               Writing a note...
             </p>
           ) : controls && generationFailed ? (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 lg:relative lg:z-10">
               <span className="text-sm text-[var(--color-text-tertiary)] italic">
                 Couldn&apos;t write a note.
               </span>
@@ -413,7 +480,7 @@ export function CollectionItemRow({
             <button
               type="button"
               onClick={startEditingSummary}
-              className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer lg:relative lg:z-10"
             >
               <Pencil className="w-3.5 h-3.5" />
               Add a note

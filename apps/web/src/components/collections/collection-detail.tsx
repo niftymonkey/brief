@@ -5,14 +5,16 @@ import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddItemForm } from "@/components/collections/add-item-form";
-import { CollectionClosing } from "@/components/collections/collection-closing";
 import { CollectionItemRow } from "@/components/collections/collection-item-row";
 import {
   CollectionPlayer,
   type ActiveSitting,
   type CollectionPlayerHandle,
 } from "@/components/collections/collection-player";
-import { CollectionTransport } from "@/components/collections/collection-transport";
+import {
+  CollectionTransport,
+  useFullscreenToggles,
+} from "@/components/collections/collection-transport";
 import { DeleteCollectionButton } from "@/components/collections/delete-collection-button";
 import { EditCollectionDialog } from "@/components/collections/edit-collection-dialog";
 import { SortableItemRow } from "@/components/collections/sortable-item-row";
@@ -87,9 +89,11 @@ export function CollectionDetail({
   const [activeSitting, setActiveSitting] = useState<ActiveSitting | null>(null);
   const [position, setPosition] = useState<SittingPosition | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  /** The run on screen, for the prev, skip and full screen controls the header carries for it. */
+  /** The entry a wide screen's stage shows while nothing plays, and Play starts from. */
+  const [cuedIndex, setCuedIndex] = useState(0);
+  /** The run on screen, for the prev, skip, jump and full screen controls the page carries for it. */
   const playerRef = useRef<CollectionPlayerHandle>(null);
-  const fullscreenToggleRef = useRef<HTMLButtonElement>(null);
+  const fullscreenToggles = useFullscreenToggles();
 
   // A grip has to travel a few pixels before it counts as a drag, so a plain
   // click on it (or a tap that turns into a page scroll) never lifts a row. The
@@ -111,16 +115,19 @@ export function CollectionDetail({
     setPosition(next);
   }, []);
 
-  /** Opens a run of the collection, from the top, on the entries as they stand now. */
-  const startSitting = useCallback(() => {
-    setPosition(null);
-    setActiveSitting((previous) => ({ key: (previous?.key ?? 0) + 1, items: [...items] }));
-  }, [items]);
-
-  const closePlayer = useCallback(() => {
-    setActiveSitting(null);
-    setPosition(null);
-  }, []);
+  /** Opens a run of the collection on one entry, on the entries as they stand now. */
+  const startSitting = useCallback(
+    (startIndex: number) => {
+      setPosition(null);
+      setCuedIndex(startIndex);
+      setActiveSitting((previous) => ({
+        key: (previous?.key ?? 0) + 1,
+        items: [...items],
+        startIndex,
+      }));
+    },
+    [items],
+  );
 
   const handleEditCollection = async (nextTitle: string, nextDescription: string | null) => {
     const updated = await requestJson<{ title: string; description: string | null }>(
@@ -308,6 +315,27 @@ export function CollectionDetail({
   const entryCount = sitting.entries.length;
   const canPlay = entryCount > 0;
   const activeEntryId = resolveActiveEntryId(sitting.entries, position?.itemId ?? null);
+  const cued = Math.min(cuedIndex, Math.max(entryCount - 1, 0));
+
+  /** Stops the run and cues the entry it was on, so Play picks up there. */
+  const closePlayer = () => {
+    const onScreen = sitting.entries.findIndex((entry) => entry.id === position?.itemId);
+    if (onScreen >= 0) setCuedIndex(onScreen);
+    else if (position?.isDone) setCuedIndex(0);
+    setActiveSitting(null);
+    setPosition(null);
+  };
+
+  /** Puts an entry on the stage: the run moves there, or it becomes the cued one. */
+  const jumpTo = (index: number) => {
+    const entry = sitting.entries[index];
+    if (!entry) return;
+    if (openSitting === null) {
+      setCuedIndex(index);
+      return;
+    }
+    if (!playerRef.current?.jumpTo(entry.id)) startSitting(index);
+  };
   const share: CollectionShareState = {
     isShared,
     shareUrl: slug ? `${siteOrigin}/c/${slug}` : null,
@@ -319,131 +347,127 @@ export function CollectionDetail({
   };
 
   return (
-    <div>
-      <CollectionTransport
-        title={title}
-        lede={description}
-        curator={curator}
-        updatedLabel={updatedLabel}
-        sitting={sitting}
-        canPlay={canPlay}
-        isPlaying={openSitting !== null}
-        position={position}
-        isFullscreen={isFullscreen}
-        onPlay={startSitting}
-        onStop={closePlayer}
-        onPrev={() => playerRef.current?.prev()}
-        onSkip={() => playerRef.current?.skip()}
-        onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
-        fullscreenToggleRef={fullscreenToggleRef}
-        share={share}
-        player={
-          openSitting && (
-            <CollectionPlayer
-              key={openSitting.key}
-              ref={playerRef}
-              items={openSitting.items}
-              onPositionChange={handlePositionChange}
-              onFullscreenChange={setIsFullscreen}
-              fullscreenReturnFocusRef={fullscreenToggleRef}
-            />
-          )
-        }
-        actions={
-          editable ? (
-            <>
-              <EditCollectionDialog
-                initialTitle={title}
-                initialDescription={description}
-                onSave={handleEditCollection}
-              >
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
-                  title="Edit collection"
-                  aria-label="Edit collection"
-                >
-                  <Pencil className="w-4 h-4" />
-                </Button>
-              </EditCollectionDialog>
-              <DeleteCollectionButton collectionId={collectionId} title={title} />
-            </>
-          ) : undefined
-        }
-      >
-        {entryCount === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-[var(--color-text-secondary)]">No entries yet</p>
-            {editable && (
-              <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">
-                Paste a YouTube URL below to add the first entry.
-              </p>
-            )}
+    <CollectionTransport
+      title={title}
+      lede={description}
+      curator={curator}
+      updatedLabel={updatedLabel}
+      sitting={sitting}
+      notes={items.map((item) => item.summary)}
+      canPlay={canPlay}
+      isPlaying={openSitting !== null}
+      position={position}
+      cuedIndex={cued}
+      isFullscreen={isFullscreen}
+      onPlay={startSitting}
+      onStop={closePlayer}
+      onPrev={() => playerRef.current?.prev()}
+      onSkip={() => playerRef.current?.skip()}
+      onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
+      fullscreenToggles={fullscreenToggles}
+      share={share}
+      player={
+        openSitting && (
+          <CollectionPlayer
+            key={openSitting.key}
+            ref={playerRef}
+            items={openSitting.items}
+            startIndex={openSitting.startIndex}
+            onPositionChange={handlePositionChange}
+            onFullscreenChange={setIsFullscreen}
+            fullscreenReturnFocusRef={fullscreenToggles.returnFocus}
+          />
+        )
+      }
+      shelfFooter={
+        editable && (
+          <div className="mt-8 lg:mt-0">
+            <AddItemForm onAdd={handleAddItem} />
           </div>
-        ) : editable ? (
-          <DndContext
-            id={dndContextId}
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            modifiers={[restrictToVerticalAxis]}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={items.map((item) => item.id)}
-              strategy={verticalListSortingStrategy}
+        )
+      }
+      actions={
+        editable ? (
+          <>
+            <EditCollectionDialog
+              initialTitle={title}
+              initialDescription={description}
+              onSave={handleEditCollection}
             >
-              <div className="flex flex-col">
-                {sitting.entries.map((entry, index) => (
-                  <SortableItemRow
-                    key={entry.id}
-                    item={items[index]}
-                    entry={entry}
-                    isLast={index === entryCount - 1}
-                    isActive={entry.id === activeEntryId}
-                    dragDisabled={reorderPending}
-                    controls={{
-                      onRemove: () => handleRemove(entry.id),
-                      onSummarySave: (summary) => handleSummarySave(entry.id, summary),
-                      onRetrySummary: () => summarizeItem(entry.id),
-                      onSwap: (videoId, startSec, endSec) =>
-                        handleSwap(entry.id, videoId, startSec, endSec),
-                    }}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        ) : (
-          <div className="flex flex-col">
-            {sitting.entries.map((entry, index) => (
-              <CollectionItemRow
-                key={entry.id}
-                item={items[index]}
-                entry={entry}
-                isLast={index === entryCount - 1}
-                isActive={entry.id === activeEntryId}
-              />
-            ))}
-          </div>
-        )}
-      </CollectionTransport>
-
-      {editable && (
-        <div className="mt-8">
-          <AddItemForm onAdd={handleAddItem} />
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-bg-tertiary)]"
+                title="Edit collection"
+                aria-label="Edit collection"
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+            </EditCollectionDialog>
+            <DeleteCollectionButton collectionId={collectionId} title={title} />
+          </>
+        ) : undefined
+      }
+    >
+      {entryCount === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-[var(--color-text-secondary)]">No entries yet</p>
+          {editable && (
+            <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">
+              Paste a YouTube URL below to add the first entry.
+            </p>
+          )}
+        </div>
+      ) : editable ? (
+        <DndContext
+          id={dndContextId}
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis]}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={items.map((item) => item.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col">
+              {sitting.entries.map((entry, index) => (
+                <SortableItemRow
+                  key={entry.id}
+                  item={items[index]}
+                  entry={entry}
+                  isLast={index === entryCount - 1}
+                  isActive={entry.id === activeEntryId}
+                  isCued={openSitting === null && index === cued}
+                  onJump={() => jumpTo(index)}
+                  dragDisabled={reorderPending}
+                  controls={{
+                    onRemove: () => handleRemove(entry.id),
+                    onSummarySave: (summary) => handleSummarySave(entry.id, summary),
+                    onRetrySummary: () => summarizeItem(entry.id),
+                    onSwap: (videoId, startSec, endSec) =>
+                      handleSwap(entry.id, videoId, startSec, endSec),
+                  }}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
+        <div className="flex flex-col">
+          {sitting.entries.map((entry, index) => (
+            <CollectionItemRow
+              key={entry.id}
+              item={items[index]}
+              entry={entry}
+              isLast={index === entryCount - 1}
+              isActive={entry.id === activeEntryId}
+              isCued={openSitting === null && index === cued}
+              onJump={() => jumpTo(index)}
+            />
+          ))}
         </div>
       )}
-
-      {entryCount > 0 && (
-        <CollectionClosing
-          totalRuntimeSec={sitting.totalRuntimeSec}
-          entryCount={entryCount}
-          canPlay={canPlay}
-          onPlay={startSitting}
-          share={share}
-        />
-      )}
-    </div>
+    </CollectionTransport>
   );
 }
