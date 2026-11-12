@@ -192,10 +192,13 @@ export function makeItem(
     videoId,
     startSec,
     endSec,
+    title: null,
+    titleAuthored: false,
     videoTitle: `Title ${id}`,
     durationSec: VIDEO_DURATION_SEC[videoId],
     aspectRatio: null,
     summary: null,
+    summaryAuthored: false,
     summaryStatus: "ready",
     position,
   };

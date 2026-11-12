@@ -11,6 +11,7 @@ const addItemSchema = z
     videoId: z.string().regex(VIDEO_ID),
     startSec: z.number().int().nonnegative().optional(),
     endSec: z.number().int().nonnegative().optional(),
+    title: z.string().optional(),
     summary: z.string().optional(),
   })
   .refine(

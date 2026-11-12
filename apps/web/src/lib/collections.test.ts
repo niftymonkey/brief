@@ -226,8 +226,8 @@ describe("collections db lifecycle", () => {
     expect(startEdited).toMatchObject({
       startSec: 10,
       endSec: 15,
-      summary: null,
-      summaryStatus: "pending",
+      summary: "new summary",
+      summaryAuthored: true,
     });
   });
 
@@ -491,6 +491,202 @@ describe("collections db lifecycle", () => {
 
     expect(firstShare?.slug).toBeTruthy();
     expect(secondShare?.slug).toBe(`${firstShare?.slug}-9f9f`);
+  });
+});
+
+describe("clip authorship", () => {
+  const userId = `vitest-authorship-${Date.now()}`;
+  const cleanupCollectionIds: string[] = [];
+
+  function requireDb(): void {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+  }
+
+  async function createTrackedCollection(title: string): Promise<string> {
+    const collection = await createCollection(userId, { title });
+    cleanupCollectionIds.push(collection.id);
+    return collection.id;
+  }
+
+  /** A clip whose note the AI wrote, the state every add without a note ends in. */
+  async function addClipWithGeneratedNote(collectionId: string, videoId: string): Promise<CollectionItem> {
+    const item = expectCollectionItem(
+      await addCollectionItem(userId, collectionId, { videoId, startSec: 10, endSec: 40 }, noFacts),
+    );
+    return expectCollectionItem(
+      await writeGeneratedSummary(userId, collectionId, item.id, {
+        status: "ready",
+        summary: "generated note",
+      }),
+    );
+  }
+
+  afterAll(async () => {
+    for (const id of cleanupCollectionIds) {
+      await sql`DELETE FROM collections WHERE id = ${id}`;
+    }
+  });
+
+  it("keeps a hand-written note when the clip's start and end move", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Authored note survives bounds");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "authnotexxx", startSec: 10, endSec: 40, summary: "my own note" },
+        noFacts,
+      ),
+    );
+    expect(item.summaryAuthored).toBe(true);
+
+    const moved = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { startSec: 15, endSec: 45 }, noFacts),
+    );
+
+    expect(moved).toMatchObject({
+      startSec: 15,
+      endSec: 45,
+      summary: "my own note",
+      summaryAuthored: true,
+    });
+  });
+
+  it("keeps a hand-written title when the clip's start and end move", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Authored title survives bounds");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "authtitlexx", startSec: 10, endSec: 40, title: "My clip" },
+        noFacts,
+      ),
+    );
+    expect(item).toMatchObject({ title: "My clip", titleAuthored: true });
+
+    const moved = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { startSec: 15, endSec: 45 }, noFacts),
+    );
+
+    expect(moved).toMatchObject({ title: "My clip", titleAuthored: true });
+  });
+
+  it("clears an AI-written note and marks it pending when the clip's bounds really change", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Generated note cleared on bounds");
+
+    const item = await addClipWithGeneratedNote(collectionId, "gennotexxxx");
+    expect(item).toMatchObject({ summary: "generated note", summaryAuthored: false });
+
+    const moved = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { startSec: 15, endSec: 45 }, noFacts),
+    );
+
+    expect(moved).toMatchObject({
+      summary: null,
+      summaryStatus: "pending",
+      summaryAuthored: false,
+    });
+  });
+
+  it("changes nothing when the same video, start and end are resent", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Identical pointer resent");
+
+    const item = await addClipWithGeneratedNote(collectionId, "resendsame1");
+
+    const resent = expectCollectionItem(
+      await updateCollectionItem(
+        userId,
+        collectionId,
+        item.id,
+        { videoId: "resendsame1", startSec: 10, endSec: 40 },
+        noFacts,
+      ),
+    );
+
+    expect(resent).toMatchObject({
+      summary: "generated note",
+      summaryStatus: "ready",
+      summaryAuthored: false,
+    });
+  });
+
+  it("marks a title set by hand as authored and hands it back to the AI when cleared with null", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Title set and cleared");
+
+    const item = await addClipWithGeneratedNote(collectionId, "titleclear1");
+    expect(item).toMatchObject({ title: null, titleAuthored: false });
+
+    const titled = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { title: "Named by hand" }),
+    );
+    expect(titled).toMatchObject({ title: "Named by hand", titleAuthored: true });
+
+    const cleared = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { title: null }),
+    );
+    expect(cleared).toMatchObject({ title: null, titleAuthored: false });
+  });
+
+  it("keeps a note sent in the same request as a bounds change as hand-written", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Note sent with bounds");
+
+    const item = await addClipWithGeneratedNote(collectionId, "notewithbnd");
+
+    const edited = expectCollectionItem(
+      await updateCollectionItem(
+        userId,
+        collectionId,
+        item.id,
+        { startSec: 15, endSec: 45, summary: "rewritten by hand" },
+        noFacts,
+      ),
+    );
+
+    expect(edited).toMatchObject({
+      startSec: 15,
+      endSec: 45,
+      summary: "rewritten by hand",
+      summaryAuthored: true,
+    });
+  });
+
+  it("never lets a generated note overwrite a hand-written one", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Generation spares authored note");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "genspares11", startSec: 10, endSec: 40, summary: "my own note" },
+        noFacts,
+      ),
+    );
+    // Moving the bounds leaves the AI-owned title outstanding, so the clip goes
+    // back to pending while its note stays the author's, the state in which a
+    // generation run reaches an authored note.
+    const pending = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { startSec: 15, endSec: 45 }, noFacts),
+    );
+    expect(pending).toMatchObject({ summaryStatus: "pending", summaryAuthored: true });
+
+    const afterGeneration = expectCollectionItem(
+      await writeGeneratedSummary(userId, collectionId, item.id, {
+        status: "ready",
+        summary: "machine note that must be ignored",
+      }),
+    );
+
+    expect(afterGeneration).toMatchObject({ summary: "my own note", summaryAuthored: true });
   });
 });
 

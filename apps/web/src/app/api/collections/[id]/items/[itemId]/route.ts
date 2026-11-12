@@ -8,6 +8,7 @@ const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 
 const updateItemSchema = z
   .object({
+    title: z.string().nullable().optional(),
     summary: z.string().nullable().optional(),
     videoId: z.string().regex(VIDEO_ID).optional(),
     startSec: z.number().int().nonnegative().nullable().optional(),
