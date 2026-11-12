@@ -1,5 +1,13 @@
 import { useRef, useState, type ReactNode, type RefObject } from "react";
-import { Maximize, Minimize, Play, SkipBack, SkipForward, Square } from "lucide-react";
+import {
+  ExternalLink,
+  Maximize,
+  Minimize,
+  Play,
+  SkipBack,
+  SkipForward,
+  Square,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   CollectionSharePopover,
@@ -11,6 +19,8 @@ import {
   STAGE_FRAME_CLASS,
 } from "./collection-player";
 import { CollectionStagePoster } from "./collection-stage-poster";
+import { ClipProgressMeter } from "./clip-progress-bar";
+import type { ClipProgress } from "@/lib/clip-progress";
 import { cn } from "@/lib/utils";
 import {
   formatRuntimeWords,
@@ -73,6 +83,8 @@ interface CollectionTransportProps {
   cuedIndex: number;
   /** True while the player fills the screen. */
   isFullscreen: boolean;
+  /** How far the clip on screen has played, as the player publishes it. */
+  progress: ClipProgress;
   /** Starts a run on the entry at this index of the sitting. */
   onPlay: (startIndex: number) => void;
   onStop: () => void;
@@ -154,6 +166,7 @@ interface StageCaptionProps {
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   fullscreenToggleRef?: RefObject<HTMLButtonElement | null>;
+  progress: ClipProgress;
 }
 
 /**
@@ -174,6 +187,7 @@ function StageCaption({
   isFullscreen,
   onToggleFullscreen,
   fullscreenToggleRef,
+  progress,
 }: StageCaptionProps) {
   const { entries } = sitting;
   const { canStepBack, canStepForward } = readSittingSteps(position);
@@ -194,26 +208,29 @@ function StageCaption({
     // which is the field's, so the caption lines up under it.
     <div className="hidden lg:grid shrink-0 lg:h-[var(--stage-caption-h)] lg:w-[var(--stage-field-w)] content-start grid-cols-[minmax(0,1fr)_auto] gap-x-6 px-1">
       <div className="min-w-0">
-        <p className="font-mono text-xs leading-[1.4] text-[var(--color-text-tertiary)]">
+        <div className="flex items-center gap-3 font-mono text-xs leading-[1.4] text-[var(--color-text-tertiary)]">
           {isLive && position ? (
             <>
-              <span className="text-[var(--color-playing)]">now playing</span>
-              <MetaSeparator />
-              <span>{ordinalPlace(position.ordinal ?? 1, position.total)}</span>
+              <span>
+                <span className="text-[var(--color-playing)]">now playing</span>
+                <MetaSeparator />
+                <span>{ordinalPlace(position.ordinal ?? 1, position.total)}</span>
+              </span>
+              <ClipProgressMeter progress={progress} className="flex-1" />
             </>
           ) : isDone && position ? (
             <span>{ordinalPlace(position.total, position.total)}</span>
           ) : (
             entry && <span>{ordinalPlace(index + 1, entries.length)}</span>
           )}
-        </p>
+        </div>
         <p className="mt-1 h-[2.7em] line-clamp-2 xl:h-auto xl:line-clamp-1 font-heading text-[1.125rem] font-semibold leading-[1.35] tracking-tight text-[var(--color-text-primary)]">
           {isDone ? "Playback complete." : (entry?.title ?? "")}
         </p>
       </div>
 
       {isPlaying && (
-        <div className="flex items-center gap-2 self-start [&_button]:size-9">
+        <div className="flex items-center gap-2 self-start [&_a]:size-9 [&_button]:size-9">
           <Button
             variant="outline"
             size="icon-sm"
@@ -257,6 +274,24 @@ function StageCaption({
           >
             {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
           </Button>
+          {entry && (
+            <Button
+              asChild
+              variant="outline"
+              size="icon-sm"
+              className={QUIET_ICON_BUTTON}
+            >
+              <a
+                href={entry.watchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open in YouTube"
+                aria-label="Open in YouTube"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </Button>
+          )}
         </div>
       )}
 
@@ -294,6 +329,7 @@ export function CollectionTransport({
   position,
   cuedIndex,
   isFullscreen,
+  progress,
   onPlay,
   onStop,
   onPrev,
@@ -530,6 +566,7 @@ export function CollectionTransport({
             isFullscreen={isFullscreen}
             onToggleFullscreen={onToggleFullscreen}
             fullscreenToggleRef={fullscreenToggles?.stage}
+            progress={progress}
           />
         </div>
 

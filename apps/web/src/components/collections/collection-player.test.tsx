@@ -2,7 +2,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRef, type RefObject } from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createClipProgress } from "@/lib/clip-progress";
+import { PLAYER_STATE } from "@/lib/collection-playback";
 import {
   CollectionPlayer,
   type CollectionPlayerHandle,
@@ -44,7 +46,7 @@ function playerItem(
 }
 
 function renderPlayer(items: CollectionPlayerItem[]) {
-  return render(<CollectionPlayer items={items} />);
+  return render(<CollectionPlayer items={items} progress={createClipProgress()} />);
 }
 
 /** The one element the iframe lives inside, whatever shape it is drawn at. */
@@ -135,6 +137,7 @@ describe("CollectionPlayer frame shape", () => {
       <CollectionPlayer
         items={[playerItem("item-a", VIDEO_A, LANDSCAPE), playerItem("item-b", VIDEO_B, VERTICAL)]}
         startIndex={1}
+        progress={createClipProgress()}
       />,
     );
 
@@ -206,7 +209,12 @@ describe("CollectionPlayer starting point and jumps", () => {
 
   function renderWithHandle(startIndex?: number): RefObject<CollectionPlayerHandle | null> {
     const handle = createRef<CollectionPlayerHandle>();
-    render(<CollectionPlayer items={ITEMS} startIndex={startIndex} ref={handle} />);
+    render(<CollectionPlayer
+        items={ITEMS}
+        startIndex={startIndex}
+        progress={createClipProgress()}
+        ref={handle}
+      />);
     return handle;
   }
 
@@ -266,5 +274,65 @@ describe("CollectionPlayer starting point and jumps", () => {
     const handle = renderWithHandle();
 
     expect(jumpTo(handle, "item-c")).toBe(false);
+  });
+});
+
+describe("CollectionPlayer lock to the clip", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("builds the player with YouTube's own controls and keyboard shortcuts off", async () => {
+    // Slice 5 guarantee: the viewer cannot seek through YouTube's controls or keys.
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+
+    expect(livePlayer().playerVars).toMatchObject({ controls: 0, disablekb: 1 });
+  });
+
+  it("pauses the video on a click and resumes it on the next", async () => {
+    // Slice 5 guarantee: clicking the video toggles pause and resume.
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+    await playFor(1);
+    const player = livePlayer();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause video" }));
+    await settle();
+    expect(player.calls.at(-1)).toEqual({ kind: "pause" });
+    expect(player.getPlayerState()).toBe(PLAYER_STATE.PAUSED);
+
+    fireEvent.click(screen.getByRole("button", { name: "Play video" }));
+    await settle();
+    expect(player.calls.at(-1)).toEqual({ kind: "play" });
+    expect(player.getPlayerState()).toBe(PLAYER_STATE.PLAYING);
+  });
+
+  it("lets nothing inside the video take a click while the clip plays", async () => {
+    // Slice 5 guarantee: the iframe sits in an inert subtree, so a browser routes no
+    // pointer or focus into it, and the layer over it is what takes the click.
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+    await playFor(1);
+
+    const iframeHost = frame().querySelector("[id^='collection-player-']");
+    if (!iframeHost) throw new Error("No iframe host was built");
+    const inertRegion = iframeHost.closest("[inert]");
+    expect(inertRegion).not.toBeNull();
+    expect(frame().contains(inertRegion)).toBe(true);
+
+    const layer = screen.getByRole("button", { name: "Pause video" });
+    expect(frame().contains(layer)).toBe(true);
+    expect(layer.contains(iframeHost)).toBe(false);
+    expect(layer.className).toContain("absolute");
+    expect(layer.className).toContain("inset-0");
   });
 });

@@ -91,7 +91,8 @@ function entryRangeLabel(startSec: number | null, endSec: number | null): string
   return "full clip";
 }
 
-function watchUrl(videoId: string, startSec: number | null): string {
+/** The video on YouTube itself, opened at the clip's start. */
+export function watchUrl(videoId: string, startSec: number | null): string {
   const base = `https://youtube.com/watch?v=${videoId}`;
   return startSec !== null ? `${base}&t=${startSec}s` : base;
 }

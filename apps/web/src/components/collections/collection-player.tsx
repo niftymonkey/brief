@@ -11,14 +11,16 @@ import {
   type Ref,
   type RefObject,
 } from "react";
-import { CircleAlert, Loader2, Minimize, Play, RotateCw } from "lucide-react";
+import { CircleAlert, ExternalLink, Loader2, Minimize, Play, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useElementFullscreen } from "@/hooks/use-element-fullscreen";
-import { entryAspectRatio, entryTitle } from "@/lib/collection-entries";
+import { CLIP_PROGRESS_SAMPLE_MS, clipProgressFraction, type ClipProgress } from "@/lib/clip-progress";
+import { entryAspectRatio, entryTitle, watchUrl } from "@/lib/collection-entries";
 import { formatRange } from "@/lib/collection-item-input";
 import {
   BOUNDARY_POLL_INTERVAL_MS,
   initialPlaybackState,
+  PLAYER_STATE,
   readSittingPosition,
   reducePlayback,
   type PlaybackEffect,
@@ -27,6 +29,7 @@ import {
   type SittingPosition,
 } from "@/lib/collection-playback";
 import { cn } from "@/lib/utils";
+import { ClipProgressMeter } from "./clip-progress-bar";
 import { loadYouTubeIframeApi } from "@/lib/youtube-iframe-api";
 
 export interface CollectionPlayerItem {
@@ -79,6 +82,11 @@ interface CollectionPlayerProps {
    * full screen.
    */
   fullscreenReturnFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * Where the player publishes how far the clip on screen has played, which the page
+   * also hands to the wide screen's caption so both bars read the same clock.
+   */
+  progress: ClipProgress;
   ref?: Ref<CollectionPlayerHandle>;
 }
 
@@ -163,6 +171,7 @@ export function CollectionPlayer({
   onPositionChange,
   onFullscreenChange,
   fullscreenReturnFocusRef,
+  progress,
   ref,
 }: CollectionPlayerProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -181,6 +190,8 @@ export function CollectionPlayer({
   const [state, setState] = useState<PlaybackState>(initialPlaybackState);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [apiFailed, setApiFailed] = useState(false);
+  /** Whether YouTube last reported the video playing, which is what the click on it toggles. */
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   /** Bumped by the Try again control to build the player over from scratch. */
   const [loadAttempt, setLoadAttempt] = useState(0);
   const fullscreen = useElementFullscreen(frameRef, {
@@ -336,8 +347,14 @@ export function CollectionPlayer({
       playerRef.current = new window.YT.Player(host.id, {
         width: "100%",
         height: "100%",
+        // YouTube's own controls and keys would let the viewer seek out of the clip,
+        // so the player keeps neither and the page carries the transport instead.
         playerVars: {
           enablejsapi: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          iv_load_policy: 3,
           rel: 0,
           // iOS keeps the player inline instead of hijacking the whole screen.
           playsinline: 1,
@@ -353,6 +370,7 @@ export function CollectionPlayer({
           onStateChange: (event) => {
             const player = playerRef.current;
             if (!player) return;
+            setIsVideoPlaying(event.data === PLAYER_STATE.PLAYING);
             dispatchRef.current({
               kind: "playerState",
               state: event.data,
@@ -443,6 +461,33 @@ export function CollectionPlayer({
 
   const currentItem = state.index >= 0 ? (items[state.index] ?? null) : null;
   const range = currentItem ? formatRange(currentItem.startSec, currentItem.endSec) : "";
+  const isClipLive = state.status === "playing";
+  const isClipRunning = isClipLive && state.armed && isVideoPlaying;
+
+  useEffect(() => {
+    // Until a load proves it is on screen, the clock still belongs to the clip before
+    // it, so the new clip reads as just started.
+    if (!state.armed) {
+      progress.publish(0);
+      return;
+    }
+    if (!currentItem || !isClipRunning) return;
+    const sampleClock = () => {
+      const player = playerRef.current;
+      if (!player) return;
+      progress.publish(
+        clipProgressFraction(
+          player.getCurrentTime(),
+          currentItem.startSec,
+          currentItem.endSec,
+          player.getDuration(),
+        ),
+      );
+    };
+    sampleClock();
+    const sampler = window.setInterval(sampleClock, CLIP_PROGRESS_SAMPLE_MS);
+    return () => window.clearInterval(sampler);
+  }, [currentItem, isClipRunning, progress, state.armed]);
 
   const frameAspect = entryAspectRatio(frameItem(items, state, startIndex)?.aspectRatio ?? null);
   const frameStyle: FrameStyle = { "--frame-aspect": String(frameAspect) };
@@ -459,6 +504,18 @@ export function CollectionPlayer({
   const handleResume = () => {
     setAutoplayBlocked(false);
     playerRef.current?.playVideo();
+  };
+
+  const handleTogglePlayback = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const playerState = player.getPlayerState();
+    if (playerState === PLAYER_STATE.PLAYING || playerState === PLAYER_STATE.BUFFERING) {
+      player.pauseVideo();
+      return;
+    }
+    setAutoplayBlocked(false);
+    player.playVideo();
   };
 
   return (
@@ -486,14 +543,27 @@ export function CollectionPlayer({
         >
           {/* Full screen draws the video at its true shape, as large as the frame
               allows, rather than handing a Short a landscape box to letterbox in. */}
+          {/* Inert, so a browser sends no pointer or focus into the iframe: its title,
+              logo and end screens all lead out of the clip. */}
           <div
             ref={containerRef}
+            inert
             className={cn(
               "absolute inset-0",
               fullscreen.mode === "off"
                 ? "w-full h-full"
                 : "m-auto w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] h-[min(100cqh,calc(100cqw/var(--frame-aspect)))]",
             )}
+          />
+          {/* The one thing on the video that takes a click. It lies inside the frame,
+              so it follows the frame into full screen, and before the exit control,
+              which draws over it. */}
+          <button
+            type="button"
+            onClick={handleTogglePlayback}
+            disabled={!isClipLive}
+            aria-label={isVideoPlaying ? "Pause video" : "Play video"}
+            className="absolute inset-0 cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]"
           />
           {/* The header is out of reach while the frame fills the screen, so the way
               back out is drawn inside it, and focus moves to it so a keyboard can
@@ -542,6 +612,7 @@ export function CollectionPlayer({
           the entries list underneath the player. A wide screen captions the stage
           from the page instead, idle and playing alike. */}
       <div className="mt-3.5 lg:hidden">
+        <ClipProgressMeter progress={progress} className="mb-2.5" />
         <div className="flex items-baseline gap-2 h-[1.4em]">
           <p className="min-w-0 truncate font-medium leading-[1.4] text-[var(--color-text-primary)]">
             {currentItem ? (
@@ -559,6 +630,18 @@ export function CollectionPlayer({
             <span className="shrink-0 font-mono text-xs text-[var(--color-text-tertiary)]">
               {range}
             </span>
+          )}
+          {currentItem && (
+            <a
+              href={watchUrl(currentItem.videoId, currentItem.startSec)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open in YouTube"
+              aria-label="Open in YouTube"
+              className="ml-auto shrink-0 self-center text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
           )}
         </div>
         <p className="h-[3em] line-clamp-2 text-sm sm:text-[0.9375rem] leading-[1.5] text-[var(--color-text-secondary)]">

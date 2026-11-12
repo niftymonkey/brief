@@ -542,3 +542,77 @@ describe("SharedCollection clip titles", () => {
     expect(screen.queryAllByRole("textbox")).toEqual([]);
   });
 });
+
+describe("SharedCollection clip progress and the way out to YouTube", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  /**
+   * What every clip progress bar on the page reads, as a percentage. The stage's
+   * caption and the phone's caption both carry one, and media queries do not resolve
+   * here, so both are in the document and both must agree.
+   */
+  function progressReadings(): number[] {
+    return screen
+      .getAllByRole("progressbar", { name: "Clip progress" })
+      .map((bar) => Number(bar.getAttribute("aria-valuenow")));
+  }
+
+  async function pressNext(): Promise<void> {
+    fireEvent.click(headerButton("Next entry"));
+    await settle();
+  }
+
+  it("shows progress through the clip's own range, not through the whole video", async () => {
+    // Slice 4 guarantee: progress is the position within the clip's range.
+    renderShared();
+    await startSharedSitting();
+    // The third entry is 0:30 to 0:40 of a ten-minute video.
+    await pressNext();
+    await pressNext();
+    await playFor(5);
+
+    const elapsedInClip = livePlayer().getCurrentTime() - 30;
+    const expected = Math.round((elapsedInClip / 10) * 100);
+    expect(expected).toBeGreaterThan(40);
+    expect(progressReadings()).toEqual([expected, expected]);
+  });
+
+  it("starts the progress over when the run moves to the next clip", async () => {
+    // Slice 4 guarantee: progress resets per clip.
+    renderShared();
+    await startSharedSitting();
+    await playFor(5);
+    expect(progressReadings().every((reading) => reading >= 40)).toBe(true);
+
+    await pressNext();
+
+    expect(screen.getByText("2 of 3")).toBeTruthy();
+    expect(progressReadings()).toEqual([0, 0]);
+  });
+
+  it("links out to the clip on screen at its start time, in a new tab", async () => {
+    // Slice 5 guarantee: "Open in YouTube" is the current clip's video at its start.
+    renderShared();
+    await startSharedSitting();
+    await pressNext();
+    await pressNext();
+
+    const links = screen.getAllByRole("link", { name: "Open in YouTube" });
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link.getAttribute("href")).toBe(`https://youtube.com/watch?v=${VIDEO_B}&t=30s`);
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    }
+  });
+});

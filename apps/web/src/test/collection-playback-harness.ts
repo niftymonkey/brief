@@ -35,6 +35,8 @@ export class FakeYouTubePlayer {
   static instances: FakeYouTubePlayer[] = [];
 
   readonly calls: PlayerCall[] = [];
+  /** The player parameters the component built this player with. */
+  readonly playerVars: YT.PlayerVars;
   destroyed = false;
 
   private readonly events: YT.PlayerEvents;
@@ -44,6 +46,7 @@ export class FakeYouTubePlayer {
 
   constructor(_host: string | HTMLElement, options: YT.PlayerOptions) {
     this.events = options.events ?? {};
+    this.playerVars = options.playerVars ?? {};
     FakeYouTubePlayer.instances.push(this);
     setTimeout(() => this.emitReady(), 0);
   }
