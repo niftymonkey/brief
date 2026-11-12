@@ -474,3 +474,116 @@ describe("CollectionDetail server rendering", () => {
     expect(second).toEqual(first);
   });
 });
+
+describe("CollectionDetail clip words", () => {
+  const pendingCollection = () => {
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], summaryStatus: "pending" };
+    return collection;
+  };
+
+  /** The collection as the server answers once the first entry's words have landed. */
+  const writtenCollection = () => {
+    const collection = makeCollection();
+    collection.items[0] = {
+      ...collection.items[0],
+      title: "The written title",
+      summary: "The written note.",
+      summaryStatus: "ready",
+    };
+    return collection;
+  };
+
+  const collectionReads = (fetchMock: ReturnType<typeof vi.fn>): number =>
+    fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input) === "/api/collections/collection-1" && (init?.method ?? "GET") === "GET",
+    ).length;
+
+  /**
+   * Lets wall clock pass a second at a time. React holds a render until its
+   * `act` ends, so one long `act` would hide every update from the page until
+   * the end, where a real page renders between polls.
+   */
+  const waitSeconds = async (seconds: number): Promise<void> => {
+    for (let elapsed = 0; elapsed < seconds; elapsed += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+    }
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("shows a pending entry's words once a later read of the collection carries them", async () => {
+    const answers = [pendingCollection(), writtenCollection()];
+    const fetchMock = vi.fn(async () => {
+      const body = answers.length > 1 ? answers.shift() : answers[0];
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    globalThis.fetch = fetchMock;
+
+    renderDetail(pendingCollection());
+    expect(screen.getByText("Writing a note...")).toBeTruthy();
+
+    await waitSeconds(5);
+
+    expect(screen.queryByText("Writing a note...")).toBeNull();
+    expect(screen.getAllByText("The written note.").length).toBeGreaterThan(0);
+    expect(collectionReads(fetchMock)).toBeGreaterThanOrEqual(2);
+  });
+
+  it("stops reading the collection once no entry is pending", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(writtenCollection()), { status: 200 }));
+    globalThis.fetch = fetchMock;
+
+    renderDetail(pendingCollection());
+    await waitSeconds(25);
+
+    // The first read settles the only pending entry, so it is the last one.
+    expect(collectionReads(fetchMock)).toBe(1);
+  });
+
+  it("gives up reading the collection after ninety seconds of nothing landing", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(pendingCollection()), { status: 200 }));
+    globalThis.fetch = fetchMock;
+
+    renderDetail(pendingCollection());
+    await waitSeconds(95);
+    const readsAtDeadline = collectionReads(fetchMock);
+    await waitSeconds(30);
+
+    expect(readsAtDeadline).toBeGreaterThan(0);
+    expect(collectionReads(fetchMock)).toBe(readsAtDeadline);
+  });
+
+  it("never asks the browser to write an added entry's words", async () => {
+    // The add route schedules the words itself; a second request from the page
+    // would pay for them twice.
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body =
+        init?.method === "POST"
+          ? { ...makeItem("item-d", VIDEO_B, 0, 10, 3), summaryStatus: "pending" }
+          : writtenCollection();
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    globalThis.fetch = fetchMock;
+
+    renderDetail();
+    await addEntry();
+    await waitSeconds(5);
+
+    const summarizeCalls = fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/summarize"));
+    expect(summarizeCalls).toEqual([]);
+  });
+});

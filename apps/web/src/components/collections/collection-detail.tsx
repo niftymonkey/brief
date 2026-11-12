@@ -44,6 +44,7 @@ import {
 } from "@/lib/collection-entries";
 import type { SittingPosition } from "@/lib/collection-playback";
 import { notifyCollectionsChanged } from "@/lib/collections-events";
+import { usePendingClipWords } from "@/components/collections/use-pending-clip-words";
 import type { CollectionShareState } from "@/components/collections/collection-share-popover";
 import type { CollectionItem, CollectionWithItems } from "@/lib/collections";
 
@@ -147,7 +148,10 @@ export function CollectionDetail({
     router.refresh();
   };
 
-  const summarizeItem = async (itemId: string) => {
+  usePendingClipWords(collectionId, items, setItems, editable);
+
+  /** Asks again for the words of an entry whose generation failed. */
+  const retryClipWords = async (itemId: string) => {
     try {
       const updated = await requestJson<CollectionItem>(
         `/api/collections/${collectionId}/items/${itemId}/summarize`,
@@ -181,12 +185,6 @@ export function CollectionDetail({
     setItems((prev) => sortByPosition([...prev, item]));
     notifyCollectionsChanged();
     router.refresh();
-    // Client-driven async summary: the entry renders 'pending' immediately, then
-    // updates in place when generation resolves. Fire-and-forget so the add
-    // returns without blocking on the LLM call.
-    if (item.summaryStatus !== "ready") {
-      void summarizeItem(item.id);
-    }
   };
 
   /**
@@ -447,7 +445,7 @@ export function CollectionDetail({
                   controls={{
                     onRemove: () => handleRemove(entry.id),
                     onSummarySave: (summary) => handleSummarySave(entry.id, summary),
-                    onRetrySummary: () => summarizeItem(entry.id),
+                    onRetrySummary: () => retryClipWords(entry.id),
                     onSwap: (videoId, startSec, endSec) =>
                       handleSwap(entry.id, videoId, startSec, endSec),
                   }}

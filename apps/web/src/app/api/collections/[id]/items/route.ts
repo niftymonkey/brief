@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { z } from "zod";
 import { InvalidClipRangeError, addCollectionItem } from "@/lib/collections";
+import { scheduleClipWords } from "@/lib/schedule-clip-words";
 
 // Mirrors the video-id shape in @brief/core's parser (`/^[a-zA-Z0-9_-]{11}$/`).
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
@@ -21,6 +22,9 @@ const addItemSchema = z
       data.startSec <= data.endSec,
     { message: "startSec must be less than or equal to endSec", path: ["endSec"] },
   );
+
+// Covers the clip words run scheduled after the response.
+export const maxDuration = 60;
 
 export async function POST(
   request: NextRequest,
@@ -51,6 +55,7 @@ export async function POST(
     if (!item) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
     }
+    scheduleClipWords(user, id, item);
     return NextResponse.json(item);
   } catch (error) {
     if (error instanceof InvalidClipRangeError) {

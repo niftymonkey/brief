@@ -13,12 +13,19 @@
  */
 
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { generateText, type ModelMessage } from "ai";
+import { generateText, Output, type ModelMessage } from "ai";
+import type { z } from "zod";
 
 export interface OpenRouterRequest {
   model: string;
   messages: ModelMessage[];
   maxOutputTokens: number;
+  /**
+   * The JSON shape the reply must take. The production adapter hands it to the
+   * provider as structured output, and the reply still arrives as `text` (the
+   * JSON), which the caller parses against the same schema.
+   */
+  outputSchema?: z.ZodType;
   signal?: AbortSignal;
 }
 
@@ -75,6 +82,7 @@ export function createOpenRouterClient(
         model: openrouter(req.model),
         messages: req.messages,
         maxOutputTokens: req.maxOutputTokens,
+        ...(req.outputSchema ? { output: Output.object({ schema: req.outputSchema }) } : {}),
         // AI SDK v6 has no default request timeout; without one a stuck
         // upstream call would hang indefinitely. 60s is generous enough for
         // worst-case vision payloads but short enough to surface real outages.
