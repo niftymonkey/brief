@@ -23,6 +23,7 @@ function item(overrides: Partial<SittingItem> & { id: string }): SittingItem {
     videoId: "vid",
     startSec: null,
     endSec: null,
+    title: null,
     videoTitle: null,
     aspectRatio: null,
     ...overrides,

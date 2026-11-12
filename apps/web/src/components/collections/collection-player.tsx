@@ -14,7 +14,7 @@ import {
 import { CircleAlert, Loader2, Minimize, Play, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useElementFullscreen } from "@/hooks/use-element-fullscreen";
-import { entryAspectRatio } from "@/lib/collection-entries";
+import { entryAspectRatio, entryTitle } from "@/lib/collection-entries";
 import { formatRange } from "@/lib/collection-item-input";
 import {
   BOUNDARY_POLL_INTERVAL_MS,
@@ -32,6 +32,8 @@ import { loadYouTubeIframeApi } from "@/lib/youtube-iframe-api";
 export interface CollectionPlayerItem {
   id: string;
   videoId: string;
+  /** The clip's own title, null until one is written. */
+  title: string | null;
   videoTitle: string | null;
   summary: string | null;
   startSec: number | null;
@@ -115,10 +117,6 @@ export const STAGE_FIELD_MEASURE_CLASS = "lg:[container-type:size]";
 /** The frame at its entry's own shape, as large as the stage's field allows. */
 export const STAGE_FRAME_CLASS =
   "lg:w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] lg:aspect-[var(--frame-aspect)]";
-
-function itemLabel(item: CollectionPlayerItem): string {
-  return item.videoTitle ?? item.videoId;
-}
 
 /**
  * The entry whose shape the frame is drawn at, which is the one on screen wherever
@@ -547,7 +545,7 @@ export function CollectionPlayer({
         <div className="flex items-baseline gap-2 h-[1.4em]">
           <p className="min-w-0 truncate font-medium leading-[1.4] text-[var(--color-text-primary)]">
             {currentItem ? (
-              itemLabel(currentItem)
+              entryTitle(currentItem)
             ) : isDone ? (
               "Playback complete."
             ) : (
@@ -581,7 +579,7 @@ export function CollectionPlayer({
                 <CircleAlert className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>
                   <span className="font-medium">
-                    Could not play {failed ? itemLabel(failed) : "this item"}.
+                    Could not play {failed ? entryTitle(failed) : "this item"}.
                   </span>{" "}
                   {failure.reason}
                 </span>

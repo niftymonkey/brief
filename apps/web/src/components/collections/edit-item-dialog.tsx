@@ -81,7 +81,7 @@ export function EditItemDialog({
         <DialogHeader>
           <DialogTitle>Replace video or range</DialogTitle>
           <DialogDescription>
-            The item keeps its place in the collection. Its summary resets so you can write a fresh one.
+            The item keeps its place in the collection. A title or note you wrote yourself is kept, and any written for you is rewritten for the new clip.
           </DialogDescription>
         </DialogHeader>
 

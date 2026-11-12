@@ -34,6 +34,7 @@ function playerItem(
   return {
     id,
     videoId,
+    title: null,
     videoTitle: `Title ${id}`,
     summary: null,
     startSec: 0,
@@ -152,6 +153,35 @@ describe("CollectionPlayer frame shape", () => {
     expect(className).toContain("mx-auto");
     expect(className).toContain("sm:w-full");
     expect(className).toContain("sm:aspect-video");
+  });
+});
+
+describe("CollectionPlayer caption", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("captions a clip with its own title, in place of the video's name", async () => {
+    renderPlayer([{ ...playerItem("item-a", VIDEO_A, LANDSCAPE), title: "The clip's own title" }]);
+    await startSitting();
+
+    expect(screen.getByText("The clip's own title")).toBeTruthy();
+    expect(screen.queryByText("Title item-a")).toBeNull();
+  });
+
+  it("captions a clip with no title of its own with the video's name", async () => {
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+
+    expect(screen.getByText("Title item-a")).toBeTruthy();
   });
 });
 

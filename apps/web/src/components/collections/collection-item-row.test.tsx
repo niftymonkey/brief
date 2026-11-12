@@ -11,20 +11,22 @@ const VERTICAL = 0.5625;
 interface RowOptions {
   isCued?: boolean;
   onJump?: () => void;
+  /** The clip's own title, null while it has none. */
+  title?: string | null;
 }
 
 function renderRow(
   aspectRatio: number | null,
   isActive = false,
   isLast = true,
-  { isCued = false, onJump }: RowOptions = {},
+  { isCued = false, onJump, title = null }: RowOptions = {},
 ): void {
   const item: CollectionItem = {
     id: "item-a",
     videoId: "vid",
     startSec: null,
     endSec: null,
-    title: null,
+    title,
     titleAuthored: false,
     videoTitle: "An entry",
     durationSec: 90,
@@ -84,6 +86,23 @@ function failThumbnail(): void {
   if (!image) throw new Error("The row is showing no thumbnail to fail");
   fireEvent.error(image);
 }
+
+describe("CollectionItemRow title", () => {
+  afterEach(cleanup);
+
+  it("shows a clip's own title in its row, in place of the video's name", () => {
+    renderRow(null, false, true, { title: "The clip's own title" });
+
+    expect(document.querySelector("h3")?.textContent).toBe("The clip's own title");
+    expect(screen.queryByText("An entry")).toBeNull();
+  });
+
+  it("shows the video's name in the row of a clip with no title of its own", () => {
+    renderRow(null);
+
+    expect(document.querySelector("h3")?.textContent).toBe("An entry");
+  });
+});
 
 describe("CollectionItemRow thumbnail", () => {
   afterEach(cleanup);
@@ -231,6 +250,7 @@ describe("CollectionItemRow drag grip", () => {
         controls={{
           onRemove: settled,
           onSummarySave: settled,
+          onTitleSave: settled,
           onRetrySummary: settled,
           onSwap: settled,
         }}

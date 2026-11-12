@@ -17,6 +17,8 @@ export interface SittingItem {
   videoId: string;
   startSec: number | null;
   endSec: number | null;
+  /** The clip's own title, null until one is written. */
+  title: string | null;
   videoTitle: string | null;
   /**
    * The video's frame shape as width divided by height, or null when the shape
@@ -261,6 +263,22 @@ export function isEntryActive(entry: CollectionEntry, activeEntryId: string | nu
   return activeEntryId !== null && entry.id === activeEntryId;
 }
 
+/** The parts of an item its name is read from. */
+export interface EntryNameSource {
+  videoId: string;
+  title: string | null;
+  videoTitle: string | null;
+}
+
+/**
+ * What an entry is called wherever it is shown: the clip's own title, and while it
+ * has none, the video's name, then the video's id. `knownVideoTitle` is the name the
+ * viewer's own briefs give the video, used when the item never stored one.
+ */
+export function entryTitle(item: EntryNameSource, knownVideoTitle: string | null = null): string {
+  return item.title ?? item.videoTitle ?? knownVideoTitle ?? item.videoId;
+}
+
 /**
  * Reads an ordered list of collection items as a sitting, resolving each entry's
  * length and start position from the item's own bounds first and the video's
@@ -297,7 +315,7 @@ export function buildSitting(
       ordinal,
       anchorId: entryAnchorId(ordinal),
       videoId: item.videoId,
-      title: item.videoTitle ?? videoFacts?.title ?? item.videoId,
+      title: entryTitle(item, videoFacts?.title ?? null),
       channelName: videoFacts?.channelName ?? null,
       startSec: item.startSec,
       endSec: item.endSec,

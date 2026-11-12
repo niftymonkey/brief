@@ -15,6 +15,7 @@ function sittingOf(
     ...item,
     startSec: null,
     endSec: null,
+    title: null,
     videoTitle: null,
   }));
   const facts = Object.fromEntries(

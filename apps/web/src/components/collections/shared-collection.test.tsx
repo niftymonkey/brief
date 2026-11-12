@@ -26,10 +26,10 @@ vi.mock("@/lib/youtube-iframe-api", () => ({
   loadYouTubeIframeApi: () => Promise.resolve(),
 }));
 
-function renderShared() {
+function renderShared(collection = makeCollection()) {
   return render(
     <SharedCollection
-      collection={makeCollection()}
+      collection={collection}
       videoFacts={VIDEO_FACTS}
       updatedLabel="today"
     />,
@@ -503,5 +503,42 @@ describe("SharedCollection stage", () => {
 
     expect(container.firstElementChild?.lastElementChild?.tagName).toBe("SECTION");
     expect(screen.queryByText(/Total runtime of/)).toBeNull();
+  });
+});
+
+describe("SharedCollection clip titles", () => {
+  /** The shared collection with its first clip carrying a title of its own. */
+  const titledCollection = () => {
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], title: "The clip's own title" };
+    return collection;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("shows a clip's own title on its row and on the stage", () => {
+    renderShared(titledCollection());
+
+    const rowTitles = [...document.querySelectorAll("h3")].map((heading) => heading.textContent);
+    expect(rowTitles).toEqual(["The clip's own title", "Title item-b", "Title item-c"]);
+    expect(within(stage()).getByText("The clip's own title")).toBeTruthy();
+    expect(screen.queryByText("Title item-a")).toBeNull();
+  });
+
+  it("offers a reader no way to rename a clip", () => {
+    renderShared(titledCollection());
+
+    expect(screen.queryAllByRole("button", { name: /rename/i })).toEqual([]);
+    expect(screen.queryAllByRole("textbox")).toEqual([]);
   });
 });

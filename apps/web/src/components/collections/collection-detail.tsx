@@ -254,6 +254,18 @@ export function CollectionDetail({
     setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
   };
 
+  const handleTitleSave = async (itemId: string, title: string | null) => {
+    const updated = await requestJson<CollectionItem>(
+      `/api/collections/${collectionId}/items/${itemId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      },
+    );
+    setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+  };
+
   const handleSwap = async (
     itemId: string,
     videoId: string,
@@ -445,6 +457,7 @@ export function CollectionDetail({
                   controls={{
                     onRemove: () => handleRemove(entry.id),
                     onSummarySave: (summary) => handleSummarySave(entry.id, summary),
+                    onTitleSave: (title) => handleTitleSave(entry.id, title),
                     onRetrySummary: () => retryClipWords(entry.id),
                     onSwap: (videoId, startSec, endSec) =>
                       handleSwap(entry.id, videoId, startSec, endSec),

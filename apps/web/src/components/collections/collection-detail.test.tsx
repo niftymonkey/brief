@@ -534,11 +534,11 @@ describe("CollectionDetail clip words", () => {
     globalThis.fetch = fetchMock;
 
     renderDetail(pendingCollection());
-    expect(screen.getByText("Writing a note...")).toBeTruthy();
+    expect(screen.getByText("Writing a title and note...")).toBeTruthy();
 
     await waitSeconds(5);
 
-    expect(screen.queryByText("Writing a note...")).toBeNull();
+    expect(screen.queryByText("Writing a title and note...")).toBeNull();
     expect(screen.getAllByText("The written note.").length).toBeGreaterThan(0);
     expect(collectionReads(fetchMock)).toBeGreaterThanOrEqual(2);
   });
@@ -585,5 +585,79 @@ describe("CollectionDetail clip words", () => {
 
     const summarizeCalls = fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/summarize"));
     expect(summarizeCalls).toEqual([]);
+  });
+});
+
+describe("CollectionDetail clip titles", () => {
+  /** PATCH bodies the page sent for one entry, parsed. */
+  const patchBodies = (fetchMock: ReturnType<typeof vi.fn>, itemId: string): unknown[] =>
+    fetchMock.mock.calls
+      .filter(
+        ([input, init]) =>
+          String(input) === `/api/collections/collection-1/items/${itemId}` &&
+          init?.method === "PATCH",
+      )
+      .map(([, init]) => JSON.parse(String(init?.body)));
+
+  /** Answers a title PATCH the way the route does, with the item as it now stands. */
+  const answerTitlePatches = () =>
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const sent = JSON.parse(String(init?.body ?? "{}"));
+      const title: string | null = sent.title ?? null;
+      const body = {
+        ...makeItem("item-a", VIDEO_A, 0, 10, 0),
+        title,
+        titleAuthored: title !== null,
+        summaryStatus: title === null ? "pending" : "ready",
+      };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+
+  const renameFirstEntry = async (typed: string): Promise<void> => {
+    fireEvent.click(screen.getAllByRole("button", { name: /^Rename / })[0]);
+    const field = screen.getByRole("textbox", { name: "Clip title" });
+    fireEvent.change(field, { target: { value: typed } });
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+    await settle();
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("renames a clip in place and sends the new title as hand-written", async () => {
+    const fetchMock = answerTitlePatches();
+    globalThis.fetch = fetchMock;
+    renderDetail();
+
+    await renameFirstEntry("  A name of my own  ");
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([{ title: "A name of my own" }]);
+    expect(document.querySelector("h3")?.textContent).toBe("A name of my own");
+    expect(screen.queryByRole("textbox", { name: "Clip title" })).toBeNull();
+  });
+
+  it("hands a cleared title back to the AI", async () => {
+    const fetchMock = answerTitlePatches();
+    globalThis.fetch = fetchMock;
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], title: "An old name", titleAuthored: true };
+    renderDetail(collection);
+
+    await renameFirstEntry("   ");
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([{ title: null }]);
+    // While the AI writes a new one, the row reads the video's name.
+    expect(document.querySelector("h3")?.textContent).toBe("Title item-a");
   });
 });

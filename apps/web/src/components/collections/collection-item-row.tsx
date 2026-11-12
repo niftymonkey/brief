@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type KeyboardEvent } from "react";
 import { GripVertical, Loader2, Pencil, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EditItemDialog } from "@/components/collections/edit-item-dialog";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,8 @@ import type { CollectionItem } from "@/lib/collections";
 export interface CollectionItemRowControls {
   onRemove: () => Promise<void>;
   onSummarySave: (summary: string) => Promise<void>;
+  /** Saves the clip's title: a string is the author's own, null hands it back to the AI. */
+  onTitleSave: (title: string | null) => Promise<void>;
   onRetrySummary: () => Promise<void>;
   onSwap: (videoId: string, startSec: number | null, endSec: number | null) => Promise<void>;
 }
@@ -83,6 +86,9 @@ export function CollectionItemRow({
   controls,
   drag,
 }: CollectionItemRowProps) {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(item.title ?? "");
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [isEditingSummary, setIsEditingSummary] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState(item.summary ?? "");
   const [isSavingSummary, setIsSavingSummary] = useState(false);
@@ -145,6 +151,43 @@ export function CollectionItemRow({
       setError("Could not remove this entry. Please try again.");
     } finally {
       setIsRemoving(false);
+    }
+  };
+
+  const startEditingTitle = () => {
+    setTitleDraft(item.title ?? "");
+    setIsEditingTitle(true);
+  };
+
+  const handleTitleSave = async () => {
+    if (!controls) return;
+    const trimmed = titleDraft.trim();
+    const title = trimmed.length > 0 ? trimmed : null;
+    // An untouched field asks for nothing, so it never queues a rewrite of a title
+    // the AI is already writing.
+    if (title === item.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+    setError(null);
+    setIsSavingTitle(true);
+    try {
+      await controls.onTitleSave(title);
+      setIsEditingTitle(false);
+    } catch {
+      setError("Could not save the title. Please try again.");
+    } finally {
+      setIsSavingTitle(false);
+    }
+  };
+
+  const handleTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void handleTitleSave();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setIsEditingTitle(false);
     }
   };
 
@@ -260,18 +303,68 @@ export function CollectionItemRow({
             height and everything centres on it. Top-aligning instead leaves the
             title sitting visibly above its own marker and buttons. */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:min-h-9 lg:min-h-8">
-          <h3 className="basis-full sm:basis-auto sm:grow min-w-0 font-heading text-base sm:text-[1.0625rem] lg:text-[0.9375rem] font-semibold leading-[1.35] tracking-tight text-[var(--color-text-primary)]">
-            {/* A pointer on a wide screen jumps from the title like the rest of the
-                row; the link stays in the tab order for a keyboard. */}
-            <a
-              href={entry.watchUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-[var(--color-accent)] transition-colors lg:pointer-events-none lg:group-hover/row:text-[var(--color-accent)]"
-            >
-              {entry.title}
-            </a>
-          </h3>
+          {isEditingTitle ? (
+            <div className="basis-full sm:basis-auto sm:grow min-w-0 space-y-2 lg:relative lg:z-10">
+              <Input
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onKeyDown={handleTitleKeyDown}
+                disabled={isSavingTitle}
+                aria-label="Clip title"
+                placeholder="Leave empty to have one written for you"
+                className="h-8 font-heading font-semibold"
+                autoFocus
+              />
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={handleTitleSave} disabled={isSavingTitle}>
+                  {isSavingTitle ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving
+                    </>
+                  ) : (
+                    "Save title"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsEditingTitle(false)}
+                  disabled={isSavingTitle}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            // The heading runs inline so the rename pencil sits at the end of its last
+            // line, however many lines the title wraps to.
+            <div className="basis-full sm:basis-auto sm:grow min-w-0 font-heading text-base sm:text-[1.0625rem] lg:text-[0.9375rem] font-semibold leading-[1.35] tracking-tight text-[var(--color-text-primary)]">
+              <h3 className="inline">
+                {/* A pointer on a wide screen jumps from the title like the rest of the
+                    row; the link stays in the tab order for a keyboard. */}
+                <a
+                  href={entry.watchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-[var(--color-accent)] transition-colors lg:pointer-events-none lg:group-hover/row:text-[var(--color-accent)]"
+                >
+                  {entry.title}
+                </a>
+              </h3>
+              {controls && (
+                <button
+                  type="button"
+                  onClick={startEditingTitle}
+                  title="Rename clip"
+                  aria-label={`Rename ${entry.title}`}
+                  className="ml-1.5 inline-flex align-middle p-0.5 rounded-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:relative lg:z-10"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-2.5 shrink-0">
             <span
@@ -448,7 +541,7 @@ export function CollectionItemRow({
           ) : controls && isGenerating ? (
             <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Writing a note...
+              {item.title === null ? "Writing a title and note..." : "Writing a note..."}
             </p>
           ) : controls && generationFailed ? (
             <div className="flex flex-wrap items-center gap-3 lg:relative lg:z-10">
