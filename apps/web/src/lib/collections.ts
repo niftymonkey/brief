@@ -946,6 +946,80 @@ export async function writeGeneratedClipWords(
   }
 }
 
+/** A clip with no title yet, with the collection it sits in and that collection's owner. */
+export interface UntitledClip {
+  ownerId: string;
+  collection: { id: string; title: string; description: string | null };
+  item: CollectionItem;
+}
+
+interface UntitledClipRow extends CollectionItemRow {
+  ownerId: string;
+  collectionId: string;
+  collectionTitle: string;
+  collectionDescription: string | null;
+}
+
+/**
+ * Every clip, across every user, whose title is still the AI's to write and
+ * has not been written. A clip still 'pending' is left out: the generation run
+ * it is waiting on writes its title, and a clip left pending because its owner
+ * may not spend tokens stays that way.
+ */
+export async function listUntitledClips(): Promise<UntitledClip[]> {
+  const result = await sql<UntitledClipRow>`
+    SELECT
+      c.user_id as "ownerId",
+      c.id as "collectionId",
+      c.title as "collectionTitle",
+      c.description as "collectionDescription",
+      ci.id,
+      ci.video_id as "videoId",
+      ci.start_sec as "startSec",
+      ci.end_sec as "endSec",
+      ci.video_title as "videoTitle",
+      ci.title,
+      ci.title_authored as "titleAuthored",
+      ci.duration_sec as "durationSec",
+      ci.aspect_ratio as "aspectRatio",
+      ci.summary,
+      ci.summary_authored as "summaryAuthored",
+      ci.summary_status as "summaryStatus",
+      ci.position
+    FROM collection_items ci
+    JOIN collections c ON c.id = ci.collection_id
+    WHERE ci.title IS NULL
+      AND NOT ci.title_authored
+      AND ci.summary_status <> 'pending'
+    ORDER BY c.id, ci.position
+  `;
+  return result.rows.map((row) => ({
+    ownerId: row.ownerId,
+    collection: { id: row.collectionId, title: row.collectionTitle, description: row.collectionDescription },
+    item: toCollectionItem(row),
+  }));
+}
+
+/**
+ * Writes a generated title onto a clip that has none, leaving its note and
+ * status as they are. The guards are checked in the statement itself, so a
+ * title the author wrote after `describedClip` was read, or a move onto other
+ * footage, wins over this write. Answers whether the title was written.
+ */
+export async function writeGeneratedClipTitle(describedClip: CollectionItem, title: string): Promise<boolean> {
+  const result = await sql`
+    UPDATE collection_items
+    SET title = ${title}, updated_at = NOW()
+    WHERE id = ${describedClip.id}
+      AND title IS NULL
+      AND NOT title_authored
+      AND video_id = ${describedClip.videoId}
+      AND start_sec IS NOT DISTINCT FROM ${describedClip.startSec}::int
+      AND end_sec IS NOT DISTINCT FROM ${describedClip.endSec}::int
+  `;
+  return (result.rowCount ?? 0) > 0;
+}
+
 /** The clip's words and who owns each. */
 interface ClipWordsOwnership {
   title: string | null;

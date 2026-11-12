@@ -58,21 +58,55 @@ const loadClipTranscriptText = async (
   userId: string,
   item: CollectionItem,
   deps: ClipWordsDeps,
-): Promise<{ text: string; rangeSeconds: number | null } | null> => {
+): Promise<{ text: string; rangeSeconds: number | null } | { reason: string }> => {
   let entries: StoredTranscriptEntry[];
   try {
     entries = await deps.loadTranscript(userId, item.videoId);
   } catch (error) {
-    console.error(`[CLIP WORDS] no transcript for item ${item.id} (${item.videoId}):`, error);
-    return null;
+    const message = error instanceof Error ? error.message : String(error);
+    return { reason: `no transcript for ${item.videoId}: ${message}` };
   }
   const sliced = sliceTranscriptRange(entries, item.startSec, item.endSec);
   const text = rangeTranscriptText(sliced);
-  if (text.length === 0) {
-    console.error(`[CLIP WORDS] transcript has nothing in range for item ${item.id}`);
-    return null;
-  }
+  if (text.length === 0) return { reason: "transcript has nothing in the clip's range" };
   return { text, rangeSeconds: deriveRangeSeconds(item, sliced) };
+};
+
+/** The collection a clip sits in, as the model is told about it. */
+interface ClipCollectionContext {
+  title: string;
+  description: string | null;
+}
+
+/** What one generation run produced: the words asked for (null for any not asked), or why there are none. */
+type ClipWordsGeneration =
+  | { kind: "ok"; title: string | null; note: string | null }
+  | { kind: "failed"; reason: string };
+
+/**
+ * Asks the model for the clip's wanted words from the clip's own stretch of
+ * transcript, spending on `userId`'s account. Writes nothing.
+ */
+const generateClipWords = async (
+  userId: string,
+  item: CollectionItem,
+  collection: ClipCollectionContext,
+  wants: ClipWordsWanted,
+  deps: ClipWordsDeps,
+): Promise<ClipWordsGeneration> => {
+  const transcript = await loadClipTranscriptText(userId, item, deps);
+  if ("reason" in transcript) return { kind: "failed", reason: transcript.reason };
+
+  const result = await deps.gateway.writeClipWords({
+    userId,
+    wants,
+    transcriptText: transcript.text,
+    rangeSeconds: transcript.rangeSeconds,
+    ...(item.videoTitle ? { videoTitle: item.videoTitle } : {}),
+    collection: { title: collection.title, description: collection.description },
+  });
+  if (result.kind !== "ok") return { kind: "failed", reason: `generation failed (${result.reason}): ${result.message}` };
+  return { kind: "ok", title: result.title, note: result.note };
 };
 
 /**
@@ -100,26 +134,16 @@ const writeClipWords = async (
     return writeGeneratedClipWords(userId, collectionId, item, { status: "ready", title: null, summary: null });
   }
 
-  const transcript = await loadClipTranscriptText(userId, item, deps);
-  if (!transcript) return writeGeneratedClipWords(userId, collectionId, item, { status: "failed" });
-
-  const result = await deps.gateway.writeClipWords({
-    userId,
-    wants,
-    transcriptText: transcript.text,
-    rangeSeconds: transcript.rangeSeconds,
-    ...(item.videoTitle ? { videoTitle: item.videoTitle } : {}),
-    collection: { title: collection.title, description: collection.description },
-  });
-  if (result.kind !== "ok") {
-    console.error(`[CLIP WORDS] generation failed for item ${item.id} (${result.reason}):`, result.message);
+  const generated = await generateClipWords(userId, item, collection, wants, deps);
+  if (generated.kind === "failed") {
+    console.error(`[CLIP WORDS] item ${item.id}: ${generated.reason}`);
     return writeGeneratedClipWords(userId, collectionId, item, { status: "failed" });
   }
 
   return writeGeneratedClipWords(userId, collectionId, item, {
     status: "ready",
-    title: result.title,
-    summary: result.note,
+    title: generated.title,
+    summary: generated.note,
   });
 };
 
@@ -150,4 +174,5 @@ const createClipWordsDeps = (openRouterKey: string): ClipWordsDeps => ({
   loadTranscript: loadClipTranscript,
 });
 
-export { createClipWordsDeps, writeClipWords };
+export { createClipWordsDeps, generateClipWords, writeClipWords };
+export type { ClipCollectionContext, ClipWordsGeneration };

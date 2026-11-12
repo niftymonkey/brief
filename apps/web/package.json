@@ -15,6 +15,7 @@
     "migrate": "tsx scripts/migrate.ts",
     "backfill-search": "tsx scripts/backfill-search.ts",
     "backfill-video-facts": "tsx scripts/backfill-video-facts.ts",
+    "backfill-clip-titles": "tsx scripts/backfill-clip-titles.ts",
     "query": "tsx scripts/query.ts",
     "inspect-schema": "tsx scripts/inspect-schema.ts",
     "db:sync-from-prod": "tsx scripts/sync-dev-from-prod.ts",
