@@ -340,4 +340,33 @@ describe("CollectionPlayer lock to the clip", () => {
 
     expect(player.loads.at(-1)).toMatchObject({ kind: "load", videoId: VIDEO_B });
   });
+
+  it("holds the video still when YouTube's own Play is pressed after the sitting has finished", async () => {
+    // Guarantee: a finished sitting plays nothing past its last clip's end.
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+    await playFor(12);
+    expect(screen.getByText("Playback complete.")).toBeTruthy();
+    const player = livePlayer();
+
+    player.playVideo();
+    await settle();
+
+    expect(player.calls.at(-1)).toEqual({ kind: "pause" });
+  });
+
+  it("moves the clip's bar to where a paused viewer seeks with YouTube's own controls", async () => {
+    // Guarantee: the clip bar and clock follow a seek made while paused, from any control.
+    renderPlayer([{ ...playerItem("item-a", VIDEO_A, LANDSCAPE), startSec: 20, endSec: 40 }]);
+    await startSitting();
+    await playFor(1);
+    const player = livePlayer();
+
+    player.pauseVideo();
+    await settle();
+    player.seekTo(35);
+    await playFor(1);
+
+    expect(screen.getByRole("slider", { name: "Clip progress" }).getAttribute("aria-valuenow")).toBe("15");
+  });
 });

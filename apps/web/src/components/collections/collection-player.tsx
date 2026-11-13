@@ -27,7 +27,6 @@ import { formatRange } from "@/lib/collection-item-input";
 import {
   BOUNDARY_POLL_INTERVAL_MS,
   initialPlaybackState,
-  PLAYER_STATE,
   readSittingPosition,
   reducePlayback,
   type PlaybackEffect,
@@ -200,7 +199,6 @@ export function CollectionPlayer({
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [apiFailed, setApiFailed] = useState(false);
   /** Whether YouTube last reported the video playing, which is what the click on it toggles. */
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   /** Bumped by the Try again control to build the player over from scratch. */
   const [loadAttempt, setLoadAttempt] = useState(0);
   const fullscreen = useElementFullscreen(frameRef, {
@@ -405,7 +403,6 @@ export function CollectionPlayer({
           onStateChange: (event) => {
             const player = playerRef.current;
             if (!player) return;
-            setIsVideoPlaying(event.data === PLAYER_STATE.PLAYING);
             dispatchRef.current({
               kind: "playerState",
               state: event.data,
@@ -497,7 +494,9 @@ export function CollectionPlayer({
   const currentItem = state.index >= 0 ? (items[state.index] ?? null) : null;
   const range = currentItem ? formatRange(currentItem.startSec, currentItem.endSec) : "";
   const isClipLive = state.status === "playing";
-  const isClipRunning = isClipLive && state.armed && isVideoPlaying;
+  // Sampled paused as well as playing, so a seek made with YouTube's own controls
+  // while paused still moves the clip's bar and clock.
+  const isClipArmed = isClipLive && state.armed;
 
   useEffect(() => {
     // Until a load proves it is on screen, the clock still belongs to the clip before
@@ -510,7 +509,7 @@ export function CollectionPlayer({
       );
       return;
     }
-    if (!currentItem || !isClipRunning) return;
+    if (!currentItem || !isClipArmed) return;
     const sampleClock = () => {
       const player = playerRef.current;
       if (!player) return;
@@ -526,7 +525,7 @@ export function CollectionPlayer({
     sampleClock();
     const sampler = window.setInterval(sampleClock, CLIP_PROGRESS_SAMPLE_MS);
     return () => window.clearInterval(sampler);
-  }, [currentItem, isClipRunning, progress, state.armed]);
+  }, [currentItem, isClipArmed, progress, state.armed]);
 
   const frameAspect = entryAspectRatio(frameItem(items, state, startIndex)?.aspectRatio ?? null);
   const frameStyle: FrameStyle = { "--frame-aspect": String(frameAspect) };

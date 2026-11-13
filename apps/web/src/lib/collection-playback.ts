@@ -748,6 +748,10 @@ export function reducePlayback(
     }
 
     case "playerState": {
+      // A finished sitting has no clip left to play, so YouTube's own Play is held.
+      if (state.status === "done" && event.state === PLAYER_STATE.PLAYING) {
+        return { state, effects: [{ kind: "pause" }] };
+      }
       if (state.status !== "loading" && state.status !== "playing") return unchanged(state);
       const item = currentItem(state, items);
       if (!item || !isForLoadedVideo(item, event.videoId)) return unchanged(state);
