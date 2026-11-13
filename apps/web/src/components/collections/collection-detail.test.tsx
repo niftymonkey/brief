@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
+import type { CollectionItem } from "@/lib/collections";
 import { CollectionDetail } from "@/components/collections/collection-detail";
 import {
   FakeYouTubePlayer,
@@ -588,7 +589,7 @@ describe("CollectionDetail clip words", () => {
   });
 });
 
-describe("CollectionDetail clip titles", () => {
+describe("CollectionDetail clip edit popup", () => {
   /** PATCH bodies the page sent for one entry, parsed. */
   const patchBodies = (fetchMock: ReturnType<typeof vi.fn>, itemId: string): unknown[] =>
     fetchMock.mock.calls
@@ -599,26 +600,47 @@ describe("CollectionDetail clip titles", () => {
       )
       .map(([, init]) => JSON.parse(String(init?.body)));
 
-  /** Answers a title PATCH the way the route does, with the item as it now stands. */
-  const answerTitlePatches = () =>
+  /** Answers an edit PATCH the way the route does, with the item as it now stands. */
+  const answerEditPatches = (base: CollectionItem) =>
     vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const sent = JSON.parse(String(init?.body ?? "{}"));
-      const title: string | null = sent.title ?? null;
-      const body = {
-        ...makeItem("item-a", VIDEO_A, 0, 10, 0),
+      const sent: Partial<CollectionItem> = JSON.parse(String(init?.body ?? "{}"));
+      const title = sent.title === undefined ? base.title : sent.title;
+      const body: CollectionItem = {
+        ...base,
+        ...sent,
         title,
-        titleAuthored: title !== null,
+        titleAuthored: sent.title === undefined ? base.titleAuthored : sent.title !== null,
         summaryStatus: title === null ? "pending" : "ready",
       };
       return new Response(JSON.stringify(body), { status: 200 });
     });
 
-  const renameFirstEntry = async (typed: string): Promise<void> => {
-    fireEvent.click(screen.getAllByRole("button", { name: /^Rename / })[0]);
-    const field = screen.getByRole("textbox", { name: "Clip title" });
-    fireEvent.change(field, { target: { value: typed } });
+  /** The first entry with a title and note the AI wrote. */
+  const aiWrittenCollection = () => {
+    const collection = makeCollection();
+    collection.items[0] = {
+      ...collection.items[0],
+      title: "An AI title",
+      summary: "An AI note.",
+    };
+    return collection;
+  };
+
+  const openEditor = (): HTMLElement => {
+    const [firstClip] = screen
+      .getAllByRole("button", { name: /^Edit / })
+      .filter((button) => button.getAttribute("aria-label") !== "Edit collection");
+    fireEvent.click(firstClip);
+    return screen.getByRole("dialog", { name: "Edit clip" });
+  };
+
+  const typeInto = (dialog: HTMLElement, label: string, value: string): void => {
+    fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+  };
+
+  const save = async (dialog: HTMLElement): Promise<void> => {
     await act(async () => {
-      fireEvent.keyDown(field, { key: "Enter" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
     });
     await settle();
   };
@@ -635,29 +657,84 @@ describe("CollectionDetail clip titles", () => {
     uninstallFakeYouTubePlayer();
   });
 
-  it("renames a clip in place and sends the new title as hand-written", async () => {
-    const fetchMock = answerTitlePatches();
+  it("renames a clip from its popup and sends the new title as hand-written", async () => {
+    const collection = aiWrittenCollection();
+    const fetchMock = answerEditPatches(collection.items[0]);
     globalThis.fetch = fetchMock;
-    renderDetail();
+    renderDetail(collection);
 
-    await renameFirstEntry("  A name of my own  ");
+    const dialog = openEditor();
+    typeInto(dialog, "Title", "  A name of my own  ");
+    await save(dialog);
 
     expect(patchBodies(fetchMock, "item-a")).toEqual([{ title: "A name of my own" }]);
     expect(document.querySelector("h3")?.textContent).toBe("A name of my own");
-    expect(screen.queryByRole("textbox", { name: "Clip title" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("hands a cleared title back to the AI", async () => {
-    const fetchMock = answerTitlePatches();
-    globalThis.fetch = fetchMock;
+    // Guarantee: an empty title sends null, which hands the title back to the AI.
     const collection = makeCollection();
     collection.items[0] = { ...collection.items[0], title: "An old name", titleAuthored: true };
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
     renderDetail(collection);
 
-    await renameFirstEntry("   ");
+    const dialog = openEditor();
+    typeInto(dialog, "Title", "   ");
+    await save(dialog);
 
     expect(patchBodies(fetchMock, "item-a")).toEqual([{ title: null }]);
     // While the AI writes a new one, the row reads the video's name.
     expect(document.querySelector("h3")?.textContent).toBe("Title item-a");
+  });
+
+  it("sends only the note when the note is all the author changed", async () => {
+    // Guarantee: the popup sends only changed fields, so an AI title left alone stays the AI's.
+    const collection = aiWrittenCollection();
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
+    renderDetail(collection);
+
+    const dialog = openEditor();
+    typeInto(dialog, "Note", "A note of my own.");
+    await save(dialog);
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([{ summary: "A note of my own." }]);
+  });
+
+  it("sends only the bound that moved when the range is all the author changed", async () => {
+    // Guarantee: the popup sends only changed fields, so the words stay the AI's to rewrite.
+    const collection = aiWrittenCollection();
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
+    renderDetail(collection);
+
+    const dialog = openEditor();
+    typeInto(dialog, "Start (s)", "2");
+    await save(dialog);
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([{ startSec: 2 }]);
+  });
+
+  it("saves nothing for a clip whose words are still being written and were left alone", async () => {
+    // Guarantee: an empty field the AI has yet to fill is never sent, so it is never marked authored.
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], summaryStatus: "pending" };
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
+    renderDetail(collection);
+
+    const dialog = openEditor();
+    expect(within(dialog).getByLabelText("Title").getAttribute("placeholder")).toBe(
+      "Being written for you...",
+    );
+    expect(within(dialog).getByLabelText("Note").getAttribute("placeholder")).toBe(
+      "Being written for you...",
+    );
+    await save(dialog);
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([]);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

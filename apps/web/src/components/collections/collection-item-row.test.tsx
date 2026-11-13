@@ -167,23 +167,25 @@ describe("CollectionItemRow thumbnail slot", () => {
 describe("CollectionItemRow active entry", () => {
   afterEach(cleanup);
 
-  it("says which entry is playing, and hides the words where they would crush the title", () => {
+  it("keeps the playing entry's length in its slot, lit, and marks the row current", () => {
+    // Guarantee: the active row keeps its resting label rather than trading it for "now playing".
     renderRow(null, true);
 
-    const marker = [...document.querySelectorAll("span")].find(
-      (node) => node.textContent === "now playing",
+    const label = [...document.querySelectorAll("span.font-mono")].find((node) =>
+      node.textContent?.endsWith("1:30"),
     );
-    expect(marker).toBeTruthy();
-    expect(marker?.className).toContain("hidden");
-    expect(marker?.className).toContain("sm:inline");
+    expect(label).toBeTruthy();
+    expect(label?.className).toContain("text-[var(--color-playing)]");
+    expect(label?.className).not.toContain("hidden sm:inline");
+    expect(document.body.textContent).not.toContain("now playing");
     expect(document.querySelector('[aria-current="true"]')).toBeTruthy();
   });
 
-  it("shows the entry's runtime where an inactive row has nothing to announce", () => {
+  it("shows the entry's runtime on a row that is not playing", () => {
     renderRow(null);
 
     expect(document.body.textContent).toContain("1:30");
-    expect(document.body.textContent).not.toContain("now playing");
+    expect(document.querySelector('[aria-current="true"]')).toBeNull();
   });
 
   it("fills the ordinal marker and lights its rail while the sitting is here", () => {
@@ -249,10 +251,8 @@ describe("CollectionItemRow drag grip", () => {
         isActive={false}
         controls={{
           onRemove: settled,
-          onSummarySave: settled,
-          onTitleSave: settled,
+          onEdit: settled,
           onRetrySummary: settled,
-          onSwap: settled,
         }}
         drag={{
           setNodeRef: () => {},
@@ -313,16 +313,15 @@ describe("CollectionItemRow jump", () => {
     expect(jumpButton().className).not.toContain("border-[var(--color-text-secondary)]");
   });
 
-  it("says the channel and runtime under the title, and now playing in their place", () => {
-    renderRow(null, false, true, { onJump: () => {} });
-    expect(document.body.textContent).toContain("1:30");
-    cleanup();
-
+  it("keeps the channel and runtime under the title of the entry playing, lit", () => {
+    // Guarantee: the active row keeps its resting label rather than trading it for "now playing".
     renderRow(null, true, true, { onJump: () => {} });
+
     const lines = [...document.querySelectorAll("p")].filter(
-      (node) => node.textContent === "now playing",
+      (node) => node.textContent === "1:30",
     );
     expect(lines).toHaveLength(1);
     expect(lines[0]?.className).toContain("text-[var(--color-playing)]");
+    expect(document.body.textContent).not.toContain("now playing");
   });
 });

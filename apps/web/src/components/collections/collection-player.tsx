@@ -14,7 +14,14 @@ import {
 import { CircleAlert, ExternalLink, Loader2, Minimize, Play, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useElementFullscreen } from "@/hooks/use-element-fullscreen";
-import { CLIP_PROGRESS_SAMPLE_MS, clipProgressFraction, type ClipProgress } from "@/lib/clip-progress";
+import {
+  CLIP_PROGRESS_SAMPLE_MS,
+  clipLengthSec,
+  clipSeekTarget,
+  readClipClock,
+  UNSTARTED_CLIP_CLOCK,
+  type ClipProgress,
+} from "@/lib/clip-progress";
 import { entryAspectRatio, entryTitle, watchUrl } from "@/lib/collection-entries";
 import { formatRange } from "@/lib/collection-item-input";
 import {
@@ -60,6 +67,8 @@ export interface CollectionPlayerHandle {
    * the page's cue to start a new run from the entry instead.
    */
   jumpTo: (itemId: string) => boolean;
+  /** Moves playback to this many seconds into the clip on screen, held inside the clip. */
+  seek: (elapsedSec: number) => void;
   toggleFullscreen: () => void;
 }
 
@@ -290,6 +299,27 @@ export function CollectionPlayer({
     dispatchRef.current = dispatch;
   }, [dispatch]);
 
+  /**
+   * Seeks within the clip on screen only once its load has proved itself, so a seek
+   * can never land on the clip before it, and never outside the clip's own range.
+   */
+  const seekWithinClip = useCallback(
+    (elapsedSec: number) => {
+      const player = playerRef.current;
+      const playback = stateRef.current;
+      const item = items[playback.index];
+      if (!player || !item || playback.status !== "playing" || !playback.armed) return;
+      const videoDurationSec = player.getDuration();
+      const lengthSec = clipLengthSec(item.startSec, item.endSec, videoDurationSec);
+      if (lengthSec === null) return;
+      const toSec = clipSeekTarget(elapsedSec, item.startSec, lengthSec);
+      player.seekTo(toSec, true);
+      // A paused video samples no clock, so the bar is moved to where the seek landed.
+      progress.publish(readClipClock(toSec, item.startSec, item.endSec, videoDurationSec));
+    },
+    [items, progress],
+  );
+
   useImperativeHandle(
     ref,
     () => ({
@@ -304,9 +334,10 @@ export function CollectionPlayer({
         dispatch({ kind: "jump", index });
         return stateRef.current !== before;
       },
+      seek: seekWithinClip,
       toggleFullscreen: fullscreen.toggle,
     }),
-    [dispatch, fullscreen.toggle, items],
+    [dispatch, fullscreen.toggle, items, seekWithinClip],
   );
 
   /** The run's opening entry as of the moment the player is ready to open it. */
@@ -468,7 +499,11 @@ export function CollectionPlayer({
     // Until a load proves it is on screen, the clock still belongs to the clip before
     // it, so the new clip reads as just started.
     if (!state.armed) {
-      progress.publish(0);
+      progress.publish(
+        currentItem
+          ? readClipClock(currentItem.startSec ?? 0, currentItem.startSec, currentItem.endSec, 0)
+          : UNSTARTED_CLIP_CLOCK,
+      );
       return;
     }
     if (!currentItem || !isClipRunning) return;
@@ -476,7 +511,7 @@ export function CollectionPlayer({
       const player = playerRef.current;
       if (!player) return;
       progress.publish(
-        clipProgressFraction(
+        readClipClock(
           player.getCurrentTime(),
           currentItem.startSec,
           currentItem.endSec,
@@ -611,8 +646,8 @@ export function CollectionPlayer({
       {/* A fixed block whatever the entry's text runs to, so skipping never reflows
           the entries list underneath the player. A wide screen captions the stage
           from the page instead, idle and playing alike. */}
-      <div className="mt-3.5 lg:hidden">
-        <ClipProgressMeter progress={progress} className="mb-2.5" />
+      <div className="mt-2.5 lg:hidden">
+        <ClipProgressMeter progress={progress} onSeek={seekWithinClip} className="mb-1.5" />
         <div className="flex items-baseline gap-2 h-[1.4em]">
           <p className="min-w-0 truncate font-medium leading-[1.4] text-[var(--color-text-primary)]">
             {currentItem ? (

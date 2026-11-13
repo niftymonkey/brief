@@ -19,7 +19,7 @@ import {
   STAGE_FRAME_CLASS,
 } from "./collection-player";
 import { CollectionStagePoster } from "./collection-stage-poster";
-import { ClipProgressMeter } from "./clip-progress-bar";
+import { ClipClockReadout, ClipProgressMeter, type SeekWithinClip } from "./clip-progress-bar";
 import type { ClipProgress } from "@/lib/clip-progress";
 import { cn } from "@/lib/utils";
 import {
@@ -85,6 +85,8 @@ interface CollectionTransportProps {
   isFullscreen: boolean;
   /** How far the clip on screen has played, as the player publishes it. */
   progress: ClipProgress;
+  /** Moves the run's playback within the clip on screen, from the stage's bar. */
+  onSeek: SeekWithinClip;
   /** Starts a run on the entry at this index of the sitting. */
   onPlay: (startIndex: number) => void;
   onStop: () => void;
@@ -167,6 +169,7 @@ interface StageCaptionProps {
   onToggleFullscreen: () => void;
   fullscreenToggleRef?: RefObject<HTMLButtonElement | null>;
   progress: ClipProgress;
+  onSeek: SeekWithinClip;
 }
 
 /**
@@ -188,6 +191,7 @@ function StageCaption({
   onToggleFullscreen,
   fullscreenToggleRef,
   progress,
+  onSeek,
 }: StageCaptionProps) {
   const { entries } = sitting;
   const { canStepBack, canStepForward } = readSittingSteps(position);
@@ -211,12 +215,9 @@ function StageCaption({
         <div className="flex items-center gap-3 font-mono text-xs leading-[1.4] text-[var(--color-text-tertiary)]">
           {isLive && position ? (
             <>
-              <span>
-                <span className="text-[var(--color-playing)]">now playing</span>
-                <MetaSeparator />
-                <span>{ordinalPlace(position.ordinal ?? 1, position.total)}</span>
-              </span>
-              <ClipProgressMeter progress={progress} className="flex-1" />
+              <span className="shrink-0">{ordinalPlace(position.ordinal ?? 1, position.total)}</span>
+              <ClipProgressMeter progress={progress} onSeek={onSeek} className="flex-1" />
+              <ClipClockReadout progress={progress} />
             </>
           ) : isDone && position ? (
             <span>{ordinalPlace(position.total, position.total)}</span>
@@ -330,6 +331,7 @@ export function CollectionTransport({
   cuedIndex,
   isFullscreen,
   progress,
+  onSeek,
   onPlay,
   onStop,
   onPrev,
@@ -567,6 +569,7 @@ export function CollectionTransport({
             onToggleFullscreen={onToggleFullscreen}
             fullscreenToggleRef={fullscreenToggles?.stage}
             progress={progress}
+            onSeek={onSeek}
           />
         </div>
 

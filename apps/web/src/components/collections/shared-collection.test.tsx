@@ -43,6 +43,16 @@ function stage(): HTMLElement {
   return element;
 }
 
+/** The clip's bar in the caption under the stage, as opposed to the one in the player's own caption. */
+function stageCaptionSlider(): HTMLElement {
+  const player = screen.getByRole("region", { name: "Collection playback" });
+  const slider = within(stage())
+    .getAllByRole("slider", { name: "Clip progress" })
+    .find((candidate) => !player.contains(candidate));
+  if (!slider) throw new Error("The stage caption is showing no clip bar");
+  return slider;
+}
+
 /**
  * The header's control of this name. A wide screen carries a second set under the
  * stage, and media queries do not resolve here, so both are in the document.
@@ -399,8 +409,8 @@ describe("SharedCollection stage", () => {
     expect(within(stage()).getByText("Title item-a")).toBeTruthy();
     expect(within(stage()).getByText("01 of 03")).toBeTruthy();
     expect(stagePosterSrc()).toContain(VIDEO_A);
-    // Gold is for the entry playing, and nothing is.
-    expect(within(stage()).queryByText("now playing")).toBeNull();
+    // The clip's bar and clock are for the entry playing, and nothing is.
+    expect(within(stage()).queryByRole("slider")).toBeNull();
   });
 
   it("cues the entry whose row is pressed while nothing plays", async () => {
@@ -422,7 +432,8 @@ describe("SharedCollection stage", () => {
 
     expect(livePlayer().loads).toEqual([{ kind: "load", videoId: VIDEO_B, toSec: 30 }]);
     expect(screen.getByText("3 of 3")).toBeTruthy();
-    expect(within(stage()).getByText("now playing")).toBeTruthy();
+    expect(within(stage()).getByText("03 of 03")).toBeTruthy();
+    expect(stageCaptionSlider()).toBeTruthy();
   });
 
   it("still starts from the top from the header's Play", async () => {
@@ -557,13 +568,13 @@ describe("SharedCollection clip progress and the way out to YouTube", () => {
   });
 
   /**
-   * What every clip progress bar on the page reads, as a percentage. The stage's
+   * What every clip progress bar on the page reads, in seconds into the clip. The stage's
    * caption and the phone's caption both carry one, and media queries do not resolve
    * here, so both are in the document and both must agree.
    */
   function progressReadings(): number[] {
     return screen
-      .getAllByRole("progressbar", { name: "Clip progress" })
+      .getAllByRole("slider", { name: "Clip progress" })
       .map((bar) => Number(bar.getAttribute("aria-valuenow")));
   }
 
@@ -581,10 +592,13 @@ describe("SharedCollection clip progress and the way out to YouTube", () => {
     await pressNext();
     await playFor(5);
 
-    const elapsedInClip = livePlayer().getCurrentTime() - 30;
-    const expected = Math.round((elapsedInClip / 10) * 100);
-    expect(expected).toBeGreaterThan(40);
+    // The bar reads in seconds into the clip, out of the clip's ten.
+    const expected = Math.round(livePlayer().getCurrentTime() - 30);
+    expect(expected).toBeGreaterThan(4);
     expect(progressReadings()).toEqual([expected, expected]);
+    for (const bar of screen.getAllByRole("slider", { name: "Clip progress" })) {
+      expect(bar.getAttribute("aria-valuemax")).toBe("10");
+    }
   });
 
   it("starts the progress over when the run moves to the next clip", async () => {
@@ -592,7 +606,7 @@ describe("SharedCollection clip progress and the way out to YouTube", () => {
     renderShared();
     await startSharedSitting();
     await playFor(5);
-    expect(progressReadings().every((reading) => reading >= 40)).toBe(true);
+    expect(progressReadings().every((reading) => reading >= 4)).toBe(true);
 
     await pressNext();
 
@@ -614,5 +628,118 @@ describe("SharedCollection clip progress and the way out to YouTube", () => {
       expect(link.getAttribute("target")).toBe("_blank");
       expect(link.getAttribute("rel")).toBe("noopener noreferrer");
     }
+  });
+});
+
+/**
+ * jsdom has no pointer events and no pointer capture. A PointerEvent built on its
+ * MouseEvent carries the position and button the bar reads.
+ */
+class TestPointerEvent extends MouseEvent {
+  readonly pointerId: number;
+  constructor(type: string, init: PointerEventInit = {}) {
+    super(type, init);
+    this.pointerId = init.pointerId ?? 1;
+  }
+}
+
+describe("SharedCollection clip clock under the stage", () => {
+  const pointerHost: { PointerEvent?: unknown } = window;
+  const elementProto: Partial<Pick<HTMLElement, "setPointerCapture">> = HTMLElement.prototype;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+    pointerHost.PointerEvent = TestPointerEvent;
+    elementProto.setPointerCapture = () => {};
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+    pointerHost.PointerEvent = undefined;
+    elementProto.setPointerCapture = undefined;
+  });
+
+  /** Plays the run onto its third entry, 0:30 to 0:40 of a ten-minute video. */
+  async function playThirdEntry(): Promise<void> {
+    renderShared();
+    await startSharedSitting();
+    fireEvent.click(headerButton("Next entry"));
+    await settle();
+    fireEvent.click(headerButton("Next entry"));
+    await settle();
+  }
+
+  /** The last place the run asked the player to seek to. */
+  function lastSeek(): number | undefined {
+    const seeks = livePlayer().calls.filter((call) => call.kind === "seek");
+    const last = seeks.at(-1);
+    return last?.kind === "seek" ? last.toSec : undefined;
+  }
+
+  it("reads the clip's place in the run on the left and its time against its length on the right", async () => {
+    // Guarantee: the caption reads "03 of 03" and "0:0N / 0:10", live from the clip's own start.
+    await playThirdEntry();
+    await playFor(3);
+
+    const caption = stageCaptionSlider().parentElement;
+    if (!caption) throw new Error("The clip bar sits in no caption");
+    const firstElapsed = Math.floor(livePlayer().getCurrentTime() - 30);
+    expect(caption.firstElementChild?.textContent).toBe("03 of 03");
+    expect(caption.lastElementChild?.textContent).toBe(`0:0${firstElapsed} / 0:10`);
+
+    await playFor(3);
+    const laterElapsed = Math.floor(livePlayer().getCurrentTime() - 30);
+    expect(laterElapsed).toBeGreaterThan(firstElapsed);
+    expect(caption.lastElementChild?.textContent).toBe(`0:0${laterElapsed} / 0:10`);
+  });
+
+  it("seeks where the bar is pressed and dragged, and never past either end of the clip", async () => {
+    // Guarantee: seeking from the bar calls the player's seek, clamped to the clip's range.
+    await playThirdEntry();
+    await playFor(1);
+    const bar = stageCaptionSlider();
+    vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 100, y: 0, width: 200, height: 12 }),
+    );
+
+    fireEvent.pointerDown(bar, { clientX: 200, button: 0, pointerId: 1 });
+    expect(lastSeek()).toBe(35);
+
+    fireEvent.pointerMove(bar, { clientX: 500, pointerId: 1 });
+    expect(lastSeek()).toBe(40);
+
+    fireEvent.pointerMove(bar, { clientX: 0, pointerId: 1 });
+    expect(lastSeek()).toBe(30);
+
+    fireEvent.pointerUp(bar, { clientX: 0, pointerId: 1 });
+    const seeksAtRelease = livePlayer().calls.length;
+    fireEvent.pointerMove(bar, { clientX: 250, pointerId: 1 });
+    expect(livePlayer().calls.length).toBe(seeksAtRelease);
+  });
+
+  it("nudges playback by arrow key, held inside the clip", async () => {
+    // Guarantee: seeking from the bar calls the player's seek, clamped to the clip's range.
+    await playThirdEntry();
+    await playFor(1);
+    const bar = stageCaptionSlider();
+
+    fireEvent.keyDown(bar, { key: "Home" });
+    expect(lastSeek()).toBe(30);
+    expect(bar.getAttribute("aria-valuenow")).toBe("0");
+
+    fireEvent.keyDown(bar, { key: "ArrowLeft" });
+    expect(lastSeek()).toBe(30);
+
+    fireEvent.keyDown(bar, { key: "ArrowRight" });
+    expect(lastSeek()).toBe(35);
+    expect(bar.getAttribute("aria-valuenow")).toBe("5");
+
+    fireEvent.keyDown(bar, { key: "ArrowRight" });
+    fireEvent.keyDown(bar, { key: "ArrowRight" });
+    expect(lastSeek()).toBe(40);
   });
 });

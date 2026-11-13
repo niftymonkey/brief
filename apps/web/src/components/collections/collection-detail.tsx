@@ -17,6 +17,7 @@ import {
 } from "@/components/collections/collection-transport";
 import { DeleteCollectionButton } from "@/components/collections/delete-collection-button";
 import { EditCollectionDialog } from "@/components/collections/edit-collection-dialog";
+import type { ClipEdit } from "@/components/collections/edit-item-dialog";
 import { SortableItemRow } from "@/components/collections/sortable-item-row";
 import {
   DndContext,
@@ -245,48 +246,20 @@ export function CollectionDetail({
     router.refresh();
   };
 
-  const handleSummarySave = async (itemId: string, summary: string) => {
+  /** Saves one clip's edit popup, which sends only the fields the author changed. */
+  const handleEdit = async (itemId: string, edit: ClipEdit) => {
     const updated = await requestJson<CollectionItem>(
       `/api/collections/${collectionId}/items/${itemId}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ summary }),
+        body: JSON.stringify(edit),
       },
     );
     setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-  };
-
-  const handleTitleSave = async (itemId: string, title: string | null) => {
-    const updated = await requestJson<CollectionItem>(
-      `/api/collections/${collectionId}/items/${itemId}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      },
-    );
-    setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-  };
-
-  const handleSwap = async (
-    itemId: string,
-    videoId: string,
-    startSec: number | null,
-    endSec: number | null,
-  ) => {
-    const updated = await requestJson<CollectionItem>(
-      `/api/collections/${collectionId}/items/${itemId}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoId, startSec, endSec }),
-      },
-    );
-    setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-    // The hero reads the new video's title, channel and length off the server's
+    // The hero reads a new video's title, channel and length off the server's
     // videoFacts prop, which only a refresh can restock.
-    router.refresh();
+    if (edit.videoId !== undefined) router.refresh();
   };
 
   const setSharing = async (nextShared: boolean) => {
@@ -381,6 +354,7 @@ export function CollectionDetail({
       onPrev={() => playerRef.current?.prev()}
       onSkip={() => playerRef.current?.skip()}
       onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
+      onSeek={(elapsedSec) => playerRef.current?.seek(elapsedSec)}
       fullscreenToggles={fullscreenToggles}
       share={share}
       player={
@@ -461,11 +435,8 @@ export function CollectionDetail({
                   dragDisabled={reorderPending}
                   controls={{
                     onRemove: () => handleRemove(entry.id),
-                    onSummarySave: (summary) => handleSummarySave(entry.id, summary),
-                    onTitleSave: (title) => handleTitleSave(entry.id, title),
+                    onEdit: (edit) => handleEdit(entry.id, edit),
                     onRetrySummary: () => retryClipWords(entry.id),
-                    onSwap: (videoId, startSec, endSec) =>
-                      handleSwap(entry.id, videoId, startSec, endSec),
                   }}
                 />
               ))}

@@ -124,6 +124,7 @@ export function SharedCollection({
       onPrev={() => playerRef.current?.prev()}
       onSkip={() => playerRef.current?.skip()}
       onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
+      onSeek={(elapsedSec) => playerRef.current?.seek(elapsedSec)}
       fullscreenToggles={fullscreenToggles}
       player={
         openSitting && (
