@@ -206,6 +206,8 @@ export type PlaybackEffect =
   /** Move the video already on screen to this item's start. */
   | { kind: "seek"; index: number; item: PlaybackItem; generation: number; toSec: number }
   | { kind: "play" }
+  /** Move the item on screen back to its own start, leaving it playing or paused as it is. */
+  | { kind: "snapBack"; toSec: number }
   /** Silence the player: the sitting is over and nothing more of it should be heard. */
   | { kind: "pause" }
   | { kind: "scheduleFailureAdvance"; generation: number; delayMs: number }
@@ -786,13 +788,22 @@ export function reducePlayback(
       if (pollFoundVideoEnd(item, event)) return advance(seen, items);
 
       // The primary end-boundary detector: this item is armed, so the position the
-      // poll reads is this item's own.
-      if (
-        event.state === PLAYER_STATE.PLAYING &&
-        item.endSec !== null &&
-        event.currentTime >= item.endSec
-      ) {
+      // poll reads is this item's own. A paused player past the end is a viewer who
+      // moved it there with YouTube's own controls, which ends the clip the same way.
+      // A buffering sample is mid-move and waits for the move to settle.
+      const isSettled = event.state === PLAYER_STATE.PLAYING || event.state === PLAYER_STATE.PAUSED;
+      if (isSettled && item.endSec !== null && event.currentTime >= item.endSec) {
         return advance(seen, items);
+      }
+
+      // YouTube's own controls can move playback before the clip's start; it is
+      // pulled back to the start, playing or paused as the viewer left it.
+      if (isSettled && behindItsOwnStart(item, event.currentTime)) {
+        const tracked = trackProgress(seen, item, event);
+        return {
+          state: tracked.state,
+          effects: [...tracked.effects, { kind: "snapBack", toSec: item.startSec ?? 0 }],
+        };
       }
 
       return trackProgress(seen, item, event);

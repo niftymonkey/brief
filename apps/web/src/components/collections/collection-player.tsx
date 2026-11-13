@@ -242,6 +242,10 @@ export function CollectionPlayer({
             player?.playVideo();
             break;
           }
+          case "snapBack": {
+            player?.seekTo(effect.toSec, true);
+            break;
+          }
           case "pause": {
             // The sitting is over but the player stays mounted to offer Play again, so
             // nothing stops the video playing on under it unless we stop it.
@@ -378,12 +382,12 @@ export function CollectionPlayer({
       playerRef.current = new window.YT.Player(host.id, {
         width: "100%",
         height: "100%",
-        // YouTube's own controls and keys would let the viewer seek out of the clip,
-        // so the player keeps neither and the page carries the transport instead.
+        // YouTube's own controls stay, captions and volume among them. A seek they make
+        // outside the clip is pulled back by the poll, and the page's own full screen
+        // is the one the frame uses.
         playerVars: {
           enablejsapi: 1,
-          controls: 0,
-          disablekb: 1,
+          controls: 1,
           fs: 0,
           iv_load_policy: 3,
           rel: 0,
@@ -541,18 +545,6 @@ export function CollectionPlayer({
     playerRef.current?.playVideo();
   };
 
-  const handleTogglePlayback = () => {
-    const player = playerRef.current;
-    if (!player) return;
-    const playerState = player.getPlayerState();
-    if (playerState === PLAYER_STATE.PLAYING || playerState === PLAYER_STATE.BUFFERING) {
-      player.pauseVideo();
-      return;
-    }
-    setAutoplayBlocked(false);
-    player.playVideo();
-  };
-
   return (
     <section aria-label="Collection playback" className="lg:flex lg:flex-1 lg:flex-col lg:min-h-0">
       {/* One tree across the entry change, the breakpoint and full screen: the shape
@@ -578,11 +570,8 @@ export function CollectionPlayer({
         >
           {/* Full screen draws the video at its true shape, as large as the frame
               allows, rather than handing a Short a landscape box to letterbox in. */}
-          {/* Inert, so a browser sends no pointer or focus into the iframe: its title,
-              logo and end screens all lead out of the clip. */}
-          <div
+<div
             ref={containerRef}
-            inert
             className={cn(
               "absolute inset-0",
               fullscreen.mode === "off"
@@ -590,16 +579,15 @@ export function CollectionPlayer({
                 : "m-auto w-[min(100cqw,calc(100cqh*var(--frame-aspect)))] h-[min(100cqh,calc(100cqw/var(--frame-aspect)))]",
             )}
           />
-          {/* The one thing on the video that takes a click. It lies inside the frame,
-              so it follows the frame into full screen, and before the exit control,
-              which draws over it. */}
-          <button
-            type="button"
-            onClick={handleTogglePlayback}
-            disabled={!isClipLive}
-            aria-label={isVideoPlaying ? "Pause video" : "Play video"}
-            className="absolute inset-0 cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]"
-          />
+          {/* The captions under the frame are out of reach while it fills the screen,
+              so the clip's bar and clock are drawn inside it, along the top edge
+              beside the exit control, clear of YouTube's own bar along the bottom. */}
+          {fullscreen.mode !== "off" && (
+            <div className="absolute inset-x-0 top-0 flex items-center gap-3 bg-gradient-to-b from-black/70 to-transparent pt-[max(1.25rem,env(safe-area-inset-top))] pb-8 pl-[max(1rem,env(safe-area-inset-left))] pr-16">
+              <ClipProgressMeter key={currentItem?.id} progress={progress} onSeek={seekWithinClip} className="flex-1" />
+              <ClipClockReadout progress={progress} className="font-mono text-xs text-white/80" />
+            </div>
+          )}
           {/* The header is out of reach while the frame fills the screen, so the way
               back out is drawn inside it, and focus moves to it so a keyboard can
               find it. */}
@@ -615,14 +603,6 @@ export function CollectionPlayer({
             >
               <Minimize className="w-4 h-4" />
             </Button>
-          )}
-          {/* The captions under the frame are out of reach while it fills the screen,
-              so the clip's bar and clock are drawn inside it, over the video. */}
-          {fullscreen.mode !== "off" && (
-            <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/70 to-transparent pt-8 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
-              <ClipProgressMeter key={currentItem?.id} progress={progress} onSeek={seekWithinClip} className="flex-1" />
-              <ClipClockReadout progress={progress} className="font-mono text-xs text-white/80" />
-            </div>
           )}
         </div>
       </div>

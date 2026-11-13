@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, type CSSProperties } from "react";
 import { GripVertical, Loader2, Pencil, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -395,10 +396,11 @@ export function CollectionItemRow({
                 {entry.videoId}
               </span>
               {thumbnailSrc !== null && (
-                <img
+                <Image
                   src={thumbnailSrc}
                   alt=""
-                  loading="lazy"
+                  fill
+                  unoptimized
                   onError={() => setFailedThumbnailUrls((failed) => [...failed, thumbnailSrc])}
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />

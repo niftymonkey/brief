@@ -2,9 +2,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRef, type RefObject } from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { createClipProgress } from "@/lib/clip-progress";
-import { PLAYER_STATE } from "@/lib/collection-playback";
 import {
   CollectionPlayer,
   type CollectionPlayerHandle,
@@ -290,49 +289,55 @@ describe("CollectionPlayer lock to the clip", () => {
     uninstallFakeYouTubePlayer();
   });
 
-  it("builds the player with YouTube's own controls and keyboard shortcuts off", async () => {
-    // Slice 5 guarantee: the viewer cannot seek through YouTube's controls or keys.
+  it("builds the player with YouTube's own controls and keyboard shortcuts on", async () => {
+    // Guarantee: YouTube's controls stay available, so captions and volume are in reach.
     renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
     await startSitting();
 
-    expect(livePlayer().playerVars).toMatchObject({ controls: 0, disablekb: 1 });
+    expect(livePlayer().playerVars.controls).toBe(1);
+    expect(livePlayer().playerVars.disablekb).toBeUndefined();
   });
 
-  it("pauses the video on a click and resumes it on the next", async () => {
-    // Slice 5 guarantee: clicking the video toggles pause and resume.
-    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
-    await startSitting();
-    await playFor(1);
-    const player = livePlayer();
-
-    fireEvent.click(screen.getByRole("button", { name: "Pause video" }));
-    await settle();
-    expect(player.calls.at(-1)).toEqual({ kind: "pause" });
-    expect(player.getPlayerState()).toBe(PLAYER_STATE.PAUSED);
-
-    fireEvent.click(screen.getByRole("button", { name: "Play video" }));
-    await settle();
-    expect(player.calls.at(-1)).toEqual({ kind: "play" });
-    expect(player.getPlayerState()).toBe(PLAYER_STATE.PLAYING);
-  });
-
-  it("lets nothing inside the video take a click while the clip plays", async () => {
-    // Slice 5 guarantee: the iframe sits in an inert subtree, so a browser routes no
-    // pointer or focus into it, and the layer over it is what takes the click.
+  it("leaves the video open to the pointer, with nothing laid over it", async () => {
+    // Guarantee: YouTube's controls take clicks and focus, so no layer covers the iframe.
     renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
     await startSitting();
     await playFor(1);
 
     const iframeHost = frame().querySelector("[id^='collection-player-']");
     if (!iframeHost) throw new Error("No iframe host was built");
-    const inertRegion = iframeHost.closest("[inert]");
-    expect(inertRegion).not.toBeNull();
-    expect(frame().contains(inertRegion)).toBe(true);
+    expect(iframeHost.closest("[inert]")).toBeNull();
+    expect(within(frame()).queryByRole("button", { name: /video$/ })).toBeNull();
+  });
 
-    const layer = screen.getByRole("button", { name: "Pause video" });
-    expect(frame().contains(layer)).toBe(true);
-    expect(layer.contains(iframeHost)).toBe(false);
-    expect(layer.className).toContain("absolute");
-    expect(layer.className).toContain("inset-0");
+  it("pulls playback moved before the clip's start back to the start", async () => {
+    // Guarantee: a seek before the clip's range, from any control, snaps to the clip's start.
+    renderPlayer([{ ...playerItem("item-a", VIDEO_A, LANDSCAPE), startSec: 20, endSec: 40 }]);
+    await startSitting();
+    await playFor(1);
+    const player = livePlayer();
+
+    player.seekTo(5);
+    await playFor(1);
+
+    expect(player.calls.filter((call) => call.kind === "seek").at(-1)).toEqual({ kind: "seek", toSec: 20 });
+    expect(player.getCurrentTime()).toBeGreaterThanOrEqual(20);
+  });
+
+  it("ends the clip when playback is moved past its end", async () => {
+    // Guarantee: a seek past the clip's range behaves as the clip ending.
+    renderPlayer([
+      { ...playerItem("item-a", VIDEO_A, LANDSCAPE), startSec: 20, endSec: 40 },
+      playerItem("item-b", VIDEO_B, LANDSCAPE),
+    ]);
+    await startSitting();
+    await playFor(1);
+    const player = livePlayer();
+
+    player.pauseVideo();
+    player.seekTo(55);
+    await playFor(1);
+
+    expect(player.loads.at(-1)).toMatchObject({ kind: "load", videoId: VIDEO_B });
   });
 });

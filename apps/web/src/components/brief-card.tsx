@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { BriefSummary } from "@/lib/types";
 import { TagBadge } from "@/components/tag-badge";
@@ -23,10 +24,11 @@ export function BriefCard({ brief, activeTags, onTagClick }: BriefCardProps) {
       {/* Thumbnail */}
       <div className="aspect-video rounded-lg bg-[var(--color-bg-tertiary)] mb-3 overflow-hidden relative">
         {brief.thumbnailUrl ? (
-          <img
+          <Image
             src={brief.thumbnailUrl}
             alt={brief.title}
-            loading="lazy"
+            fill
+            unoptimized
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
