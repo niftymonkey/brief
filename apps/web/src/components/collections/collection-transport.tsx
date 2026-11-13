@@ -216,7 +216,7 @@ function StageCaption({
           {isLive && position ? (
             <>
               <span className="shrink-0">{ordinalPlace(position.ordinal ?? 1, position.total)}</span>
-              <ClipProgressMeter progress={progress} onSeek={onSeek} className="flex-1" />
+              <ClipProgressMeter key={position.itemId} progress={progress} onSeek={onSeek} className="flex-1" />
               <ClipClockReadout progress={progress} />
             </>
           ) : isDone && position ? (

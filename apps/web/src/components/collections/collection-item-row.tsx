@@ -72,6 +72,40 @@ interface ThumbnailStyle extends CSSProperties {
  * entry's own title, a mono source line, and the curator's note as body copy with
  * the thumbnail subordinate to it.
  */
+interface WordsFailedNoticeProps {
+  message: string;
+  isRetrying: boolean;
+  onRetry: () => void;
+  onWrite: () => void;
+  className?: string;
+}
+
+/** Says which words could not be written, with a retry and a way to write them by hand. */
+function WordsFailedNotice({ message, isRetrying, onRetry, onWrite, className }: WordsFailedNoticeProps) {
+  return (
+    <div className={cn("flex flex-wrap items-center gap-3 lg:relative lg:z-10", className)}>
+      <span className="text-sm text-[var(--color-text-tertiary)] italic">{message}</span>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={isRetrying}
+        className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer disabled:opacity-50"
+      >
+        {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+        Retry
+      </button>
+      <button
+        type="button"
+        onClick={onWrite}
+        className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+      >
+        <Pencil className="w-3.5 h-3.5" />
+        Write one
+      </button>
+    </div>
+  );
+}
+
 export function CollectionItemRow({
   item,
   entry,
@@ -118,6 +152,7 @@ export function CollectionItemRow({
   const hasSummary = item.summary !== null && item.summary.trim().length > 0;
   const isGenerating = item.summaryStatus === "pending" && !hasSummary;
   const generationFailed = item.summaryStatus === "failed" && !hasSummary;
+  const titleGenerationFailed = item.summaryStatus === "failed" && item.title === null;
 
   const handleRetrySummary = async () => {
     if (!controls) return;
@@ -372,41 +407,32 @@ export function CollectionItemRow({
           </span>
 
           {hasSummary ? (
-            <p className="text-sm sm:text-[0.9375rem] lg:text-sm leading-[1.55] text-[var(--color-text-secondary)] whitespace-pre-wrap lg:line-clamp-2">
-              {item.summary}
-            </p>
+            <>
+              <p className="text-sm sm:text-[0.9375rem] lg:text-sm leading-[1.55] text-[var(--color-text-secondary)] whitespace-pre-wrap lg:line-clamp-2">
+                {item.summary}
+              </p>
+              {controls && titleGenerationFailed && (
+                <WordsFailedNotice
+                  message="Couldn't write a title."
+                  isRetrying={isRetrying}
+                  onRetry={handleRetrySummary}
+                  onWrite={() => setIsEditOpen(true)}
+                  className="mt-1.5"
+                />
+              )}
+            </>
           ) : controls && isGenerating ? (
             <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               {item.title === null ? "Writing a title and note..." : "Writing a note..."}
             </p>
           ) : controls && generationFailed ? (
-            <div className="flex flex-wrap items-center gap-3 lg:relative lg:z-10">
-              <span className="text-sm text-[var(--color-text-tertiary)] italic">
-                Couldn&apos;t write a note.
-              </span>
-              <button
-                type="button"
-                onClick={handleRetrySummary}
-                disabled={isRetrying}
-                className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {isRetrying ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <RotateCw className="w-3.5 h-3.5" />
-                )}
-                Retry
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsEditOpen(true)}
-                className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Write one
-              </button>
-            </div>
+            <WordsFailedNotice
+              message={item.title === null ? "Couldn't write a title and note." : "Couldn't write a note."}
+              isRetrying={isRetrying}
+              onRetry={handleRetrySummary}
+              onWrite={() => setIsEditOpen(true)}
+            />
           ) : controls ? (
             <button
               type="button"

@@ -464,6 +464,50 @@ describe("collections db lifecycle", () => {
     expect(retried).toMatchObject({ summary: "recovered summary", summaryStatus: "ready" });
   });
 
+  it("a note-only run that lands after the title was cleared leaves the clip pending for the run that writes the title", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Title cleared mid-run" });
+    cleanupCollectionIds.push(collection.id);
+
+    // The note-only run reads the clip as added, before the author clears the title.
+    const describedByNoteRun = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "clearmidrun",
+      startSec: 5,
+      endSec: 20,
+      title: "My own title",
+    }, noFacts));
+
+    const cleared = expectCollectionItem(
+      await updateCollectionItem(userId, collection.id, describedByNoteRun.id, { title: null }),
+    );
+    expect(cleared).toMatchObject({ title: null, titleAuthored: false, summaryStatus: "pending" });
+
+    const afterNoteRun = expectCollectionItem(
+      await writeGeneratedClipWords(userId, collection.id, describedByNoteRun, {
+        status: "ready",
+        title: null,
+        summary: "note from the earlier run",
+      }),
+    );
+    expect(afterNoteRun).toMatchObject({
+      title: null,
+      summary: "note from the earlier run",
+      summaryStatus: "pending",
+    });
+
+    const afterReplacementRun = expectCollectionItem(
+      await writeGeneratedClipWords(userId, collection.id, cleared, {
+        status: "ready",
+        title: "Generated title",
+        summary: "note from the replacement run",
+      }),
+    );
+    expect(afterReplacementRun).toMatchObject({ title: "Generated title", summaryStatus: "ready" });
+  });
+
   it("getCollectionItem returns the item for its owner and null for a stranger", async () => {
     if (!process.env.POSTGRES_URL) {
       throw new Error("POSTGRES_URL is required for collections db integration tests");

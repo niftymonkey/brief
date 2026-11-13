@@ -4,7 +4,7 @@
  * words land or the wait runs out.
  */
 
-import { useEffect, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import type { CollectionItem, CollectionWithItems } from "@/lib/collections";
 
 const POLL_INTERVAL_MS = 2_000;
@@ -18,11 +18,19 @@ const pendingItemIds = (items: CollectionItem[]): string =>
     .map((item) => item.id)
     .join(",");
 
-/** Takes only the words from the server's copy, so a reorder or edit in flight keeps its place. */
+const showsSameFootage = (a: CollectionItem, b: CollectionItem): boolean =>
+  a.videoId === b.videoId && a.startSec === b.startSec && a.endSec === b.endSec;
+
+/**
+ * Takes only the words from the server's copy, so a reorder or edit in flight
+ * keeps its place, and only for an entry still waiting on words for the footage
+ * the server's copy describes.
+ */
 const mergeClipWords = (current: CollectionItem[], fetched: CollectionItem[]): CollectionItem[] =>
   current.map((item) => {
+    if (item.summaryStatus !== "pending") return item;
     const latest = fetched.find((candidate) => candidate.id === item.id);
-    if (!latest) return item;
+    if (!latest || !showsSameFootage(item, latest)) return item;
     return {
       ...item,
       title: latest.title,
@@ -48,13 +56,19 @@ const readCollection = async (collectionId: string): Promise<CollectionWithItems
   }
 };
 
+/**
+ * Polls while any entry is pending. Returns the call the page makes as it
+ * applies an edit the server answered: a read sent before that point may
+ * predate the edit, so its answer is dropped and the next read is trusted.
+ */
 const usePendingClipWords = (
   collectionId: string,
   items: CollectionItem[],
   setItems: Dispatch<SetStateAction<CollectionItem[]>>,
   enabled: boolean,
-): void => {
+): (() => void) => {
   const pendingIds = enabled ? pendingItemIds(items) : "";
+  const editsApplied = useRef(0);
 
   useEffect(() => {
     if (pendingIds === "") return;
@@ -63,9 +77,11 @@ const usePendingClipWords = (
     const deadline = Date.now() + POLL_DEADLINE_MS;
 
     const poll = async () => {
+      const editsBeforeRead = editsApplied.current;
       const collection = await readCollection(collectionId);
       if (stopped) return;
-      if (collection) setItems((previous) => mergeClipWords(previous, collection.items));
+      const predatesAnEdit = editsApplied.current !== editsBeforeRead;
+      if (collection && !predatesAnEdit) setItems((previous) => mergeClipWords(previous, collection.items));
       if (Date.now() < deadline) timer = setTimeout(poll, POLL_INTERVAL_MS);
     };
 
@@ -75,6 +91,10 @@ const usePendingClipWords = (
       clearTimeout(timer);
     };
   }, [collectionId, pendingIds, setItems]);
+
+  return useCallback(() => {
+    editsApplied.current += 1;
+  }, []);
 };
 
 export { usePendingClipWords };

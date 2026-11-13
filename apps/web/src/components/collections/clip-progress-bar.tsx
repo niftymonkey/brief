@@ -53,7 +53,9 @@ interface ClipProgressMeterProps {
 
 /**
  * The bar, kept current from the feed the player publishes into, and a slider that
- * moves playback within the clip by press, drag or arrow key.
+ * moves playback within the clip by press, drag or arrow key. A caller keys it by
+ * the entry on screen, so a drag ends when the run moves to another clip rather
+ * than seeking inside the next one.
  */
 const ClipProgressMeter = ({ progress, onSeek, className }: ClipProgressMeterProps) => {
   const clock = useClipClock(progress);

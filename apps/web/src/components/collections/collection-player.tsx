@@ -36,7 +36,7 @@ import {
   type SittingPosition,
 } from "@/lib/collection-playback";
 import { cn } from "@/lib/utils";
-import { ClipProgressMeter } from "./clip-progress-bar";
+import { ClipClockReadout, ClipProgressMeter } from "./clip-progress-bar";
 import { loadYouTubeIframeApi } from "@/lib/youtube-iframe-api";
 
 export interface CollectionPlayerItem {
@@ -616,6 +616,14 @@ export function CollectionPlayer({
               <Minimize className="w-4 h-4" />
             </Button>
           )}
+          {/* The captions under the frame are out of reach while it fills the screen,
+              so the clip's bar and clock are drawn inside it, over the video. */}
+          {fullscreen.mode !== "off" && (
+            <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/70 to-transparent pt-8 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+              <ClipProgressMeter key={currentItem?.id} progress={progress} onSeek={seekWithinClip} className="flex-1" />
+              <ClipClockReadout progress={progress} className="font-mono text-xs text-white/80" />
+            </div>
+          )}
         </div>
       </div>
 
@@ -647,7 +655,7 @@ export function CollectionPlayer({
           the entries list underneath the player. A wide screen captions the stage
           from the page instead, idle and playing alike. */}
       <div className="mt-2.5 lg:hidden">
-        <ClipProgressMeter progress={progress} onSeek={seekWithinClip} className="mb-1.5" />
+        <ClipProgressMeter key={currentItem?.id} progress={progress} onSeek={seekWithinClip} className="mb-1.5" />
         <div className="flex items-baseline gap-2 h-[1.4em]">
           <p className="min-w-0 truncate font-medium leading-[1.4] text-[var(--color-text-primary)]">
             {currentItem ? (

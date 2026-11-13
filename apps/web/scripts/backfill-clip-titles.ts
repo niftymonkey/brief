@@ -146,7 +146,8 @@ const listDryRun = (clips: UntitledClip[]): void => {
   console.log(`\nDry run complete. ${clips.length} clip(s) would be titled. Nothing was called or written.\n`);
 };
 
-const titleClips = async (clips: UntitledClip[], openRouterKey: string): Promise<void> => {
+/** Titles every clip, failures included, and returns how many failed. */
+const titleClips = async (clips: UntitledClip[], openRouterKey: string): Promise<number> => {
   let index = 0;
   const tally = await backfillClipTitles(clips, createClipWordsDeps(openRouterKey), (clip, outcome) => {
     console.log(`${clipLabel(clip, index, clips.length)}: ${describeOutcome(outcome)}`);
@@ -155,29 +156,35 @@ const titleClips = async (clips: UntitledClip[], openRouterKey: string): Promise
   console.log(`\nDone. ${tally.written} titled, ${tally.skipped} skipped, ${tally.failed} failed.`);
   if (tally.failed > 0) console.log("Failed clips keep no title. Re-run once the cause is fixed.");
   console.log();
+  return tally.failed;
 };
 
-const main = async (): Promise<void> => {
+/** Runs the backfill and returns the process exit status: nonzero when any clip failed. */
+const main = async (): Promise<number> => {
   const flags = parseFlags(process.argv.slice(2));
   const runEnv = resolveRunEnv(flags.isProd);
   printHeader(runEnv, flags);
 
   if (flags.isProd && !(await confirmProduction())) {
     console.log("\nBackfill cancelled.\n");
-    return;
+    return 0;
   }
 
   applyRunEnv(runEnv);
   const clips = await listUntitledClips();
   console.log(`Found ${clips.length} settled clip(s) with no title.\n`);
-  if (clips.length === 0) return;
+  if (clips.length === 0) return 0;
 
-  if (flags.isDryRun) listDryRun(clips);
-  else await titleClips(clips, runEnv.openRouterKey);
+  if (flags.isDryRun) {
+    listDryRun(clips);
+    return 0;
+  }
+  const failed = await titleClips(clips, runEnv.openRouterKey);
+  return failed > 0 ? 1 : 0;
 };
 
 main()
-  .then(() => process.exit(0))
+  .then((exitStatus) => process.exit(exitStatus))
   .catch((error: unknown) => {
     console.error("\nBackfill failed:", error instanceof Error ? error.message : error);
     process.exit(1);

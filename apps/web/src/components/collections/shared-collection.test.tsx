@@ -260,6 +260,21 @@ describe("SharedCollection full screen", () => {
     expect(fullscreenToggle().getAttribute("aria-label")).toBe("Enter full screen");
   });
 
+  it("keeps the clip's bar inside the frame in the browser's full screen and in the filled viewport", async () => {
+    installNativeFullscreen();
+    renderShared();
+    await startSharedSitting();
+    await pressFullscreenToggle();
+    expect(frame().getAttribute("data-fullscreen")).toBe("native");
+    expect(within(frame()).getByRole("slider", { name: "Clip progress" })).toBeTruthy();
+
+    await pressFullscreenToggle();
+    uninstallNativeFullscreen();
+    await pressFullscreenToggle();
+    expect(frame().getAttribute("data-fullscreen")).toBe("fill");
+    expect(within(frame()).getByRole("slider", { name: "Clip progress" })).toBeTruthy();
+  });
+
   it("leaves the filled viewport from the control drawn inside it", async () => {
     renderShared();
     await startSharedSitting();
@@ -741,5 +756,25 @@ describe("SharedCollection clip clock under the stage", () => {
     fireEvent.keyDown(bar, { key: "ArrowRight" });
     fireEvent.keyDown(bar, { key: "ArrowRight" });
     expect(lastSeek()).toBe(40);
+  });
+
+  it("ends a drag when the run moves to another clip, so one drag never seeks inside the next clip", async () => {
+    renderShared();
+    await startSharedSitting();
+    await playFor(1);
+    const bar = stageCaptionSlider();
+    vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 100, y: 0, width: 200, height: 12 }),
+    );
+    fireEvent.pointerDown(bar, { clientX: 200, button: 0, pointerId: 1 });
+
+    fireEvent.click(headerButton("Next entry"));
+    await settle();
+    await playFor(1);
+    const seeksAtClipChange = livePlayer().calls.filter((call) => call.kind === "seek").length;
+
+    fireEvent.pointerMove(stageCaptionSlider(), { clientX: 250, pointerId: 1 });
+
+    expect(livePlayer().calls.filter((call) => call.kind === "seek").length).toBe(seeksAtClipChange);
   });
 });

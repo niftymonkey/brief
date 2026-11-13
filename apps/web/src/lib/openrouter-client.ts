@@ -13,7 +13,13 @@
  */
 
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { generateText, Output, type ModelMessage } from "ai";
+import {
+  generateText,
+  NoObjectGeneratedError,
+  Output,
+  type LanguageModelUsage,
+  type ModelMessage,
+} from "ai";
 import type { z } from "zod";
 
 export interface OpenRouterRequest {
@@ -78,26 +84,33 @@ export function createOpenRouterClient(
 
   return {
     async generateText(req) {
-      const result = await generateText({
-        model: openrouter(req.model),
-        messages: req.messages,
-        maxOutputTokens: req.maxOutputTokens,
-        ...(req.outputSchema ? { output: Output.object({ schema: req.outputSchema }) } : {}),
-        // AI SDK v6 has no default request timeout; without one a stuck
-        // upstream call would hang indefinitely. 60s is generous enough for
-        // worst-case vision payloads but short enough to surface real outages.
-        timeout: DEFAULT_TIMEOUT_MS,
-        ...(req.signal ? { abortSignal: req.signal } : {}),
-      });
-      return {
-        text: result.text,
-        usage: {
-          inputTokens: result.usage.inputTokens ?? 0,
-          outputTokens: result.usage.outputTokens ?? 0,
-        },
-      };
+      try {
+        const result = await generateText({
+          model: openrouter(req.model),
+          messages: req.messages,
+          maxOutputTokens: req.maxOutputTokens,
+          ...(req.outputSchema ? { output: Output.object({ schema: req.outputSchema }) } : {}),
+          // AI SDK v6 has no default request timeout; without one a stuck
+          // upstream call would hang indefinitely. 60s is generous enough for
+          // worst-case vision payloads but short enough to surface real outages.
+          timeout: DEFAULT_TIMEOUT_MS,
+          ...(req.signal ? { abortSignal: req.signal } : {}),
+        });
+        return { text: result.text, usage: readUsage(result.usage) };
+      } catch (err) {
+        // The SDK throws when a structured reply fails the schema, after the
+        // tokens are spent. The caller judges the reply against the same schema
+        // and must see its spend, so the reply comes back as ordinary text.
+        if (!NoObjectGeneratedError.isInstance(err)) throw err;
+        return { text: err.text ?? "", usage: readUsage(err.usage) };
+      }
     },
   };
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+
+const readUsage = (usage: LanguageModelUsage | undefined): OpenRouterUsage => ({
+  inputTokens: usage?.inputTokens ?? 0,
+  outputTokens: usage?.outputTokens ?? 0,
+});

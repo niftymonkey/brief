@@ -325,3 +325,44 @@ describe("CollectionItemRow jump", () => {
     expect(document.body.textContent).not.toContain("now playing");
   });
 });
+
+describe("CollectionItemRow failed words", () => {
+  afterEach(cleanup);
+
+  it("offers to retry a title that failed to be written on a clip that already has a note", () => {
+    const item: CollectionItem = {
+      id: "item-a",
+      videoId: "vid",
+      startSec: null,
+      endSec: null,
+      title: null,
+      titleAuthored: false,
+      videoTitle: "An entry",
+      durationSec: 90,
+      aspectRatio: null,
+      summary: "A note.",
+      summaryAuthored: false,
+      summaryStatus: "failed",
+      position: 0,
+    };
+    const [entry] = buildSitting([item], {
+      vid: { title: null, channelName: null, durationSec: 90 },
+    }).entries;
+    const onRetrySummary = vi.fn(async () => {});
+
+    render(
+      <CollectionItemRow
+        item={item}
+        entry={entry}
+        isLast
+        isActive={false}
+        controls={{ onRemove: async () => {}, onEdit: async () => {}, onRetrySummary }}
+      />,
+    );
+
+    expect(screen.getByText("A note.")).toBeTruthy();
+    expect(screen.getByText("Couldn't write a title.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetrySummary).toHaveBeenCalledTimes(1);
+  });
+});

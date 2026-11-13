@@ -152,7 +152,7 @@ export function CollectionDetail({
     router.refresh();
   };
 
-  usePendingClipWords(collectionId, items, setItems, editable);
+  const noteEditApplied = usePendingClipWords(collectionId, items, setItems, editable);
 
   /** Asks again for the words of an entry whose generation failed. */
   const retryClipWords = async (itemId: string) => {
@@ -256,6 +256,7 @@ export function CollectionDetail({
         body: JSON.stringify(edit),
       },
     );
+    noteEditApplied();
     setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
     // The hero reads a new video's title, channel and length off the server's
     // videoFacts prop, which only a refresh can restock.

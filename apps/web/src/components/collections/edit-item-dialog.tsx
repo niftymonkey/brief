@@ -259,7 +259,7 @@ function EditItemDialog({ children, item, open, onOpenChange, onSubmit }: EditIt
       }}
     >
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[75dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Edit clip</DialogTitle>
           <DialogDescription>

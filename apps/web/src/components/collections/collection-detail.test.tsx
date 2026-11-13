@@ -737,4 +737,51 @@ describe("CollectionDetail clip edit popup", () => {
     expect(patchBodies(fetchMock, "item-a")).toEqual([]);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  it("keeps a title saved while a read of the collection was in flight when that older read lands", async () => {
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], summaryStatus: "pending" };
+    const saved: CollectionItem = { ...collection.items[0], title: "A name of my own", titleAuthored: true };
+    let answerRead: (response: Response) => void = () => {};
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PATCH") return new Response(JSON.stringify(saved), { status: 200 });
+      return new Promise<Response>((resolve) => {
+        answerRead = resolve;
+      });
+    });
+    renderDetail(collection);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    const dialog = openEditor();
+    typeInto(dialog, "Title", "A name of my own");
+    await save(dialog);
+    expect(document.querySelector("h3")?.textContent).toBe("A name of my own");
+
+    // The read was answered from the clip as it stood before the save.
+    await act(async () => {
+      answerRead(new Response(JSON.stringify(collection), { status: 200 }));
+    });
+    await settle();
+
+    expect(document.querySelector("h3")?.textContent).toBe("A name of my own");
+  });
+
+  it("takes no words from a read for an entry that is not waiting on any", async () => {
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], summaryStatus: "pending" };
+    const serverCopy = makeCollection();
+    serverCopy.items[0] = collection.items[0];
+    serverCopy.items[1] = { ...serverCopy.items[1], title: "Words from elsewhere", summaryStatus: "ready" };
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify(serverCopy), { status: 200 }));
+    renderDetail(collection);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    await settle();
+
+    expect(screen.queryByText("Words from elsewhere")).toBeNull();
+  });
 });

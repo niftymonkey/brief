@@ -848,6 +848,11 @@ export type GeneratedClipWordsOutcome =
  *   bounds moved while it ran, its words describe footage the clip no longer
  *   shows, and the run the move started will write the right ones.
  *
+ * A run asks only for the words missing when it started. When the author hands
+ * back to the AI a word the run saw written, that word is still owed after the
+ * run's write, so the clip stays 'pending' for the run the edit started rather
+ * than settling 'ready' without it.
+ *
  * A failed or a retried run on a 'failed' clip advances normally. Returns the
  * clip's resulting state (unchanged when a guard blocked the write), or null
  * when the clip is not the user's.
@@ -875,6 +880,8 @@ export async function writeGeneratedClipWords(
 
     const title = outcome.status === "ready" ? outcome.title : null;
     const summary = outcome.status === "ready" ? outcome.summary : null;
+    const runSawTitle = describedClip.title !== null || describedClip.titleAuthored;
+    const runSawSummary = describedClip.summary !== null || describedClip.summaryAuthored;
 
     const updated = await client.sql<CollectionItemRow>`
       UPDATE collection_items ci
@@ -887,7 +894,13 @@ export async function writeGeneratedClipWords(
           WHEN ${summary}::text IS NOT NULL AND NOT ci.summary_authored THEN ${summary}::text
           ELSE ci.summary
         END,
-        summary_status = ${outcome.status},
+        summary_status = CASE
+          WHEN ${outcome.status}::text = 'ready' AND (
+            (${runSawTitle}::boolean AND NOT ci.title_authored AND COALESCE(${title}::text, ci.title) IS NULL)
+            OR (${runSawSummary}::boolean AND NOT ci.summary_authored AND COALESCE(${summary}::text, ci.summary) IS NULL)
+          ) THEN 'pending'
+          ELSE ${outcome.status}::text
+        END,
         updated_at = NOW()
       WHERE ci.collection_id = ${collectionId}
         AND ci.id = ${itemId}
