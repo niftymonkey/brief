@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
+import type { CollectionItem } from "@/lib/collections";
 import { CollectionDetail } from "@/components/collections/collection-detail";
 import {
   FakeYouTubePlayer,
@@ -472,5 +473,315 @@ describe("CollectionDetail server rendering", () => {
     expect(first).toHaveLength(3);
     expect(first[0]).toBeTruthy();
     expect(second).toEqual(first);
+  });
+});
+
+describe("CollectionDetail clip words", () => {
+  const pendingCollection = () => {
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], summaryStatus: "pending" };
+    return collection;
+  };
+
+  /** The collection as the server answers once the first entry's words have landed. */
+  const writtenCollection = () => {
+    const collection = makeCollection();
+    collection.items[0] = {
+      ...collection.items[0],
+      title: "The written title",
+      summary: "The written note.",
+      summaryStatus: "ready",
+    };
+    return collection;
+  };
+
+  const collectionReads = (fetchMock: ReturnType<typeof vi.fn>): number =>
+    fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input) === "/api/collections/collection-1" && (init?.method ?? "GET") === "GET",
+    ).length;
+
+  /**
+   * Lets wall clock pass a second at a time. React holds a render until its
+   * `act` ends, so one long `act` would hide every update from the page until
+   * the end, where a real page renders between polls.
+   */
+  const waitSeconds = async (seconds: number): Promise<void> => {
+    for (let elapsed = 0; elapsed < seconds; elapsed += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+    }
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("shows a pending entry's words once a later read of the collection carries them", async () => {
+    const answers = [pendingCollection(), writtenCollection()];
+    const fetchMock = vi.fn(async () => {
+      const body = answers.length > 1 ? answers.shift() : answers[0];
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    globalThis.fetch = fetchMock;
+
+    renderDetail(pendingCollection());
+    expect(screen.getByText("Writing a title and note...")).toBeTruthy();
+
+    await waitSeconds(5);
+
+    expect(screen.queryByText("Writing a title and note...")).toBeNull();
+    expect(screen.getAllByText("The written note.").length).toBeGreaterThan(0);
+    expect(collectionReads(fetchMock)).toBeGreaterThanOrEqual(2);
+  });
+
+  it("stops reading the collection once no entry is pending", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(writtenCollection()), { status: 200 }));
+    globalThis.fetch = fetchMock;
+
+    renderDetail(pendingCollection());
+    await waitSeconds(25);
+
+    // The first read settles the only pending entry, so it is the last one.
+    expect(collectionReads(fetchMock)).toBe(1);
+  });
+
+  it("gives up reading the collection after ninety seconds of nothing landing", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(pendingCollection()), { status: 200 }));
+    globalThis.fetch = fetchMock;
+
+    renderDetail(pendingCollection());
+    await waitSeconds(95);
+    const readsAtDeadline = collectionReads(fetchMock);
+    await waitSeconds(30);
+
+    expect(readsAtDeadline).toBeGreaterThan(0);
+    expect(collectionReads(fetchMock)).toBe(readsAtDeadline);
+  });
+
+  it("never asks the browser to write an added entry's words", async () => {
+    // The add route schedules the words itself; a second request from the page
+    // would pay for them twice.
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body =
+        init?.method === "POST"
+          ? { ...makeItem("item-d", VIDEO_B, 0, 10, 3), summaryStatus: "pending" }
+          : writtenCollection();
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    globalThis.fetch = fetchMock;
+
+    renderDetail();
+    await addEntry();
+    await waitSeconds(5);
+
+    const summarizeCalls = fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/summarize"));
+    expect(summarizeCalls).toEqual([]);
+  });
+});
+
+describe("CollectionDetail clip edit popup", () => {
+  /** PATCH bodies the page sent for one entry, parsed. */
+  const patchBodies = (fetchMock: ReturnType<typeof vi.fn>, itemId: string): unknown[] =>
+    fetchMock.mock.calls
+      .filter(
+        ([input, init]) =>
+          String(input) === `/api/collections/collection-1/items/${itemId}` &&
+          init?.method === "PATCH",
+      )
+      .map(([, init]) => JSON.parse(String(init?.body)));
+
+  /** Answers an edit PATCH the way the route does, with the item as it now stands. */
+  const answerEditPatches = (base: CollectionItem) =>
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const sent: Partial<CollectionItem> = JSON.parse(String(init?.body ?? "{}"));
+      const title = sent.title === undefined ? base.title : sent.title;
+      const body: CollectionItem = {
+        ...base,
+        ...sent,
+        title,
+        titleAuthored: sent.title === undefined ? base.titleAuthored : sent.title !== null,
+        summaryStatus: title === null ? "pending" : "ready",
+      };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+
+  /** The first entry with a title and note the AI wrote. */
+  const aiWrittenCollection = () => {
+    const collection = makeCollection();
+    collection.items[0] = {
+      ...collection.items[0],
+      title: "An AI title",
+      summary: "An AI note.",
+    };
+    return collection;
+  };
+
+  const openEditor = (): HTMLElement => {
+    const [firstClip] = screen
+      .getAllByRole("button", { name: /^Edit / })
+      .filter((button) => button.getAttribute("aria-label") !== "Edit collection");
+    fireEvent.click(firstClip);
+    return screen.getByRole("dialog", { name: "Edit clip" });
+  };
+
+  const typeInto = (dialog: HTMLElement, label: string, value: string): void => {
+    fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+  };
+
+  const save = async (dialog: HTMLElement): Promise<void> => {
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    });
+    await settle();
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("renames a clip from its popup and sends the new title as hand-written", async () => {
+    const collection = aiWrittenCollection();
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
+    renderDetail(collection);
+
+    const dialog = openEditor();
+    typeInto(dialog, "Title", "  A name of my own  ");
+    await save(dialog);
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([{ title: "A name of my own" }]);
+    expect(document.querySelector("h3")?.textContent).toBe("A name of my own");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("hands a cleared title back to the AI", async () => {
+    // Guarantee: an empty title sends null, which hands the title back to the AI.
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], title: "An old name", titleAuthored: true };
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
+    renderDetail(collection);
+
+    const dialog = openEditor();
+    typeInto(dialog, "Title", "   ");
+    await save(dialog);
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([{ title: null }]);
+    // While the AI writes a new one, the row reads the video's name.
+    expect(document.querySelector("h3")?.textContent).toBe("Title item-a");
+  });
+
+  it("sends only the note when the note is all the author changed", async () => {
+    // Guarantee: the popup sends only changed fields, so an AI title left alone stays the AI's.
+    const collection = aiWrittenCollection();
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
+    renderDetail(collection);
+
+    const dialog = openEditor();
+    typeInto(dialog, "Note", "A note of my own.");
+    await save(dialog);
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([{ summary: "A note of my own." }]);
+  });
+
+  it("sends only the bound that moved when the range is all the author changed", async () => {
+    // Guarantee: the popup sends only changed fields, so the words stay the AI's to rewrite.
+    const collection = aiWrittenCollection();
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
+    renderDetail(collection);
+
+    const dialog = openEditor();
+    typeInto(dialog, "Start (s)", "2");
+    await save(dialog);
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([{ startSec: 2 }]);
+  });
+
+  it("saves nothing for a clip whose words are still being written and were left alone", async () => {
+    // Guarantee: an empty field the AI has yet to fill is never sent, so it is never marked authored.
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], summaryStatus: "pending" };
+    const fetchMock = answerEditPatches(collection.items[0]);
+    globalThis.fetch = fetchMock;
+    renderDetail(collection);
+
+    const dialog = openEditor();
+    expect(within(dialog).getByLabelText("Title").getAttribute("placeholder")).toBe(
+      "Being written for you...",
+    );
+    expect(within(dialog).getByLabelText("Note").getAttribute("placeholder")).toBe(
+      "Being written for you...",
+    );
+    await save(dialog);
+
+    expect(patchBodies(fetchMock, "item-a")).toEqual([]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps a title saved while a read of the collection was in flight when that older read lands", async () => {
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], summaryStatus: "pending" };
+    const saved: CollectionItem = { ...collection.items[0], title: "A name of my own", titleAuthored: true };
+    let answerRead: (response: Response) => void = () => {};
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PATCH") return new Response(JSON.stringify(saved), { status: 200 });
+      return new Promise<Response>((resolve) => {
+        answerRead = resolve;
+      });
+    });
+    renderDetail(collection);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    const dialog = openEditor();
+    typeInto(dialog, "Title", "A name of my own");
+    await save(dialog);
+    expect(document.querySelector("h3")?.textContent).toBe("A name of my own");
+
+    // The read was answered from the clip as it stood before the save.
+    await act(async () => {
+      answerRead(new Response(JSON.stringify(collection), { status: 200 }));
+    });
+    await settle();
+
+    expect(document.querySelector("h3")?.textContent).toBe("A name of my own");
+  });
+
+  it("takes no words from a read for an entry that is not waiting on any", async () => {
+    const collection = makeCollection();
+    collection.items[0] = { ...collection.items[0], summaryStatus: "pending" };
+    const serverCopy = makeCollection();
+    serverCopy.items[0] = collection.items[0];
+    serverCopy.items[1] = { ...serverCopy.items[1], title: "Words from elsewhere", summaryStatus: "ready" };
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify(serverCopy), { status: 200 }));
+    renderDetail(collection);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    await settle();
+
+    expect(screen.queryByText("Words from elsewhere")).toBeNull();
   });
 });

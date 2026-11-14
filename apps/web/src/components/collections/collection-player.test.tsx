@@ -2,7 +2,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRef, type RefObject } from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { createClipProgress } from "@/lib/clip-progress";
 import {
   CollectionPlayer,
   type CollectionPlayerHandle,
@@ -34,6 +35,7 @@ function playerItem(
   return {
     id,
     videoId,
+    title: null,
     videoTitle: `Title ${id}`,
     summary: null,
     startSec: 0,
@@ -43,7 +45,7 @@ function playerItem(
 }
 
 function renderPlayer(items: CollectionPlayerItem[]) {
-  return render(<CollectionPlayer items={items} />);
+  return render(<CollectionPlayer items={items} progress={createClipProgress()} />);
 }
 
 /** The one element the iframe lives inside, whatever shape it is drawn at. */
@@ -134,6 +136,7 @@ describe("CollectionPlayer frame shape", () => {
       <CollectionPlayer
         items={[playerItem("item-a", VIDEO_A, LANDSCAPE), playerItem("item-b", VIDEO_B, VERTICAL)]}
         startIndex={1}
+        progress={createClipProgress()}
       />,
     );
 
@@ -152,6 +155,35 @@ describe("CollectionPlayer frame shape", () => {
     expect(className).toContain("mx-auto");
     expect(className).toContain("sm:w-full");
     expect(className).toContain("sm:aspect-video");
+  });
+});
+
+describe("CollectionPlayer caption", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("captions a clip with its own title, in place of the video's name", async () => {
+    renderPlayer([{ ...playerItem("item-a", VIDEO_A, LANDSCAPE), title: "The clip's own title" }]);
+    await startSitting();
+
+    expect(screen.getByText("The clip's own title")).toBeTruthy();
+    expect(screen.queryByText("Title item-a")).toBeNull();
+  });
+
+  it("captions a clip with no title of its own with the video's name", async () => {
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+
+    expect(screen.getByText("Title item-a")).toBeTruthy();
   });
 });
 
@@ -176,7 +208,12 @@ describe("CollectionPlayer starting point and jumps", () => {
 
   function renderWithHandle(startIndex?: number): RefObject<CollectionPlayerHandle | null> {
     const handle = createRef<CollectionPlayerHandle>();
-    render(<CollectionPlayer items={ITEMS} startIndex={startIndex} ref={handle} />);
+    render(<CollectionPlayer
+        items={ITEMS}
+        startIndex={startIndex}
+        progress={createClipProgress()}
+        ref={handle}
+      />);
     return handle;
   }
 
@@ -236,5 +273,100 @@ describe("CollectionPlayer starting point and jumps", () => {
     const handle = renderWithHandle();
 
     expect(jumpTo(handle, "item-c")).toBe(false);
+  });
+});
+
+describe("CollectionPlayer lock to the clip", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeYouTubePlayer();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    uninstallFakeYouTubePlayer();
+  });
+
+  it("builds the player with YouTube's own controls and keyboard shortcuts on", async () => {
+    // Guarantee: YouTube's controls stay available, so captions and volume are in reach.
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+
+    expect(livePlayer().playerVars.controls).toBe(1);
+    expect(livePlayer().playerVars.disablekb).toBeUndefined();
+  });
+
+  it("leaves the video open to the pointer, with nothing laid over it", async () => {
+    // Guarantee: YouTube's controls take clicks and focus, so no layer covers the iframe.
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+    await playFor(1);
+
+    const iframeHost = frame().querySelector("[id^='collection-player-']");
+    if (!iframeHost) throw new Error("No iframe host was built");
+    expect(iframeHost.closest("[inert]")).toBeNull();
+    expect(within(frame()).queryByRole("button", { name: /video$/ })).toBeNull();
+  });
+
+  it("pulls playback moved before the clip's start back to the start", async () => {
+    // Guarantee: a seek before the clip's range, from any control, snaps to the clip's start.
+    renderPlayer([{ ...playerItem("item-a", VIDEO_A, LANDSCAPE), startSec: 20, endSec: 40 }]);
+    await startSitting();
+    await playFor(1);
+    const player = livePlayer();
+
+    player.seekTo(5);
+    await playFor(1);
+
+    expect(player.calls.filter((call) => call.kind === "seek").at(-1)).toEqual({ kind: "seek", toSec: 20 });
+    expect(player.getCurrentTime()).toBeGreaterThanOrEqual(20);
+  });
+
+  it("ends the clip when playback is moved past its end", async () => {
+    // Guarantee: a seek past the clip's range behaves as the clip ending.
+    renderPlayer([
+      { ...playerItem("item-a", VIDEO_A, LANDSCAPE), startSec: 20, endSec: 40 },
+      playerItem("item-b", VIDEO_B, LANDSCAPE),
+    ]);
+    await startSitting();
+    await playFor(1);
+    const player = livePlayer();
+
+    player.pauseVideo();
+    player.seekTo(55);
+    await playFor(1);
+
+    expect(player.loads.at(-1)).toMatchObject({ kind: "load", videoId: VIDEO_B });
+  });
+
+  it("holds the video still when YouTube's own Play is pressed after the sitting has finished", async () => {
+    // Guarantee: a finished sitting plays nothing past its last clip's end.
+    renderPlayer([playerItem("item-a", VIDEO_A, LANDSCAPE)]);
+    await startSitting();
+    await playFor(12);
+    expect(screen.getByText("Playback complete.")).toBeTruthy();
+    const player = livePlayer();
+
+    player.playVideo();
+    await settle();
+
+    expect(player.calls.at(-1)).toEqual({ kind: "pause" });
+  });
+
+  it("moves the clip's bar to where a paused viewer seeks with YouTube's own controls", async () => {
+    // Guarantee: the clip bar and clock follow a seek made while paused, from any control.
+    renderPlayer([{ ...playerItem("item-a", VIDEO_A, LANDSCAPE), startSec: 20, endSec: 40 }]);
+    await startSitting();
+    await playFor(1);
+    const player = livePlayer();
+
+    player.pauseVideo();
+    await settle();
+    player.seekTo(35);
+    await playFor(1);
+
+    expect(screen.getByRole("slider", { name: "Clip progress" }).getAttribute("aria-valuenow")).toBe("15");
   });
 });

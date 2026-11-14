@@ -252,6 +252,54 @@ describe("boundary detection", () => {
   });
 });
 
+describe("a viewer's seek outside the clip", () => {
+  const sample = (state: number, currentTime: number): PlaybackEvent => ({
+    kind: "tick",
+    state,
+    currentTime,
+    videoId: "aqz-KE-bpKQ",
+    duration: 400,
+  });
+
+  it("pulls playback that was moved before the clip's start back to its start", () => {
+    const { state, effects } = run([
+      { kind: "start" },
+      playing(30, "aqz-KE-bpKQ"),
+      sample(PLAYER_STATE.PLAYING, 12),
+    ]);
+    expect(state.index).toBe(0);
+    expect(effects.at(-1)).toEqual({ kind: "snapBack", toSec: 30 });
+  });
+
+  it("pulls a paused position before the clip's start back to its start, without playing it", () => {
+    const { effects } = run([
+      { kind: "start" },
+      playing(30, "aqz-KE-bpKQ"),
+      sample(PLAYER_STATE.PAUSED, 3),
+    ]);
+    expect(effects.at(-1)).toEqual({ kind: "snapBack", toSec: 30 });
+  });
+
+  it("leaves a position a keyframe puts just behind the start where it is", () => {
+    const { effects } = run([
+      { kind: "start" },
+      playing(30, "aqz-KE-bpKQ"),
+      sample(PLAYER_STATE.PLAYING, 29.9),
+    ]);
+    expect(effects.some((effect) => effect.kind === "snapBack")).toBe(false);
+  });
+
+  it("ends the clip when a paused viewer moves playback past its end", () => {
+    const { state, effects } = run([
+      { kind: "start" },
+      playing(30, "aqz-KE-bpKQ"),
+      sample(PLAYER_STATE.PAUSED, 90),
+    ]);
+    expect(state.index).toBe(1);
+    expect(loads(effects)).toEqual([0, 1]);
+  });
+});
+
 describe("a viewer's own pause", () => {
   const paused = (currentTime: number, duration?: number): PlaybackEvent => ({
     kind: "tick",

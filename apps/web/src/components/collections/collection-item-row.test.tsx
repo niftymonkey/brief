@@ -11,23 +11,28 @@ const VERTICAL = 0.5625;
 interface RowOptions {
   isCued?: boolean;
   onJump?: () => void;
+  /** The clip's own title, null while it has none. */
+  title?: string | null;
 }
 
 function renderRow(
   aspectRatio: number | null,
   isActive = false,
   isLast = true,
-  { isCued = false, onJump }: RowOptions = {},
+  { isCued = false, onJump, title = null }: RowOptions = {},
 ): void {
   const item: CollectionItem = {
     id: "item-a",
     videoId: "vid",
     startSec: null,
     endSec: null,
+    title,
+    titleAuthored: false,
     videoTitle: "An entry",
     durationSec: 90,
     aspectRatio,
     summary: "A note.",
+    summaryAuthored: false,
     summaryStatus: "ready",
     position: 0,
   };
@@ -81,6 +86,23 @@ function failThumbnail(): void {
   if (!image) throw new Error("The row is showing no thumbnail to fail");
   fireEvent.error(image);
 }
+
+describe("CollectionItemRow title", () => {
+  afterEach(cleanup);
+
+  it("shows a clip's own title in its row, in place of the video's name", () => {
+    renderRow(null, false, true, { title: "The clip's own title" });
+
+    expect(document.querySelector("h3")?.textContent).toBe("The clip's own title");
+    expect(screen.queryByText("An entry")).toBeNull();
+  });
+
+  it("shows the video's name in the row of a clip with no title of its own", () => {
+    renderRow(null);
+
+    expect(document.querySelector("h3")?.textContent).toBe("An entry");
+  });
+});
 
 describe("CollectionItemRow thumbnail", () => {
   afterEach(cleanup);
@@ -145,23 +167,25 @@ describe("CollectionItemRow thumbnail slot", () => {
 describe("CollectionItemRow active entry", () => {
   afterEach(cleanup);
 
-  it("says which entry is playing, and hides the words where they would crush the title", () => {
+  it("keeps the playing entry's length in its slot, lit, and marks the row current", () => {
+    // Guarantee: the active row keeps its resting label rather than trading it for "now playing".
     renderRow(null, true);
 
-    const marker = [...document.querySelectorAll("span")].find(
-      (node) => node.textContent === "now playing",
+    const label = [...document.querySelectorAll("span.font-mono")].find((node) =>
+      node.textContent?.endsWith("1:30"),
     );
-    expect(marker).toBeTruthy();
-    expect(marker?.className).toContain("hidden");
-    expect(marker?.className).toContain("sm:inline");
+    expect(label).toBeTruthy();
+    expect(label?.className).toContain("text-[var(--color-playing)]");
+    expect(label?.className).not.toContain("hidden sm:inline");
+    expect(document.body.textContent).not.toContain("now playing");
     expect(document.querySelector('[aria-current="true"]')).toBeTruthy();
   });
 
-  it("shows the entry's runtime where an inactive row has nothing to announce", () => {
+  it("shows the entry's runtime on a row that is not playing", () => {
     renderRow(null);
 
     expect(document.body.textContent).toContain("1:30");
-    expect(document.body.textContent).not.toContain("now playing");
+    expect(document.querySelector('[aria-current="true"]')).toBeNull();
   });
 
   it("fills the ordinal marker and lights its rail while the sitting is here", () => {
@@ -204,10 +228,13 @@ describe("CollectionItemRow drag grip", () => {
       videoId: "vid",
       startSec: null,
       endSec: null,
+      title: null,
+      titleAuthored: false,
       videoTitle: "An entry",
       durationSec: 90,
       aspectRatio: null,
       summary: "A note.",
+      summaryAuthored: false,
       summaryStatus: "ready",
       position: 0,
     };
@@ -224,9 +251,8 @@ describe("CollectionItemRow drag grip", () => {
         isActive={false}
         controls={{
           onRemove: settled,
-          onSummarySave: settled,
+          onEdit: settled,
           onRetrySummary: settled,
-          onSwap: settled,
         }}
         drag={{
           setNodeRef: () => {},
@@ -287,16 +313,56 @@ describe("CollectionItemRow jump", () => {
     expect(jumpButton().className).not.toContain("border-[var(--color-text-secondary)]");
   });
 
-  it("says the channel and runtime under the title, and now playing in their place", () => {
-    renderRow(null, false, true, { onJump: () => {} });
-    expect(document.body.textContent).toContain("1:30");
-    cleanup();
-
+  it("keeps the channel and runtime under the title of the entry playing, lit", () => {
+    // Guarantee: the active row keeps its resting label rather than trading it for "now playing".
     renderRow(null, true, true, { onJump: () => {} });
+
     const lines = [...document.querySelectorAll("p")].filter(
-      (node) => node.textContent === "now playing",
+      (node) => node.textContent === "1:30",
     );
     expect(lines).toHaveLength(1);
     expect(lines[0]?.className).toContain("text-[var(--color-playing)]");
+    expect(document.body.textContent).not.toContain("now playing");
+  });
+});
+
+describe("CollectionItemRow failed words", () => {
+  afterEach(cleanup);
+
+  it("offers to retry a title that failed to be written on a clip that already has a note", () => {
+    const item: CollectionItem = {
+      id: "item-a",
+      videoId: "vid",
+      startSec: null,
+      endSec: null,
+      title: null,
+      titleAuthored: false,
+      videoTitle: "An entry",
+      durationSec: 90,
+      aspectRatio: null,
+      summary: "A note.",
+      summaryAuthored: false,
+      summaryStatus: "failed",
+      position: 0,
+    };
+    const [entry] = buildSitting([item], {
+      vid: { title: null, channelName: null, durationSec: 90 },
+    }).entries;
+    const onRetrySummary = vi.fn(async () => {});
+
+    render(
+      <CollectionItemRow
+        item={item}
+        entry={entry}
+        isLast
+        isActive={false}
+        controls={{ onRemove: async () => {}, onEdit: async () => {}, onRetrySummary }}
+      />,
+    );
+
+    expect(screen.getByText("A note.")).toBeTruthy();
+    expect(screen.getByText("Couldn't write a title.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetrySummary).toHaveBeenCalledTimes(1);
   });
 });

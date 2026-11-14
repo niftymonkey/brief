@@ -24,11 +24,15 @@ import {
   type VisionDescribeResult,
   type VisionMode,
 } from "@brief/core";
+import { z } from "zod";
 import type { OpenRouterClient } from "./openrouter-client";
 import type { UsageLedger } from "./usage-ledger";
 import {
   buildSummaryPrompt,
   SUMMARY_MAX_OUTPUT_TOKENS,
+  wantsNote,
+  wantsTitle,
+  type ClipWordsWanted,
   type SummaryCollectionContext,
 } from "./summary-prompt";
 
@@ -86,14 +90,17 @@ export interface ClassifyInput {
 export type DescribeInput = ClassifyInput;
 
 /**
- * One clip's summarization request. `transcriptText` is the transcript already
- * sliced to the clip's range; `rangeSeconds` is the range length (null for a
- * whole-Short item) and drives prompt proportionality. `collection` carries the
- * owner's own title and description for the collection the clip sits in, which
- * is what lets the note say why the clip belongs there.
+ * One clip's request for its words. `wants` names the words the author has not
+ * written by hand, and only those are asked for. `transcriptText` is the
+ * transcript already sliced to the clip's range; `rangeSeconds` is the range
+ * length (null for a whole-Short item) and drives the note's proportionality.
+ * `collection` carries the owner's own title and description for the
+ * collection the clip sits in, which is what lets the note say why the clip
+ * belongs there.
  */
-export interface SummarizeInput {
+export interface WriteClipWordsInput {
   userId: string;
+  wants: ClipWordsWanted;
   transcriptText: string;
   rangeSeconds: number | null;
   videoTitle?: string;
@@ -101,10 +108,17 @@ export interface SummarizeInput {
   signal?: AbortSignal;
 }
 
-export type SummarizeResult =
+/** The words a call wrote; a word that was not wanted is null. */
+interface GeneratedClipWords {
+  title: string | null;
+  note: string | null;
+}
+
+export type WriteClipWordsResult =
   | {
       kind: "ok";
-      summary: string;
+      title: string | null;
+      note: string | null;
       inputTokens: number;
       outputTokens: number;
       ledgerId: string;
@@ -115,7 +129,7 @@ export type SummarizeResult =
 export interface ServerLlmGateway {
   classify(input: ClassifyInput): Promise<ClassifyResult>;
   describe(input: DescribeInput): Promise<VisionDescribeResult>;
-  summarize(input: SummarizeInput): Promise<SummarizeResult>;
+  writeClipWords(input: WriteClipWordsInput): Promise<WriteClipWordsResult>;
 }
 
 export interface ServerLlmGatewayOptions {
@@ -263,8 +277,9 @@ export function createServerLlmGateway(
       };
     },
 
-    async summarize(input) {
+    async writeClipWords(input) {
       const { system, user } = buildSummaryPrompt({
+        wants: input.wants,
         rangeSeconds: input.rangeSeconds,
         transcriptText: input.transcriptText,
         ...(input.videoTitle ? { videoTitle: input.videoTitle } : {}),
@@ -281,6 +296,7 @@ export function createServerLlmGateway(
             { role: "user", content: user },
           ],
           maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+          outputSchema: CLIP_WORDS_REPLY[input.wants],
           ...(input.signal ? { signal: input.signal } : {}),
         });
       } catch (err) {
@@ -291,26 +307,15 @@ export function createServerLlmGateway(
         };
       }
       const latencyMs = Date.now() - start;
-
-      const summary = result.text.trim();
-      if (summary.length === 0) {
-        // An empty completion is not a usable summary. Treat it as bad-input so
-        // the item lands in 'failed' and the author is prompted to hand-write
-        // one, rather than persisting an empty 'ready' summary.
-        return {
-          kind: "failed",
-          reason: "bad-input",
-          message: "summary model returned empty text",
-        };
-      }
-
       const { inputTokens, outputTokens } = result.usage;
 
+      // Recorded before the reply is judged: a malformed reply spent its tokens
+      // all the same, and the ledger is the record of spend.
       let ledgerId: string;
       try {
         ledgerId = await opts.ledger.record({
           userId: input.userId,
-          op: "summarize",
+          op: "clip-words",
           model: summaryModel,
           inputTokens,
           outputTokens,
@@ -327,9 +332,22 @@ export function createServerLlmGateway(
         };
       }
 
+      const words = parseClipWordsReply(result.text, input.wants);
+      if (!words) {
+        // A reply that is not the asked-for words is not usable. Treat it as
+        // bad-input so the item lands in 'failed' and the author is prompted to
+        // retry or write their own, rather than persisting a blank 'ready'.
+        return {
+          kind: "failed",
+          reason: "bad-input",
+          message: "clip words model returned no usable words",
+        };
+      }
+
       return {
         kind: "ok",
-        summary,
+        title: words.title,
+        note: words.note,
         inputTokens,
         outputTokens,
         ledgerId,
@@ -338,6 +356,61 @@ export function createServerLlmGateway(
     },
   };
 }
+
+/**
+ * The ceiling on a clip title. The prompt asks for 2 to 5 words under this
+ * length, and a reply that runs over is cut back to whole words rather than
+ * rejected, because a slightly long title is still a usable one.
+ */
+const CLIP_TITLE_MAX_CHARS = 40;
+
+const titleField = z
+  .string()
+  .describe("2 to 5 words naming what this clip shows, at most 40 characters");
+const noteField = z.string().describe("The curator's note on this clip");
+
+const CLIP_WORDS_REPLY = {
+  both: z.object({ title: titleField, note: noteField }),
+  title: z.object({ title: titleField }),
+  note: z.object({ note: noteField }),
+} satisfies Record<ClipWordsWanted, z.ZodType>;
+
+const QUOTE_MARKS = /^["'`\u201c\u201d\u2018\u2019]+|["'`\u201c\u201d\u2018\u2019]+$/g;
+const TRAILING_PUNCTUATION = /[\s.,;:!?\u2026\u2013\u2014-]+$/;
+
+const stripTitleDecoration = (title: string): string =>
+  title.replace(/\s+/g, " ").trim().replace(QUOTE_MARKS, "").trim().replace(TRAILING_PUNCTUATION, "");
+
+const cutTitleToWholeWords = (title: string): string => {
+  if (title.length <= CLIP_TITLE_MAX_CHARS) return title;
+  const head = title.slice(0, CLIP_TITLE_MAX_CHARS + 1);
+  const lastSpace = head.lastIndexOf(" ");
+  const cut = lastSpace > 0 ? head.slice(0, lastSpace) : title.slice(0, CLIP_TITLE_MAX_CHARS);
+  return stripTitleDecoration(cut);
+};
+
+const tidyClipTitle = (raw: string): string => cutTitleToWholeWords(stripTitleDecoration(raw));
+
+/**
+ * Reads the model's reply as the words it was asked for. Returns null when the
+ * reply is not JSON of the asked-for shape, or when a wanted word is blank.
+ */
+const parseClipWordsReply = (text: string, wants: ClipWordsWanted): GeneratedClipWords | null => {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const reply = CLIP_WORDS_REPLY[wants].safeParse(json);
+  if (!reply.success) return null;
+  const fields: { title?: string; note?: string } = reply.data;
+
+  const title = wantsTitle(wants) ? tidyClipTitle(fields.title ?? "") : null;
+  const note = wantsNote(wants) ? (fields.note ?? "").trim() : null;
+  if (title === "" || note === "") return null;
+  return { title, note };
+};
 
 /**
  * Extracts the `<mode>verbatim</mode>` / `<mode>summary</mode>` marker the

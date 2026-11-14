@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { z } from "zod";
-import { InvalidClipRangeError, deleteCollectionItem, updateCollectionItem } from "@/lib/collections";
+import { InvalidClipRangeError, deleteCollectionItem, editCollectionItem } from "@/lib/collections";
+import { scheduleClipWords } from "@/lib/schedule-clip-words";
 
 // Mirrors the video-id shape in @brief/core's parser (`/^[a-zA-Z0-9_-]{11}$/`).
 const VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 
 const updateItemSchema = z
   .object({
+    title: z.string().nullable().optional(),
     summary: z.string().nullable().optional(),
     videoId: z.string().regex(VIDEO_ID).optional(),
     startSec: z.number().int().nonnegative().nullable().optional(),
@@ -24,6 +26,9 @@ const updateItemSchema = z
       data.startSec <= data.endSec,
     { message: "startSec must be less than or equal to endSec", path: ["endSec"] },
   );
+
+// Covers the clip words run scheduled after the response.
+export const maxDuration = 60;
 
 export async function PATCH(
   request: NextRequest,
@@ -50,11 +55,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid collection item" }, { status: 400 });
     }
 
-    const item = await updateCollectionItem(user.id, id, itemId, body.data);
-    if (!item) {
+    const edit = await editCollectionItem(user.id, id, itemId, body.data);
+    if (!edit) {
       return NextResponse.json({ error: "Collection item not found" }, { status: 404 });
     }
-    return NextResponse.json(item);
+    if (edit.owesClipWords) scheduleClipWords(user, id, edit.item);
+    return NextResponse.json(edit.item);
   } catch (error) {
     if (error instanceof InvalidClipRangeError) {
       return NextResponse.json({ error: error.message }, { status: 400 });

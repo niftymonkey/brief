@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useState, type CSSProperties } from "react";
 import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -95,11 +96,14 @@ export function CollectionStagePoster({
       {/* Lazy, because a browser does not fetch a lazy image that has no box, and
           the stage has none below a wide screen. */}
       {src !== null && (
-        <img
+        <Image
           ref={readSettledImage}
           src={src}
           alt=""
-          loading="lazy"
+          fill
+          // Served as YouTube sends it: the placeholder test reads the image's own
+          // natural width, which a resized copy would not carry.
+          unoptimized
           onError={() => markFailed(src)}
           onLoad={(event) => {
             if (event.currentTarget.naturalWidth <= PLACEHOLDER_WIDTH) markFailed(src);

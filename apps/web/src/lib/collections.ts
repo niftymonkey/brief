@@ -12,6 +12,10 @@ export interface CollectionItem {
   videoId: string;
   startSec: number | null;
   endSec: number | null;
+  /** The clip's own title. `null` until one is written, and readers show `videoTitle` meanwhile. */
+  title: string | null;
+  /** True when the author wrote `title` by hand, which keeps it through a change of bounds or video. */
+  titleAuthored: boolean;
   videoTitle: string | null;
   /**
    * Runtime of the whole source video in seconds, independent of the clip's
@@ -28,6 +32,9 @@ export interface CollectionItem {
    */
   aspectRatio: number | null;
   summary: string | null;
+  /** True when the author wrote `summary` by hand, which keeps it through a change of bounds or video. */
+  summaryAuthored: boolean;
+  /** 'pending' while AI generation is outstanding for any of the clip's machine-owned words. */
   summaryStatus: SummaryStatus;
   position: number;
 }
@@ -61,10 +68,12 @@ export interface AddCollectionItemInput {
   videoId: string;
   startSec?: number | null;
   endSec?: number | null;
+  title?: string | null;
   summary?: string | null;
 }
 
 export interface UpdateCollectionItemInput {
+  title?: string | null;
   summary?: string | null;
   videoId?: string;
   startSec?: number | null;
@@ -98,10 +107,13 @@ interface CollectionItemRow {
   videoId: string;
   startSec: number | null;
   endSec: number | null;
+  title: string | null;
+  titleAuthored: boolean;
   videoTitle: string | null;
   durationSec: number | null;
   aspectRatio: number | null;
   summary: string | null;
+  summaryAuthored: boolean;
   summaryStatus: SummaryStatus;
   position: number;
 }
@@ -214,10 +226,13 @@ function toCollectionItem(row: CollectionItemRow): CollectionItem {
     videoId: row.videoId,
     startSec: row.startSec,
     endSec: row.endSec,
+    title: row.title,
+    titleAuthored: row.titleAuthored,
     videoTitle: row.videoTitle,
     durationSec: row.durationSec,
     aspectRatio: row.aspectRatio,
     summary: row.summary,
+    summaryAuthored: row.summaryAuthored,
     summaryStatus: row.summaryStatus,
     position: row.position,
   };
@@ -468,9 +483,12 @@ export async function getCollectionWithItems(
       start_sec as "startSec",
       end_sec as "endSec",
       video_title as "videoTitle",
+      title,
+      title_authored as "titleAuthored",
       duration_sec as "durationSec",
       aspect_ratio as "aspectRatio",
       summary,
+      summary_authored as "summaryAuthored",
       summary_status as "summaryStatus",
       position
     FROM collection_items
@@ -662,9 +680,12 @@ export async function getSharedCollectionBySlug(
       start_sec as "startSec",
       end_sec as "endSec",
       video_title as "videoTitle",
+      title,
+      title_authored as "titleAuthored",
       duration_sec as "durationSec",
       aspect_ratio as "aspectRatio",
       summary,
+      summary_authored as "summaryAuthored",
       summary_status as "summaryStatus",
       position
     FROM collection_items
@@ -692,8 +713,16 @@ export async function addCollectionItem(
   // Resolved before the transaction opens so the network round trip never runs
   // while the collection row is locked FOR UPDATE.
   const facts = await resolveVideoFactsSafely(resolveVideoFacts, userId, input.videoId);
-  const summaryStatus: SummaryStatus =
-    input.summary === undefined || input.summary === null ? "pending" : "ready";
+  const title = input.title ?? null;
+  const summary = input.summary ?? null;
+  const summaryStatus: SummaryStatus = hasOutstandingWords({
+    title,
+    titleAuthored: title !== null,
+    summary,
+    summaryAuthored: summary !== null,
+  })
+    ? "pending"
+    : "ready";
 
   const client = await sql.connect();
   try {
@@ -715,10 +744,13 @@ export async function addCollectionItem(
         video_id,
         start_sec,
         end_sec,
+        title,
+        title_authored,
         video_title,
         duration_sec,
         aspect_ratio,
         summary,
+        summary_authored,
         summary_status,
         position
       )
@@ -727,10 +759,13 @@ export async function addCollectionItem(
         ${input.videoId},
         ${input.startSec ?? null},
         ${input.endSec ?? null},
+        ${title},
+        ${title !== null},
         ${facts.title},
         ${facts.durationSec},
         ${facts.aspectRatio},
-        ${input.summary ?? null},
+        ${summary},
+        ${summary !== null},
         ${summaryStatus},
         COALESCE(MAX(position), 0) + 1
       FROM collection_items
@@ -741,9 +776,12 @@ export async function addCollectionItem(
         start_sec as "startSec",
         end_sec as "endSec",
         video_title as "videoTitle",
+        title,
+        title_authored as "titleAuthored",
         duration_sec as "durationSec",
         aspect_ratio as "aspectRatio",
         summary,
+        summary_authored as "summaryAuthored",
         summary_status as "summaryStatus",
         position
     `;
@@ -776,9 +814,12 @@ export async function getCollectionItem(
       ci.start_sec as "startSec",
       ci.end_sec as "endSec",
       ci.video_title as "videoTitle",
+      ci.title,
+      ci.title_authored as "titleAuthored",
       ci.duration_sec as "durationSec",
       ci.aspect_ratio as "aspectRatio",
       ci.summary,
+      ci.summary_authored as "summaryAuthored",
       ci.summary_status as "summaryStatus",
       ci.position
     FROM collection_items ci
@@ -789,30 +830,40 @@ export async function getCollectionItem(
 }
 
 /**
- * Outcome of the async per-item summary generation path: either the generated
- * summary text (status 'ready') or a generation failure (status 'failed').
+ * Outcome of one generation run for a clip's words: the words it wrote (null
+ * for a word it was not asked for) and status 'ready', or a failure.
  */
-export type GeneratedSummaryOutcome =
-  | { status: "ready"; summary: string }
+export type GeneratedClipWordsOutcome =
+  | { status: "ready"; title: string | null; summary: string | null }
   | { status: "failed" };
 
 /**
- * Persists the result of the async generation path onto an item, with one hard
- * invariant: a summary whose status is already 'ready' is never overwritten.
- * That protects an author's hand-edited summary from being clobbered by a
- * generation call that completes late (or a retry racing an edit). A 'ready'
- * summary is always the authoritative one, whether machine- or hand-written.
+ * Persists a generation run onto the clip it described, `describedClip` being
+ * the clip as the run read it. Three guards hold:
  *
- * Pending and failed items are advanced normally, so a retry off a 'failed'
- * item can still land a summary. Returns the item's resulting state (unchanged
- * when the guard blocked the write), or null when the item is not the user's.
+ * - A clip whose status is already 'ready' is never touched, so a run that
+ *   lands after the author settled the clip's words cannot reopen them.
+ * - A hand-written title or note is never replaced, whatever the status.
+ * - The clip must still show the footage the run described. When the video or
+ *   bounds moved while it ran, its words describe footage the clip no longer
+ *   shows, and the run the move started will write the right ones.
+ *
+ * A run asks only for the words missing when it started. When the author hands
+ * back to the AI a word the run saw written, that word is still owed after the
+ * run's write, so the clip stays 'pending' for the run the edit started rather
+ * than settling 'ready' without it.
+ *
+ * A failed or a retried run on a 'failed' clip advances normally. Returns the
+ * clip's resulting state (unchanged when a guard blocked the write), or null
+ * when the clip is not the user's.
  */
-export async function writeGeneratedSummary(
+export async function writeGeneratedClipWords(
   userId: string,
   collectionId: string,
-  itemId: string,
-  outcome: GeneratedSummaryOutcome,
+  describedClip: CollectionItem,
+  outcome: GeneratedClipWordsOutcome,
 ): Promise<CollectionItem | null> {
+  const itemId = describedClip.id;
   const client = await sql.connect();
   try {
     await client.sql`BEGIN`;
@@ -827,28 +878,48 @@ export async function writeGeneratedSummary(
       return null;
     }
 
-    const nextStatus: SummaryStatus = outcome.status;
-    const nextSummary = outcome.status === "ready" ? outcome.summary : null;
-    const writesSummary = outcome.status === "ready";
+    const title = outcome.status === "ready" ? outcome.title : null;
+    const summary = outcome.status === "ready" ? outcome.summary : null;
+    const runSawTitle = describedClip.title !== null || describedClip.titleAuthored;
+    const runSawSummary = describedClip.summary !== null || describedClip.summaryAuthored;
 
     const updated = await client.sql<CollectionItemRow>`
       UPDATE collection_items ci
       SET
-        summary = CASE WHEN ${writesSummary}::boolean THEN ${nextSummary}::text ELSE ci.summary END,
-        summary_status = ${nextStatus},
+        title = CASE
+          WHEN ${title}::text IS NOT NULL AND NOT ci.title_authored THEN ${title}::text
+          ELSE ci.title
+        END,
+        summary = CASE
+          WHEN ${summary}::text IS NOT NULL AND NOT ci.summary_authored THEN ${summary}::text
+          ELSE ci.summary
+        END,
+        summary_status = CASE
+          WHEN ${outcome.status}::text = 'ready' AND (
+            (${runSawTitle}::boolean AND NOT ci.title_authored AND COALESCE(${title}::text, ci.title) IS NULL)
+            OR (${runSawSummary}::boolean AND NOT ci.summary_authored AND COALESCE(${summary}::text, ci.summary) IS NULL)
+          ) THEN 'pending'
+          ELSE ${outcome.status}::text
+        END,
         updated_at = NOW()
       WHERE ci.collection_id = ${collectionId}
         AND ci.id = ${itemId}
         AND ci.summary_status <> 'ready'
+        AND ci.video_id = ${describedClip.videoId}
+        AND ci.start_sec IS NOT DISTINCT FROM ${describedClip.startSec}::int
+        AND ci.end_sec IS NOT DISTINCT FROM ${describedClip.endSec}::int
       RETURNING
         ci.id,
         ci.video_id as "videoId",
         ci.start_sec as "startSec",
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
+        ci.title,
+        ci.title_authored as "titleAuthored",
         ci.duration_sec as "durationSec",
         ci.aspect_ratio as "aspectRatio",
         ci.summary,
+        ci.summary_authored as "summaryAuthored",
         ci.summary_status as "summaryStatus",
         ci.position
     `;
@@ -858,8 +929,8 @@ export async function writeGeneratedSummary(
       return toCollectionItem(updated.rows[0]);
     }
 
-    // No row updated: either the item is already 'ready' (guard held) or it
-    // does not exist. Re-read within the transaction to return the true state.
+    // No row updated: a guard held or the item does not exist. Re-read within
+    // the transaction to return the true state.
     const current = await client.sql<CollectionItemRow>`
       SELECT
         ci.id,
@@ -867,9 +938,12 @@ export async function writeGeneratedSummary(
         ci.start_sec as "startSec",
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
+        ci.title,
+        ci.title_authored as "titleAuthored",
         ci.duration_sec as "durationSec",
         ci.aspect_ratio as "aspectRatio",
         ci.summary,
+        ci.summary_authored as "summaryAuthored",
         ci.summary_status as "summaryStatus",
         ci.position
       FROM collection_items ci
@@ -885,6 +959,164 @@ export async function writeGeneratedSummary(
   }
 }
 
+/** A clip with no title yet, with the collection it sits in and that collection's owner. */
+export interface UntitledClip {
+  ownerId: string;
+  collection: { id: string; title: string; description: string | null };
+  item: CollectionItem;
+}
+
+interface UntitledClipRow extends CollectionItemRow {
+  ownerId: string;
+  collectionId: string;
+  collectionTitle: string;
+  collectionDescription: string | null;
+}
+
+/**
+ * Every clip, across every user, whose title is still the AI's to write and
+ * has not been written. A clip still 'pending' is left out: the generation run
+ * it is waiting on writes its title, and a clip left pending because its owner
+ * may not spend tokens stays that way.
+ */
+export async function listUntitledClips(): Promise<UntitledClip[]> {
+  const result = await sql<UntitledClipRow>`
+    SELECT
+      c.user_id as "ownerId",
+      c.id as "collectionId",
+      c.title as "collectionTitle",
+      c.description as "collectionDescription",
+      ci.id,
+      ci.video_id as "videoId",
+      ci.start_sec as "startSec",
+      ci.end_sec as "endSec",
+      ci.video_title as "videoTitle",
+      ci.title,
+      ci.title_authored as "titleAuthored",
+      ci.duration_sec as "durationSec",
+      ci.aspect_ratio as "aspectRatio",
+      ci.summary,
+      ci.summary_authored as "summaryAuthored",
+      ci.summary_status as "summaryStatus",
+      ci.position
+    FROM collection_items ci
+    JOIN collections c ON c.id = ci.collection_id
+    WHERE ci.title IS NULL
+      AND NOT ci.title_authored
+      AND ci.summary_status <> 'pending'
+    ORDER BY c.id, ci.position
+  `;
+  return result.rows.map((row) => ({
+    ownerId: row.ownerId,
+    collection: { id: row.collectionId, title: row.collectionTitle, description: row.collectionDescription },
+    item: toCollectionItem(row),
+  }));
+}
+
+/**
+ * Writes a generated title onto a clip that has none, leaving its note and
+ * status as they are. The guards are checked in the statement itself, so a
+ * title the author wrote after `describedClip` was read, or a move onto other
+ * footage, wins over this write. Answers whether the title was written.
+ */
+export async function writeGeneratedClipTitle(describedClip: CollectionItem, title: string): Promise<boolean> {
+  const result = await sql`
+    UPDATE collection_items
+    SET title = ${title}, updated_at = NOW()
+    WHERE id = ${describedClip.id}
+      AND title IS NULL
+      AND NOT title_authored
+      AND video_id = ${describedClip.videoId}
+      AND start_sec IS NOT DISTINCT FROM ${describedClip.startSec}::int
+      AND end_sec IS NOT DISTINCT FROM ${describedClip.endSec}::int
+  `;
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** The clip's words and who owns each. */
+interface ClipWordsOwnership {
+  title: string | null;
+  titleAuthored: boolean;
+  summary: string | null;
+  summaryAuthored: boolean;
+}
+
+/** The clip's words, who owns each, and whether generation is outstanding, as an edit leaves them. */
+interface ClipWords extends ClipWordsOwnership {
+  summaryStatus: SummaryStatus;
+  /** True when this edit is what leaves the clip waiting on generation: it sent words or cleared the AI's. */
+  owesClipWords: boolean;
+}
+
+/**
+ * Whether an edit moves the clip onto different footage, judged against the
+ * stored row rather than which fields the request carried, because the edit
+ * dialog resends the video and both bounds on every save.
+ */
+const changesClipFootage = (current: CollectionItem, input: UpdateCollectionItemInput): boolean =>
+  (input.videoId !== undefined && input.videoId !== current.videoId) ||
+  (input.startSec !== undefined && (input.startSec ?? null) !== current.startSec) ||
+  (input.endSec !== undefined && (input.endSec ?? null) !== current.endSec);
+
+/**
+ * Words the author sends are theirs: text marks the field authored and null
+ * hands it back to the AI. Words the AI wrote describe the footage they were
+ * generated from, so new footage clears them and leaves the clip pending until
+ * they are written again. Authored words outlive any footage change.
+ */
+const decideClipWords = (
+  current: CollectionItem,
+  input: UpdateCollectionItemInput,
+  footageChanged: boolean,
+): ClipWords => {
+  const titleSent = input.title !== undefined;
+  const summarySent = input.summary !== undefined;
+  const titleAuthored = titleSent ? input.title !== null : current.titleAuthored;
+  const summaryAuthored = summarySent ? input.summary !== null : current.summaryAuthored;
+
+  const clearsTitle = footageChanged && !titleAuthored;
+  const clearsSummary = footageChanged && !summaryAuthored;
+  const title = titleSent ? input.title ?? null : clearsTitle ? null : current.title;
+  const summary = summarySent ? input.summary ?? null : clearsSummary ? null : current.summary;
+
+  const words = { title, titleAuthored, summary, summaryAuthored };
+  const wordsSent = titleSent || summarySent;
+  const generationReopened = clearsTitle || clearsSummary;
+  const summaryStatus = decideSummaryStatus(current, words, wordsSent, generationReopened);
+  return {
+    ...words,
+    summaryStatus,
+    owesClipWords: summaryStatus === "pending" && (wordsSent || generationReopened),
+  };
+};
+
+/** True while a word the AI owns has not been written, which is what 'pending' waits on. */
+const hasOutstandingWords = (words: ClipWordsOwnership): boolean =>
+  (!words.titleAuthored && words.title === null) || (!words.summaryAuthored && words.summary === null);
+
+/**
+ * An edit that sends words settles the status from the words it leaves: a
+ * word handed back to the AI, or one the AI has yet to write, keeps the clip
+ * pending, which a hand-written note arriving mid-generation must not cut off.
+ * An edit that sends none leaves the status as it was.
+ */
+const decideSummaryStatus = (
+  current: CollectionItem,
+  words: ClipWordsOwnership,
+  wordsSent: boolean,
+  generationReopened: boolean,
+): SummaryStatus => {
+  if (generationReopened) return "pending";
+  if (!wordsSent) return current.summaryStatus;
+  return hasOutstandingWords(words) ? "pending" : "ready";
+};
+
+/** An edited clip, and whether the edit left it owed words a generation run must write. */
+export interface CollectionItemEdit {
+  item: CollectionItem;
+  owesClipWords: boolean;
+}
+
 export async function updateCollectionItem(
   userId: string,
   collectionId: string,
@@ -892,12 +1124,17 @@ export async function updateCollectionItem(
   input: UpdateCollectionItemInput,
   resolveVideoFacts: VideoFactsResolver = resolveCollectionVideoFacts,
 ): Promise<CollectionItem | null> {
-  const changesPointer =
-    input.videoId !== undefined ||
-    input.startSec !== undefined ||
-    input.endSec !== undefined;
-  const changesSummary = input.summary !== undefined;
-  const summaryIsText = changesSummary && input.summary !== null;
+  const edit = await editCollectionItem(userId, collectionId, itemId, input, resolveVideoFacts);
+  return edit ? edit.item : null;
+}
+
+export async function editCollectionItem(
+  userId: string,
+  collectionId: string,
+  itemId: string,
+  input: UpdateCollectionItemInput,
+  resolveVideoFacts: VideoFactsResolver = resolveCollectionVideoFacts,
+): Promise<CollectionItemEdit | null> {
   const reorders =
     input.beforeItemId !== undefined ||
     input.afterItemId !== undefined;
@@ -958,9 +1195,12 @@ export async function updateCollectionItem(
         ci.start_sec as "startSec",
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
+        ci.title,
+        ci.title_authored as "titleAuthored",
         ci.duration_sec as "durationSec",
         ci.aspect_ratio as "aspectRatio",
         ci.summary,
+        ci.summary_authored as "summaryAuthored",
         ci.summary_status as "summaryStatus",
         ci.position
       FROM collection_items ci
@@ -1003,6 +1243,7 @@ export async function updateCollectionItem(
     // stored, and no facts is the honest record rather than that writer's.
     const refreshesFacts = input.videoId !== undefined && input.videoId !== current.videoId;
     const newFacts = refreshesFacts ? (replacementFacts ?? NO_VIDEO_FACTS) : NO_VIDEO_FACTS;
+    const words = decideClipWords(current, input, changesClipFootage(current, input));
 
     const result = await client.sql<CollectionItemRow>`
       UPDATE collection_items ci
@@ -1013,17 +1254,11 @@ export async function updateCollectionItem(
         video_title = CASE WHEN ${refreshesFacts}::boolean THEN ${newFacts.title}::text ELSE ci.video_title END,
         duration_sec = CASE WHEN ${refreshesFacts}::boolean THEN ${newFacts.durationSec}::int ELSE ci.duration_sec END,
         aspect_ratio = CASE WHEN ${refreshesFacts}::boolean THEN ${newFacts.aspectRatio}::double precision ELSE ci.aspect_ratio END,
-        summary = CASE
-          WHEN ${changesPointer}::boolean THEN NULL
-          WHEN ${changesSummary}::boolean THEN ${input.summary ?? null}::text
-          ELSE ci.summary
-        END,
-        summary_status = CASE
-          WHEN ${changesPointer}::boolean THEN 'pending'
-          WHEN ${summaryIsText}::boolean THEN 'ready'
-          WHEN ${changesSummary}::boolean THEN 'pending'
-          ELSE ci.summary_status
-        END,
+        title = ${words.title}::text,
+        title_authored = ${words.titleAuthored}::boolean,
+        summary = ${words.summary}::text,
+        summary_authored = ${words.summaryAuthored}::boolean,
+        summary_status = ${words.summaryStatus},
         position = CASE WHEN ${reorders}::boolean THEN ${position}::double precision ELSE ci.position END,
         updated_at = NOW()
       FROM collections c
@@ -1037,9 +1272,12 @@ export async function updateCollectionItem(
         ci.start_sec as "startSec",
         ci.end_sec as "endSec",
         ci.video_title as "videoTitle",
+        ci.title,
+        ci.title_authored as "titleAuthored",
         ci.duration_sec as "durationSec",
         ci.aspect_ratio as "aspectRatio",
         ci.summary,
+        ci.summary_authored as "summaryAuthored",
         ci.summary_status as "summaryStatus",
         ci.position
     `;
@@ -1051,7 +1289,7 @@ export async function updateCollectionItem(
 
     await client.sql`UPDATE collections SET updated_at = NOW() WHERE id = ${collectionId}`;
     await client.sql`COMMIT`;
-    return toCollectionItem(result.rows[0]);
+    return { item: toCollectionItem(result.rows[0]), owesClipWords: words.owesClipWords };
   } catch (error) {
     await client.sql`ROLLBACK`;
     throw error;

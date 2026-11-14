@@ -10,6 +10,7 @@ import {
   createCollection,
   deleteCollection,
   deleteCollectionItem,
+  editCollectionItem,
   getCollection,
   getCollectionItem,
   getCollectionWithItems,
@@ -21,7 +22,7 @@ import {
   setCollectionShared,
   updateCollection,
   updateCollectionItem,
-  writeGeneratedSummary,
+  writeGeneratedClipWords,
 } from "./collections";
 
 function expectCollectionItem(item: CollectionItem | null): CollectionItem {
@@ -113,6 +114,7 @@ describe("collections db lifecycle", () => {
       videoId: "aaaaaaaaaaa",
       startSec: 10,
       endSec: 20,
+      title: "First title",
       summary: "First summary",
     }, noFacts));
     const second = expectCollectionItem(await addCollectionItem(userId, collection.id, {
@@ -154,6 +156,7 @@ describe("collections db lifecycle", () => {
     });
 
     const summarized = await updateCollectionItem(userId, collection.id, second.id, {
+      title: "Second title",
       summary: "Updated second summary",
     });
     expect(summarized?.summaryStatus).toBe("ready");
@@ -206,6 +209,7 @@ describe("collections db lifecycle", () => {
       videoId: "eeeeeeeeeee",
       startSec: 5,
       endSec: 15,
+      title: "Keep my title",
       summary: "keep me",
     }, noFacts));
     expect([item.startSec, item.endSec]).toEqual([5, 15]);
@@ -226,8 +230,8 @@ describe("collections db lifecycle", () => {
     expect(startEdited).toMatchObject({
       startSec: 10,
       endSec: 15,
-      summary: null,
-      summaryStatus: "pending",
+      summary: "new summary",
+      summaryAuthored: true,
     });
   });
 
@@ -313,6 +317,7 @@ describe("collections db lifecycle", () => {
 
     const withText = expectCollectionItem(await addCollectionItem(userId, collection.id, {
       videoId: "ggggggggggg",
+      title: "Has a title",
       summary: "has text",
     }, noFacts));
     expect(withText).toMatchObject({ summary: "has text", summaryStatus: "ready" });
@@ -328,6 +333,7 @@ describe("collections db lifecycle", () => {
 
     const item = expectCollectionItem(await addCollectionItem(userId, collection.id, {
       videoId: "hhhhhhhhhhh",
+      title: "Initial title",
       summary: "initial summary",
     }, noFacts));
     expect(item.summaryStatus).toBe("ready");
@@ -364,7 +370,7 @@ describe("collections db lifecycle", () => {
     expect(listed?.items.map((item) => item.id)).toEqual(expectedIds);
   });
 
-  it("writeGeneratedSummary advances a pending item to ready with the generated text", async () => {
+  it("writeGeneratedClipWords advances a pending item to ready with the generated text", async () => {
     if (!process.env.POSTGRES_URL) {
       throw new Error("POSTGRES_URL is required for collections db integration tests");
     }
@@ -380,8 +386,9 @@ describe("collections db lifecycle", () => {
     expect(item.summaryStatus).toBe("pending");
 
     const generated = expectCollectionItem(
-      await writeGeneratedSummary(userId, collection.id, item.id, {
+      await writeGeneratedClipWords(userId, collection.id, item, {
         status: "ready",
+        title: null,
         summary: "auto generated summary",
       }),
     );
@@ -391,7 +398,7 @@ describe("collections db lifecycle", () => {
     });
   });
 
-  it("writeGeneratedSummary never overwrites a ready (hand-edited) summary", async () => {
+  it("writeGeneratedClipWords never overwrites a ready (hand-edited) summary", async () => {
     if (!process.env.POSTGRES_URL) {
       throw new Error("POSTGRES_URL is required for collections db integration tests");
     }
@@ -401,14 +408,16 @@ describe("collections db lifecycle", () => {
 
     const item = expectCollectionItem(await addCollectionItem(userId, collection.id, {
       videoId: "genreadyxxx",
+      title: "hand written title",
       summary: "hand written summary",
     }, noFacts));
     expect(item.summaryStatus).toBe("ready");
 
     // Generation completing late must not clobber the author's edit.
     const afterGen = expectCollectionItem(
-      await writeGeneratedSummary(userId, collection.id, item.id, {
+      await writeGeneratedClipWords(userId, collection.id, item, {
         status: "ready",
+        title: null,
         summary: "machine summary that should be ignored",
       }),
     );
@@ -419,7 +428,7 @@ describe("collections db lifecycle", () => {
 
     // A late failure outcome must likewise leave the ready summary intact.
     const afterFail = expectCollectionItem(
-      await writeGeneratedSummary(userId, collection.id, item.id, { status: "failed" }),
+      await writeGeneratedClipWords(userId, collection.id, item, { status: "failed" }),
     );
     expect(afterFail).toMatchObject({
       summary: "hand written summary",
@@ -427,7 +436,7 @@ describe("collections db lifecycle", () => {
     });
   });
 
-  it("writeGeneratedSummary marks a pending item failed without writing a summary", async () => {
+  it("writeGeneratedClipWords marks a pending item failed without writing a summary", async () => {
     if (!process.env.POSTGRES_URL) {
       throw new Error("POSTGRES_URL is required for collections db integration tests");
     }
@@ -440,18 +449,63 @@ describe("collections db lifecycle", () => {
     }, noFacts));
 
     const failed = expectCollectionItem(
-      await writeGeneratedSummary(userId, collection.id, item.id, { status: "failed" }),
+      await writeGeneratedClipWords(userId, collection.id, item, { status: "failed" }),
     );
     expect(failed).toMatchObject({ summary: null, summaryStatus: "failed" });
 
     // Retry can still succeed off a failed item.
     const retried = expectCollectionItem(
-      await writeGeneratedSummary(userId, collection.id, item.id, {
+      await writeGeneratedClipWords(userId, collection.id, item, {
         status: "ready",
+        title: null,
         summary: "recovered summary",
       }),
     );
     expect(retried).toMatchObject({ summary: "recovered summary", summaryStatus: "ready" });
+  });
+
+  it("a note-only run that lands after the title was cleared leaves the clip pending for the run that writes the title", async () => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+
+    const collection = await createCollection(userId, { title: "Title cleared mid-run" });
+    cleanupCollectionIds.push(collection.id);
+
+    // The note-only run reads the clip as added, before the author clears the title.
+    const describedByNoteRun = expectCollectionItem(await addCollectionItem(userId, collection.id, {
+      videoId: "clearmidrun",
+      startSec: 5,
+      endSec: 20,
+      title: "My own title",
+    }, noFacts));
+
+    const cleared = expectCollectionItem(
+      await updateCollectionItem(userId, collection.id, describedByNoteRun.id, { title: null }),
+    );
+    expect(cleared).toMatchObject({ title: null, titleAuthored: false, summaryStatus: "pending" });
+
+    const afterNoteRun = expectCollectionItem(
+      await writeGeneratedClipWords(userId, collection.id, describedByNoteRun, {
+        status: "ready",
+        title: null,
+        summary: "note from the earlier run",
+      }),
+    );
+    expect(afterNoteRun).toMatchObject({
+      title: null,
+      summary: "note from the earlier run",
+      summaryStatus: "pending",
+    });
+
+    const afterReplacementRun = expectCollectionItem(
+      await writeGeneratedClipWords(userId, collection.id, cleared, {
+        status: "ready",
+        title: "Generated title",
+        summary: "note from the replacement run",
+      }),
+    );
+    expect(afterReplacementRun).toMatchObject({ title: "Generated title", summaryStatus: "ready" });
   });
 
   it("getCollectionItem returns the item for its owner and null for a stranger", async () => {
@@ -491,6 +545,390 @@ describe("collections db lifecycle", () => {
 
     expect(firstShare?.slug).toBeTruthy();
     expect(secondShare?.slug).toBe(`${firstShare?.slug}-9f9f`);
+  });
+});
+
+describe("clip authorship", () => {
+  const userId = `vitest-authorship-${Date.now()}`;
+  const cleanupCollectionIds: string[] = [];
+
+  function requireDb(): void {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+  }
+
+  async function createTrackedCollection(title: string): Promise<string> {
+    const collection = await createCollection(userId, { title });
+    cleanupCollectionIds.push(collection.id);
+    return collection.id;
+  }
+
+  /** A clip whose note the AI wrote, the state every add without a note ends in. */
+  async function addClipWithGeneratedNote(collectionId: string, videoId: string): Promise<CollectionItem> {
+    const item = expectCollectionItem(
+      await addCollectionItem(userId, collectionId, { videoId, startSec: 10, endSec: 40 }, noFacts),
+    );
+    return expectCollectionItem(
+      await writeGeneratedClipWords(userId, collectionId, item, {
+        status: "ready",
+        title: null,
+        summary: "generated note",
+      }),
+    );
+  }
+
+  afterAll(async () => {
+    for (const id of cleanupCollectionIds) {
+      await sql`DELETE FROM collections WHERE id = ${id}`;
+    }
+  });
+
+  it("keeps a hand-written note when the clip's start and end move", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Authored note survives bounds");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "authnotexxx", startSec: 10, endSec: 40, summary: "my own note" },
+        noFacts,
+      ),
+    );
+    expect(item.summaryAuthored).toBe(true);
+
+    const moved = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { startSec: 15, endSec: 45 }, noFacts),
+    );
+
+    expect(moved).toMatchObject({
+      startSec: 15,
+      endSec: 45,
+      summary: "my own note",
+      summaryAuthored: true,
+    });
+  });
+
+  it("keeps a hand-written title when the clip's start and end move", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Authored title survives bounds");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "authtitlexx", startSec: 10, endSec: 40, title: "My clip" },
+        noFacts,
+      ),
+    );
+    expect(item).toMatchObject({ title: "My clip", titleAuthored: true });
+
+    const moved = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { startSec: 15, endSec: 45 }, noFacts),
+    );
+
+    expect(moved).toMatchObject({ title: "My clip", titleAuthored: true });
+  });
+
+  it("clears an AI-written note and marks it pending when the clip's bounds really change", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Generated note cleared on bounds");
+
+    const item = await addClipWithGeneratedNote(collectionId, "gennotexxxx");
+    expect(item).toMatchObject({ summary: "generated note", summaryAuthored: false });
+
+    const moved = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { startSec: 15, endSec: 45 }, noFacts),
+    );
+
+    expect(moved).toMatchObject({
+      summary: null,
+      summaryStatus: "pending",
+      summaryAuthored: false,
+    });
+  });
+
+  it("changes nothing when the same video, start and end are resent", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Identical pointer resent");
+
+    const item = await addClipWithGeneratedNote(collectionId, "resendsame1");
+
+    const resent = expectCollectionItem(
+      await updateCollectionItem(
+        userId,
+        collectionId,
+        item.id,
+        { videoId: "resendsame1", startSec: 10, endSec: 40 },
+        noFacts,
+      ),
+    );
+
+    expect(resent).toMatchObject({
+      summary: "generated note",
+      summaryStatus: "ready",
+      summaryAuthored: false,
+    });
+  });
+
+  it("marks a title set by hand as authored and hands it back to the AI when cleared with null", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Title set and cleared");
+
+    const item = await addClipWithGeneratedNote(collectionId, "titleclear1");
+    expect(item).toMatchObject({ title: null, titleAuthored: false });
+
+    const titled = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { title: "Named by hand" }),
+    );
+    expect(titled).toMatchObject({ title: "Named by hand", titleAuthored: true });
+
+    const cleared = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { title: null }),
+    );
+    expect(cleared).toMatchObject({ title: null, titleAuthored: false });
+  });
+
+  it("keeps a note sent in the same request as a bounds change as hand-written", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Note sent with bounds");
+
+    const item = await addClipWithGeneratedNote(collectionId, "notewithbnd");
+
+    const edited = expectCollectionItem(
+      await updateCollectionItem(
+        userId,
+        collectionId,
+        item.id,
+        { startSec: 15, endSec: 45, summary: "rewritten by hand" },
+        noFacts,
+      ),
+    );
+
+    expect(edited).toMatchObject({
+      startSec: 15,
+      endSec: 45,
+      summary: "rewritten by hand",
+      summaryAuthored: true,
+    });
+  });
+
+  it("never lets a generated note overwrite a hand-written one", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Generation spares authored note");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "genspares11", startSec: 10, endSec: 40, summary: "my own note" },
+        noFacts,
+      ),
+    );
+    // Moving the bounds leaves the AI-owned title outstanding, so the clip goes
+    // back to pending while its note stays the author's, the state in which a
+    // generation run reaches an authored note.
+    const pending = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { startSec: 15, endSec: 45 }, noFacts),
+    );
+    expect(pending).toMatchObject({ summaryStatus: "pending", summaryAuthored: true });
+
+    const afterGeneration = expectCollectionItem(
+      await writeGeneratedClipWords(userId, collectionId, pending, {
+        status: "ready",
+        title: "Generated title",
+        summary: "machine note that must be ignored",
+      }),
+    );
+
+    expect(afterGeneration).toMatchObject({
+      title: "Generated title",
+      summary: "my own note",
+      summaryAuthored: true,
+      summaryStatus: "ready",
+    });
+  });
+
+  it("never lets a generated title overwrite a hand-written one", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Generation spares authored title");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "gentitle111", startSec: 10, endSec: 40, title: "My own title" },
+        noFacts,
+      ),
+    );
+    expect(item.summaryStatus).toBe("pending");
+
+    const afterGeneration = expectCollectionItem(
+      await writeGeneratedClipWords(userId, collectionId, item, {
+        status: "ready",
+        title: "Machine title that must be ignored",
+        summary: "generated note",
+      }),
+    );
+
+    expect(afterGeneration).toMatchObject({
+      title: "My own title",
+      titleAuthored: true,
+      summary: "generated note",
+      summaryStatus: "ready",
+    });
+  });
+
+  it("drops generated words written for footage the clip no longer shows", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Stale generation dropped");
+
+    const generatedFrom = expectCollectionItem(
+      await addCollectionItem(userId, collectionId, { videoId: "stalewords1", startSec: 10, endSec: 40 }, noFacts),
+    );
+    // The bounds move again while the first run is still writing.
+    await updateCollectionItem(userId, collectionId, generatedFrom.id, { startSec: 50, endSec: 80 }, noFacts);
+
+    const afterStaleRun = expectCollectionItem(
+      await writeGeneratedClipWords(userId, collectionId, generatedFrom, {
+        status: "ready",
+        title: "Words about 10 to 40",
+        summary: "A note about the old range.",
+      }),
+    );
+
+    expect(afterStaleRun).toMatchObject({
+      startSec: 50,
+      endSec: 80,
+      title: null,
+      summary: null,
+      summaryStatus: "pending",
+    });
+  });
+
+  it("goes pending for a new title when the title is handed back with the footage unchanged", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Title handed back");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "titleback11", startSec: 10, endSec: 40, title: "Named by hand", summary: "My note" },
+        noFacts,
+      ),
+    );
+    expect(item.summaryStatus).toBe("ready");
+
+    const handedBack = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { title: null }),
+    );
+
+    expect(handedBack).toMatchObject({ title: null, titleAuthored: false, summaryStatus: "pending" });
+  });
+
+  it("stays pending when the note is written by hand while the AI's title is still outstanding", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Note written mid-generation");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(userId, collectionId, { videoId: "notemidgen1", startSec: 10, endSec: 40 }, noFacts),
+    );
+    expect(item.summaryStatus).toBe("pending");
+
+    const noted = expectCollectionItem(
+      await updateCollectionItem(userId, collectionId, item.id, { summary: "Written by hand" }),
+    );
+
+    expect(noted).toMatchObject({ summary: "Written by hand", summaryAuthored: true, summaryStatus: "pending" });
+  });
+
+  it("goes pending for a title when a clip is added with only a hand-written note", async () => {
+    requireDb();
+    const collectionId = await createTrackedCollection("Added with a note only");
+
+    const item = expectCollectionItem(
+      await addCollectionItem(
+        userId,
+        collectionId,
+        { videoId: "noteonlyadd", startSec: 10, endSec: 40, summary: "My note" },
+        noFacts,
+      ),
+    );
+
+    expect(item).toMatchObject({ summaryAuthored: true, title: null, summaryStatus: "pending" });
+  });
+});
+
+describe("which edits owe a clip its words", () => {
+  const userId = `vitest-owes-words-${Date.now()}`;
+  const cleanupCollectionIds: string[] = [];
+
+  afterAll(async () => {
+    for (const id of cleanupCollectionIds) {
+      await sql`DELETE FROM collections WHERE id = ${id}`;
+    }
+  });
+
+  const pendingClips = async (title: string): Promise<{ collectionId: string; first: CollectionItem; second: CollectionItem }> => {
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL is required for collections db integration tests");
+    }
+    const collection = await createCollection(userId, { title });
+    cleanupCollectionIds.push(collection.id);
+    const add = async (videoId: string) =>
+      expectCollectionItem(
+        await addCollectionItem(userId, collection.id, { videoId, startSec: 10, endSec: 40 }, noFacts),
+      );
+    return { collectionId: collection.id, first: await add("owesfirst11"), second: await add("owessecond1") };
+  };
+
+  it("owes words when an edit really moves the clip's footage", async () => {
+    const { collectionId, first } = await pendingClips("Footage moved");
+
+    const edit = await editCollectionItem(userId, collectionId, first.id, { startSec: 15, endSec: 45 }, noFacts);
+
+    expect(edit).toMatchObject({ owesClipWords: true, item: { summaryStatus: "pending" } });
+  });
+
+  it("owes no words when a pending clip is only reordered", async () => {
+    const { collectionId, first, second } = await pendingClips("Reorder only");
+
+    const edit = await editCollectionItem(userId, collectionId, first.id, { afterItemId: second.id });
+
+    expect(edit).toMatchObject({ owesClipWords: false, item: { summaryStatus: "pending" } });
+  });
+
+  it("owes no words when a pending clip's identical video and bounds are resent", async () => {
+    const { collectionId, first } = await pendingClips("Identical bounds resent");
+
+    const edit = await editCollectionItem(
+      userId,
+      collectionId,
+      first.id,
+      { videoId: "owesfirst11", startSec: 10, endSec: 40 },
+      noFacts,
+    );
+
+    expect(edit).toMatchObject({ owesClipWords: false, item: { summaryStatus: "pending" } });
+  });
+
+  it("owes words when the title is handed back to the AI", async () => {
+    const { collectionId, first } = await pendingClips("Title handed back");
+    await editCollectionItem(userId, collectionId, first.id, { title: "By hand", summary: "By hand." });
+
+    const edit = await editCollectionItem(userId, collectionId, first.id, { title: null });
+
+    expect(edit).toMatchObject({ owesClipWords: true, item: { summaryStatus: "pending" } });
+  });
+
+  it("owes no words when the words sent leave nothing for the AI to write", async () => {
+    const { collectionId, first } = await pendingClips("Words settle the clip");
+
+    const edit = await editCollectionItem(userId, collectionId, first.id, { title: "By hand", summary: "By hand." });
+
+    expect(edit).toMatchObject({ owesClipWords: false, item: { summaryStatus: "ready" } });
   });
 });
 
@@ -909,7 +1347,7 @@ describe("collection item video facts", () => {
     });
     expect(summarized?.durationSec).toBe(1234);
 
-    const generated = await writeGeneratedSummary(userId, collection.id, item.id, {
+    const generated = await writeGeneratedClipWords(userId, collection.id, item, {
       status: "failed",
     });
     expect(generated?.durationSec).toBe(1234);
@@ -947,7 +1385,7 @@ describe("collection item video facts", () => {
     });
     expect(summarized?.aspectRatio).toBe(0.5625);
 
-    const generated = await writeGeneratedSummary(userId, collection.id, item.id, {
+    const generated = await writeGeneratedClipWords(userId, collection.id, item, {
       status: "failed",
     });
     expect(generated?.aspectRatio).toBe(0.5625);
@@ -983,7 +1421,7 @@ describe("collection item video facts", () => {
     });
     expect(summarized?.aspectRatio).toBeNull();
 
-    const generated = await writeGeneratedSummary(userId, collection.id, item.id, {
+    const generated = await writeGeneratedClipWords(userId, collection.id, item, {
       status: "failed",
     });
     expect(generated?.aspectRatio).toBeNull();

@@ -1,10 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useState, type CSSProperties } from "react";
 import { GripVertical, Loader2, Pencil, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { EditItemDialog } from "@/components/collections/edit-item-dialog";
+import { EditItemDialog, type ClipEdit } from "@/components/collections/edit-item-dialog";
 import { cn } from "@/lib/utils";
 import { formatSeconds } from "@/lib/collection-item-input";
 import { entryAspectRatio, isVerticalAspectRatio } from "@/lib/collection-entries";
@@ -18,9 +18,9 @@ import type { CollectionItem } from "@/lib/collections";
  */
 export interface CollectionItemRowControls {
   onRemove: () => Promise<void>;
-  onSummarySave: (summary: string) => Promise<void>;
+  /** Saves what the edit popup changed, and nothing it left alone. */
+  onEdit: (edit: ClipEdit) => Promise<void>;
   onRetrySummary: () => Promise<void>;
-  onSwap: (videoId: string, startSec: number | null, endSec: number | null) => Promise<void>;
 }
 
 /**
@@ -73,6 +73,40 @@ interface ThumbnailStyle extends CSSProperties {
  * entry's own title, a mono source line, and the curator's note as body copy with
  * the thumbnail subordinate to it.
  */
+interface WordsFailedNoticeProps {
+  message: string;
+  isRetrying: boolean;
+  onRetry: () => void;
+  onWrite: () => void;
+  className?: string;
+}
+
+/** Says which words could not be written, with a retry and a way to write them by hand. */
+function WordsFailedNotice({ message, isRetrying, onRetry, onWrite, className }: WordsFailedNoticeProps) {
+  return (
+    <div className={cn("flex flex-wrap items-center gap-3 lg:relative lg:z-10", className)}>
+      <span className="text-sm text-[var(--color-text-tertiary)] italic">{message}</span>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={isRetrying}
+        className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer disabled:opacity-50"
+      >
+        {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+        Retry
+      </button>
+      <button
+        type="button"
+        onClick={onWrite}
+        className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+      >
+        <Pencil className="w-3.5 h-3.5" />
+        Write one
+      </button>
+    </div>
+  );
+}
+
 export function CollectionItemRow({
   item,
   entry,
@@ -83,9 +117,7 @@ export function CollectionItemRow({
   controls,
   drag,
 }: CollectionItemRowProps) {
-  const [isEditingSummary, setIsEditingSummary] = useState(false);
-  const [summaryDraft, setSummaryDraft] = useState(item.summary ?? "");
-  const [isSavingSummary, setIsSavingSummary] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,8 +134,8 @@ export function CollectionItemRow({
   const isVerticalThumbnail = isVerticalAspectRatio(entry.aspectRatio);
   const thumbnailStyle: ThumbnailStyle = { "--thumb-aspect": String(thumbnailAspect) };
 
-  // What the mono slot says when this row is not the one playing: where the
-  // entry starts in its source video, and how long it runs.
+  // What the mono slot says: where the entry starts in its source video, and how
+  // long it runs.
   const restingLabel = [
     entry.offsetSec !== null ? `at ${formatSeconds(entry.offsetSec)}` : null,
     entry.durationSec !== null ? formatSeconds(entry.durationSec) : null,
@@ -121,6 +153,7 @@ export function CollectionItemRow({
   const hasSummary = item.summary !== null && item.summary.trim().length > 0;
   const isGenerating = item.summaryStatus === "pending" && !hasSummary;
   const generationFailed = item.summaryStatus === "failed" && !hasSummary;
+  const titleGenerationFailed = item.summaryStatus === "failed" && item.title === null;
 
   const handleRetrySummary = async () => {
     if (!controls) return;
@@ -145,25 +178,6 @@ export function CollectionItemRow({
       setError("Could not remove this entry. Please try again.");
     } finally {
       setIsRemoving(false);
-    }
-  };
-
-  const startEditingSummary = () => {
-    setSummaryDraft(item.summary ?? "");
-    setIsEditingSummary(true);
-  };
-
-  const handleSummarySave = async () => {
-    if (!controls) return;
-    setError(null);
-    setIsSavingSummary(true);
-    try {
-      await controls.onSummarySave(summaryDraft.trim());
-      setIsEditingSummary(false);
-    } catch {
-      setError("Could not save the note. Please try again.");
-    } finally {
-      setIsSavingSummary(false);
     }
   };
 
@@ -277,14 +291,10 @@ export function CollectionItemRow({
             <span
               className={cn(
                 "font-mono text-xs whitespace-nowrap lg:hidden",
-                isActive
-                  ? // The lit rail already says which row is playing, so at phone
-                    // width the words go rather than crush the title.
-                    "hidden sm:inline text-[var(--color-playing)]"
-                  : "text-[var(--color-text-tertiary)]",
+                isActive ? "text-[var(--color-playing)]" : "text-[var(--color-text-tertiary)]",
               )}
             >
-              {isActive ? "now playing" : restingLabel}
+              {restingLabel}
             </span>
 
             {controls && (
@@ -303,17 +313,17 @@ export function CollectionItemRow({
                 </Button>
               )}
               <EditItemDialog
-                initialVideoId={item.videoId}
-                initialStartSec={item.startSec}
-                initialEndSec={item.endSec}
-                onSubmit={controls.onSwap}
+                item={item}
+                open={isEditOpen}
+                onOpenChange={setIsEditOpen}
+                onSubmit={controls.onEdit}
               >
                 <Button
                   variant="outline"
                   size="icon-sm"
                   className={controlClass}
-                  title="Replace video or range"
-                  aria-label="Replace video or range"
+                  title="Edit title, note, video or range"
+                  aria-label={`Edit ${entry.title}`}
                 >
                   <Pencil className="w-4 h-4" />
                 </Button>
@@ -338,22 +348,20 @@ export function CollectionItemRow({
           </div>
         </div>
 
-        {/* One line held whether or not there is anything to say, so "now playing"
-            arriving in it moves nothing below. */}
+        {/* One line held whether or not there is anything to say, so a row with no
+            facts stands as tall as one with them. */}
         <p
           className={cn(
             "hidden lg:block lg:h-4 lg:truncate mt-0.5 font-mono text-xs",
             isActive ? "text-[var(--color-playing)]" : "text-[var(--color-text-tertiary)]",
           )}
         >
-          {isActive
-            ? "now playing"
-            : sourceFacts.map((part, index) => (
-                <span key={index}>
-                  {index > 0 && <span className="px-1.5 opacity-50">/</span>}
-                  {part}
-                </span>
-              ))}
+          {sourceFacts.map((part, index) => (
+            <span key={index}>
+              {index > 0 && <span className="px-1.5 opacity-50">/</span>}
+              {part}
+            </span>
+          ))}
         </p>
 
         {/* `flow-root` contains the thumbnail's float, so a note shorter than the
@@ -388,10 +396,11 @@ export function CollectionItemRow({
                 {entry.videoId}
               </span>
               {thumbnailSrc !== null && (
-                <img
+                <Image
                   src={thumbnailSrc}
                   alt=""
-                  loading="lazy"
+                  fill
+                  unoptimized
                   onError={() => setFailedThumbnailUrls((failed) => [...failed, thumbnailSrc])}
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
@@ -399,88 +408,37 @@ export function CollectionItemRow({
             </a>
           </span>
 
-          {isEditingSummary ? (
-            <div className="space-y-2 lg:relative lg:z-10">
-              <Textarea
-                value={summaryDraft}
-                onChange={(event) => setSummaryDraft(event.target.value)}
-                placeholder="Write what matters about this entry."
-                rows={3}
-                autoFocus
-              />
-              <div className="flex items-center gap-2">
-                <Button size="sm" onClick={handleSummarySave} disabled={isSavingSummary}>
-                  {isSavingSummary ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving
-                    </>
-                  ) : (
-                    "Save note"
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsEditingSummary(false)}
-                  disabled={isSavingSummary}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : hasSummary ? (
-            <div>
+          {hasSummary ? (
+            <>
               <p className="text-sm sm:text-[0.9375rem] lg:text-sm leading-[1.55] text-[var(--color-text-secondary)] whitespace-pre-wrap lg:line-clamp-2">
                 {item.summary}
               </p>
-              {controls && (
-                <button
-                  type="button"
-                  onClick={startEditingSummary}
-                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer lg:relative lg:z-10"
-                >
-                  <Pencil className="w-3 h-3" />
-                  Edit note
-                </button>
+              {controls && titleGenerationFailed && (
+                <WordsFailedNotice
+                  message="Couldn't write a title."
+                  isRetrying={isRetrying}
+                  onRetry={handleRetrySummary}
+                  onWrite={() => setIsEditOpen(true)}
+                  className="mt-1.5"
+                />
               )}
-            </div>
+            </>
           ) : controls && isGenerating ? (
             <p className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)]">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Writing a note...
+              {item.title === null ? "Writing a title and note..." : "Writing a note..."}
             </p>
           ) : controls && generationFailed ? (
-            <div className="flex flex-wrap items-center gap-3 lg:relative lg:z-10">
-              <span className="text-sm text-[var(--color-text-tertiary)] italic">
-                Couldn&apos;t write a note.
-              </span>
-              <button
-                type="button"
-                onClick={handleRetrySummary}
-                disabled={isRetrying}
-                className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {isRetrying ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <RotateCw className="w-3.5 h-3.5" />
-                )}
-                Retry
-              </button>
-              <button
-                type="button"
-                onClick={startEditingSummary}
-                className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Write one
-              </button>
-            </div>
+            <WordsFailedNotice
+              message={item.title === null ? "Couldn't write a title and note." : "Couldn't write a note."}
+              isRetrying={isRetrying}
+              onRetry={handleRetrySummary}
+              onWrite={() => setIsEditOpen(true)}
+            />
           ) : controls ? (
             <button
               type="button"
-              onClick={startEditingSummary}
+              onClick={() => setIsEditOpen(true)}
               className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors cursor-pointer lg:relative lg:z-10"
             >
               <Pencil className="w-3.5 h-3.5" />

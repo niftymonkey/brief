@@ -383,48 +383,108 @@ describe("createServerLlmGateway.describe", () => {
   });
 });
 
-describe("createServerLlmGateway.summarize", () => {
-  const summarizeInput = {
+describe("createServerLlmGateway.writeClipWords", () => {
+  const clipInput = {
     userId: "user_01",
+    wants: "both" as const,
     transcriptText: "the speaker walks through setting up a vector store",
     rangeSeconds: 45,
     videoTitle: "Intro to RAG",
   };
 
-  it("returns ok with the trimmed summary text and the digest model", async () => {
-    const gateway = createServerLlmGateway({
-      ledger: createInMemoryUsageLedger(),
-      openrouter: createInMemoryOpenRouterClient({
-        respond: () => ({
-          text: "  A quick walkthrough of wiring up a vector store.  ",
-          usage: { inputTokens: 120, outputTokens: 18 },
-        }),
-      }),
+  const replying = (reply: unknown, usage = { inputTokens: 120, outputTokens: 18 }) =>
+    createInMemoryOpenRouterClient({
+      respond: () => ({ text: typeof reply === "string" ? reply : JSON.stringify(reply), usage }),
     });
 
-    const result = await gateway.summarize(summarizeInput);
+  const gatewayReplying = (reply: unknown) =>
+    createServerLlmGateway({ ledger: createInMemoryUsageLedger(), openrouter: replying(reply) });
 
-    expect(result.kind).toBe("ok");
-    if (result.kind === "ok") {
-      expect(result.summary).toBe("A quick walkthrough of wiring up a vector store.");
-      expect(result.inputTokens).toBe(120);
-      expect(result.outputTokens).toBe(18);
-      expect(typeof result.ledgerId).toBe("string");
-      expect(result.model).toBe(DIGEST_MODEL);
-    }
+  it("returns a title and a note from one structured call on the digest model", async () => {
+    const openrouter = replying({
+      title: "Wiring up a vector store",
+      note: "  A quick walkthrough of wiring up a vector store.  ",
+    });
+    const gateway = createServerLlmGateway({ ledger: createInMemoryUsageLedger(), openrouter });
+
+    const result = await gateway.writeClipWords(clipInput);
+
+    expect(openrouter.calls()).toHaveLength(1);
+    expect(openrouter.calls()[0]?.outputSchema).toBeDefined();
+    expect(result).toMatchObject({
+      kind: "ok",
+      title: "Wiring up a vector store",
+      note: "A quick walkthrough of wiring up a vector store.",
+      inputTokens: 120,
+      outputTokens: 18,
+      model: DIGEST_MODEL,
+    });
+  });
+
+  it("returns only a title, and no note, when only the title is wanted", async () => {
+    const result = await gatewayReplying({ title: "Wiring up a vector store" }).writeClipWords({
+      ...clipInput,
+      wants: "title",
+    });
+
+    expect(result).toMatchObject({ kind: "ok", title: "Wiring up a vector store", note: null });
+  });
+
+  it("returns only a note, and no title, when only the note is wanted", async () => {
+    const result = await gatewayReplying({ note: "A walkthrough." }).writeClipWords({
+      ...clipInput,
+      wants: "note",
+    });
+
+    expect(result).toMatchObject({ kind: "ok", title: null, note: "A walkthrough." });
+  });
+
+  it("cuts a title past 40 characters back to whole words within 40", async () => {
+    const result = await gatewayReplying({
+      title: "Wiring a vector store into a retrieval pipeline end to end",
+      note: "A walkthrough.",
+    }).writeClipWords(clipInput);
+
+    if (result.kind !== "ok") throw new Error("expected ok");
+    expect(result.title).toBe("Wiring a vector store into a retrieval");
+    expect(result.title?.length).toBeLessThanOrEqual(40);
+  });
+
+  it("strips quotation marks and trailing punctuation from the title", async () => {
+    const result = await gatewayReplying({
+      title: ' "Wiring up a vector store." ',
+      note: "A walkthrough.",
+    }).writeClipWords(clipInput);
+
+    expect(result).toMatchObject({ kind: "ok", title: "Wiring up a vector store" });
+  });
+
+  it("fails with bad-input when the reply is not the requested shape", async () => {
+    const result = await gatewayReplying({ note: "A walkthrough." }).writeClipWords(clipInput);
+
+    expect(result).toMatchObject({ kind: "failed", reason: "bad-input" });
+  });
+
+  it("fails with bad-input when the reply is not JSON at all", async () => {
+    const result = await gatewayReplying("A walkthrough of a vector store.").writeClipWords(clipInput);
+
+    expect(result).toMatchObject({ kind: "failed", reason: "bad-input" });
+  });
+
+  it("fails with bad-input when a wanted word comes back empty", async () => {
+    const result = await gatewayReplying({ title: "Vector store", note: "   " }).writeClipWords(
+      clipInput,
+    );
+
+    expect(result).toMatchObject({ kind: "failed", reason: "bad-input" });
   });
 
   it("threads the collection's title and description into the prompt", async () => {
-    const openrouter = createInMemoryOpenRouterClient({
-      respond: () => ({ text: "note", usage: { inputTokens: 10, outputTokens: 2 } }),
-    });
-    const gateway = createServerLlmGateway({
-      ledger: createInMemoryUsageLedger(),
-      openrouter,
-    });
+    const openrouter = replying({ title: "t", note: "n" });
+    const gateway = createServerLlmGateway({ ledger: createInMemoryUsageLedger(), openrouter });
 
-    await gateway.summarize({
-      ...summarizeInput,
+    await gateway.writeClipWords({
+      ...clipInput,
       collection: {
         title: "Retrieval, end to end",
         description: "The clips I send people who ask how RAG actually works",
@@ -440,15 +500,10 @@ describe("createServerLlmGateway.summarize", () => {
   });
 
   it("omits the collection block when the caller has no collection context", async () => {
-    const openrouter = createInMemoryOpenRouterClient({
-      respond: () => ({ text: "note", usage: { inputTokens: 10, outputTokens: 2 } }),
-    });
-    const gateway = createServerLlmGateway({
-      ledger: createInMemoryUsageLedger(),
-      openrouter,
-    });
+    const openrouter = replying({ title: "t", note: "n" });
+    const gateway = createServerLlmGateway({ ledger: createInMemoryUsageLedger(), openrouter });
 
-    await gateway.summarize(summarizeInput);
+    await gateway.writeClipWords(clipInput);
 
     const messages = openrouter.calls()[0]?.messages ?? [];
     for (const message of messages) {
@@ -458,16 +513,11 @@ describe("createServerLlmGateway.summarize", () => {
   });
 
   it("sends a system+user message pair under one runaway guard whatever the range", async () => {
-    const openrouter = createInMemoryOpenRouterClient({
-      respond: () => ({ text: "ok", usage: { inputTokens: 10, outputTokens: 2 } }),
-    });
-    const gateway = createServerLlmGateway({
-      ledger: createInMemoryUsageLedger(),
-      openrouter,
-    });
+    const openrouter = replying({ title: "t", note: "n" });
+    const gateway = createServerLlmGateway({ ledger: createInMemoryUsageLedger(), openrouter });
 
-    await gateway.summarize({ ...summarizeInput, rangeSeconds: 20 });
-    await gateway.summarize({ ...summarizeInput, rangeSeconds: 1200 });
+    await gateway.writeClipWords({ ...clipInput, rangeSeconds: 20 });
+    await gateway.writeClipWords({ ...clipInput, rangeSeconds: 1200 });
 
     const calls = openrouter.calls();
     expect(calls[0]?.messages.map((m) => m.role)).toEqual(["system", "user"]);
@@ -478,16 +528,14 @@ describe("createServerLlmGateway.summarize", () => {
     expect(calls[1]?.maxOutputTokens).toBe(SUMMARY_MAX_OUTPUT_TOKENS);
   });
 
-  it("records one ledger row with op=summarize keyed by userId", async () => {
+  it("records one ledger row with op=clip-words keyed by userId", async () => {
     const ledger = createInMemoryUsageLedger();
     const gateway = createServerLlmGateway({
       ledger,
-      openrouter: createInMemoryOpenRouterClient({
-        respond: () => ({ text: "summary", usage: { inputTokens: 90, outputTokens: 12 } }),
-      }),
+      openrouter: replying({ title: "t", note: "n" }, { inputTokens: 90, outputTokens: 12 }),
     });
 
-    const result = await gateway.summarize(summarizeInput);
+    const result = await gateway.writeClipWords(clipInput);
     if (result.kind !== "ok") throw new Error("expected ok");
 
     const rows = ledger.rows();
@@ -495,11 +543,24 @@ describe("createServerLlmGateway.summarize", () => {
     expect(rows[0]).toMatchObject({
       id: result.ledgerId,
       userId: "user_01",
-      op: "summarize",
+      op: "clip-words",
       model: DIGEST_MODEL,
       inputTokens: 90,
       outputTokens: 12,
     });
+  });
+
+  it("records the tokens a malformed reply spent, though it returns no words", async () => {
+    const ledger = createInMemoryUsageLedger();
+    const gateway = createServerLlmGateway({
+      ledger,
+      openrouter: replying("not json", { inputTokens: 90, outputTokens: 12 }),
+    });
+
+    const result = await gateway.writeClipWords(clipInput);
+
+    expect(result.kind).toBe("failed");
+    expect(ledger.rows()).toHaveLength(1);
   });
 
   it("returns kind=failed with reason=transient when the upstream LLM throws", async () => {
@@ -512,7 +573,7 @@ describe("createServerLlmGateway.summarize", () => {
       },
     });
 
-    const result = await gateway.summarize(summarizeInput);
+    const result = await gateway.writeClipWords(clipInput);
     expect(result.kind).toBe("failed");
     if (result.kind === "failed") {
       expect(result.reason).toBe("transient");
@@ -520,7 +581,7 @@ describe("createServerLlmGateway.summarize", () => {
     }
   });
 
-  it("returns kind=failed and writes no summary when the ledger write fails", async () => {
+  it("returns kind=failed and writes no words when the ledger write fails", async () => {
     const brokenLedger: UsageLedger = {
       async record() {
         throw new Error("DB unavailable");
@@ -531,28 +592,14 @@ describe("createServerLlmGateway.summarize", () => {
     };
     const gateway = createServerLlmGateway({
       ledger: brokenLedger,
-      openrouter: createInMemoryOpenRouterClient({
-        respond: () => ({ text: "summary", usage: { inputTokens: 90, outputTokens: 12 } }),
-      }),
+      openrouter: replying({ title: "t", note: "n" }),
     });
 
-    const result = await gateway.summarize(summarizeInput);
+    const result = await gateway.writeClipWords(clipInput);
     expect(result.kind).toBe("failed");
     if (result.kind === "failed") {
       expect(result.reason).toBe("transient");
       expect(result.message).toMatch(/ledger/i);
     }
-  });
-
-  it("returns kind=failed with bad-input when the model returns empty text", async () => {
-    const gateway = createServerLlmGateway({
-      ledger: createInMemoryUsageLedger(),
-      openrouter: createInMemoryOpenRouterClient({
-        respond: () => ({ text: "   ", usage: { inputTokens: 90, outputTokens: 0 } }),
-      }),
-    });
-
-    const result = await gateway.summarize(summarizeInput);
-    expect(result.kind).toBe("failed");
   });
 });

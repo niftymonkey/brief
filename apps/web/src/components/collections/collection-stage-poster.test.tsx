@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { CollectionStagePoster } from "@/components/collections/collection-stage-poster";
 import { buildSitting, type CollectionSitting, type SittingItem } from "@/lib/collection-entries";
 
@@ -15,6 +15,7 @@ function sittingOf(
     ...item,
     startSec: null,
     endSec: null,
+    title: null,
     videoTitle: null,
   }));
   const facts = Object.fromEntries(
@@ -60,11 +61,14 @@ function box(): HTMLElement {
 }
 
 /** Answers the current image's load the way YouTube answers a size it lacks. */
-function loadAt(width: number): void {
+/** Loads the poster's image at this natural width and lets its load handling settle. */
+async function loadAt(width: number): Promise<void> {
   const image = poster();
   if (!image) throw new Error("The poster is showing no image to load");
   Object.defineProperty(image, "naturalWidth", { configurable: true, value: width });
-  fireEvent.load(image);
+  await act(async () => {
+    fireEvent.load(image);
+  });
 }
 
 function fail(): void {
@@ -94,27 +98,33 @@ describe("CollectionStagePoster sources", () => {
     expect(posterSrc()).toBe("https://i.ytimg.com/vi/first/hqdefault.jpg");
   });
 
-  it("steps down when YouTube answers with its 120 pixel placeholder", () => {
+  it("steps down when YouTube answers with its 120 pixel placeholder", async () => {
     renderPoster();
 
-    loadAt(120);
+    await loadAt(120);
 
     expect(posterSrc()).toBe("https://i.ytimg.com/vi/first/sddefault.jpg");
   });
 
-  it("keeps a still that loaded at a real size", () => {
+  it("keeps a still that loaded at a real size", async () => {
     renderPoster();
 
-    loadAt(1280);
+    await loadAt(1280);
 
     expect(posterSrc()).toBe("https://i.ytimg.com/vi/first/maxresdefault.jpg");
   });
 
-  it("steps past a placeholder that finished loading before the page came alive", () => {
+  it("steps past a placeholder that finished loading before the page came alive", async () => {
     vi.spyOn(HTMLImageElement.prototype, "complete", "get").mockReturnValue(true);
-    vi.spyOn(HTMLImageElement.prototype, "naturalWidth", "get").mockReturnValue(120);
+    vi.spyOn(HTMLImageElement.prototype, "naturalWidth", "get").mockImplementation(function (
+      this: HTMLImageElement,
+    ) {
+      return this.src.endsWith("/maxresdefault.jpg") ? 120 : 640;
+    });
 
-    renderPoster();
+    await act(async () => {
+      renderPoster();
+    });
 
     expect(posterSrc()).toBe("https://i.ytimg.com/vi/first/sddefault.jpg");
   });

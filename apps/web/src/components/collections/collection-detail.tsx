@@ -17,6 +17,7 @@ import {
 } from "@/components/collections/collection-transport";
 import { DeleteCollectionButton } from "@/components/collections/delete-collection-button";
 import { EditCollectionDialog } from "@/components/collections/edit-collection-dialog";
+import type { ClipEdit } from "@/components/collections/edit-item-dialog";
 import { SortableItemRow } from "@/components/collections/sortable-item-row";
 import {
   DndContext,
@@ -42,8 +43,10 @@ import {
   type EntryCue,
   type EntryVideoFacts,
 } from "@/lib/collection-entries";
+import { createClipProgress } from "@/lib/clip-progress";
 import type { SittingPosition } from "@/lib/collection-playback";
 import { notifyCollectionsChanged } from "@/lib/collections-events";
+import { usePendingClipWords } from "@/components/collections/use-pending-clip-words";
 import type { CollectionShareState } from "@/components/collections/collection-share-popover";
 import type { CollectionItem, CollectionWithItems } from "@/lib/collections";
 
@@ -97,6 +100,8 @@ export function CollectionDetail({
   /** The run on screen, for the prev, skip, jump and full screen controls the page carries for it. */
   const playerRef = useRef<CollectionPlayerHandle>(null);
   const fullscreenToggles = useFullscreenToggles();
+  /** How far the clip on screen has played, shared by the player and the stage caption. */
+  const [clipProgress] = useState(createClipProgress);
 
   // A grip has to travel a few pixels before it counts as a drag, so a plain
   // click on it (or a tap that turns into a page scroll) never lifts a row. The
@@ -147,7 +152,10 @@ export function CollectionDetail({
     router.refresh();
   };
 
-  const summarizeItem = async (itemId: string) => {
+  const noteEditApplied = usePendingClipWords(collectionId, items, setItems, editable);
+
+  /** Asks again for the words of an entry whose generation failed. */
+  const retryClipWords = async (itemId: string) => {
     try {
       const updated = await requestJson<CollectionItem>(
         `/api/collections/${collectionId}/items/${itemId}/summarize`,
@@ -181,12 +189,6 @@ export function CollectionDetail({
     setItems((prev) => sortByPosition([...prev, item]));
     notifyCollectionsChanged();
     router.refresh();
-    // Client-driven async summary: the entry renders 'pending' immediately, then
-    // updates in place when generation resolves. Fire-and-forget so the add
-    // returns without blocking on the LLM call.
-    if (item.summaryStatus !== "ready") {
-      void summarizeItem(item.id);
-    }
   };
 
   /**
@@ -244,36 +246,21 @@ export function CollectionDetail({
     router.refresh();
   };
 
-  const handleSummarySave = async (itemId: string, summary: string) => {
+  /** Saves one clip's edit popup, which sends only the fields the author changed. */
+  const handleEdit = async (itemId: string, edit: ClipEdit) => {
     const updated = await requestJson<CollectionItem>(
       `/api/collections/${collectionId}/items/${itemId}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ summary }),
+        body: JSON.stringify(edit),
       },
     );
+    noteEditApplied();
     setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-  };
-
-  const handleSwap = async (
-    itemId: string,
-    videoId: string,
-    startSec: number | null,
-    endSec: number | null,
-  ) => {
-    const updated = await requestJson<CollectionItem>(
-      `/api/collections/${collectionId}/items/${itemId}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoId, startSec, endSec }),
-      },
-    );
-    setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-    // The hero reads the new video's title, channel and length off the server's
+    // The hero reads a new video's title, channel and length off the server's
     // videoFacts prop, which only a refresh can restock.
-    router.refresh();
+    if (edit.videoId !== undefined) router.refresh();
   };
 
   const setSharing = async (nextShared: boolean) => {
@@ -362,11 +349,13 @@ export function CollectionDetail({
       position={position}
       cuedIndex={cued}
       isFullscreen={isFullscreen}
+      progress={clipProgress}
       onPlay={startSitting}
       onStop={closePlayer}
       onPrev={() => playerRef.current?.prev()}
       onSkip={() => playerRef.current?.skip()}
       onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
+      onSeek={(elapsedSec) => playerRef.current?.seek(elapsedSec)}
       fullscreenToggles={fullscreenToggles}
       share={share}
       player={
@@ -379,6 +368,7 @@ export function CollectionDetail({
             onPositionChange={handlePositionChange}
             onFullscreenChange={setIsFullscreen}
             fullscreenReturnFocusRef={fullscreenToggles.returnFocus}
+            progress={clipProgress}
           />
         )
       }
@@ -446,10 +436,8 @@ export function CollectionDetail({
                   dragDisabled={reorderPending}
                   controls={{
                     onRemove: () => handleRemove(entry.id),
-                    onSummarySave: (summary) => handleSummarySave(entry.id, summary),
-                    onRetrySummary: () => summarizeItem(entry.id),
-                    onSwap: (videoId, startSec, endSec) =>
-                      handleSwap(entry.id, videoId, startSec, endSec),
+                    onEdit: (edit) => handleEdit(entry.id, edit),
+                    onRetrySummary: () => retryClipWords(entry.id),
                   }}
                 />
               ))}

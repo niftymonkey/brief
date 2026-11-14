@@ -19,6 +19,7 @@ import {
   type EntryCue,
   type EntryVideoFacts,
 } from "@/lib/collection-entries";
+import { createClipProgress } from "@/lib/clip-progress";
 import type { SittingPosition } from "@/lib/collection-playback";
 import type { CollectionWithItems } from "@/lib/collections";
 
@@ -54,6 +55,8 @@ export function SharedCollection({
   /** The run on screen, for the prev, skip, jump and full screen controls the page carries for it. */
   const playerRef = useRef<CollectionPlayerHandle>(null);
   const fullscreenToggles = useFullscreenToggles();
+  /** How far the clip on screen has played, shared by the player and the stage caption. */
+  const [clipProgress] = useState(createClipProgress);
 
   const items = collection.items;
 
@@ -115,11 +118,13 @@ export function SharedCollection({
       position={position}
       cuedIndex={cued}
       isFullscreen={isFullscreen}
+      progress={clipProgress}
       onPlay={startSitting}
       onStop={closePlayer}
       onPrev={() => playerRef.current?.prev()}
       onSkip={() => playerRef.current?.skip()}
       onToggleFullscreen={() => playerRef.current?.toggleFullscreen()}
+      onSeek={(elapsedSec) => playerRef.current?.seek(elapsedSec)}
       fullscreenToggles={fullscreenToggles}
       player={
         openSitting && (
@@ -131,6 +136,7 @@ export function SharedCollection({
             onPositionChange={handlePositionChange}
             onFullscreenChange={setIsFullscreen}
             fullscreenReturnFocusRef={fullscreenToggles.returnFocus}
+            progress={clipProgress}
           />
         )
       }
